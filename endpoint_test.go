@@ -9,7 +9,7 @@ import (
 )
 
 func TestHeadDocument(t *testing.T) {
-	req, err := http.NewRequest(http.MethodHead, "/storage/quis/kittens.png", nil)
+	req, err := http.NewRequest(http.MethodHead, "/storage/someuser/kittens.png", nil)
 	if err != nil {
 		t.Fatalf("failed to create request: %v\n", err)
 	}
@@ -17,7 +17,9 @@ func TestHeadDocument(t *testing.T) {
 	recorder := httptest.NewRecorder()
 
 	//mux := http.NewServeMux()
-	s := rmsgo.Server{}
+
+	//s := rmsgo.Server{}
+
 	//mux.HandleFunc("/storage/", func(w http.ResponseWriter, r *http.Request) {
 	//	err := s.Serve(w, r)
 	//	if err != nil {
@@ -27,7 +29,7 @@ func TestHeadDocument(t *testing.T) {
 	//testServer := httptest.NewServer(mux)
 
 	//err = s.Serve(recorder, req)
-	err = s.HeadDocument(recorder, req)
+	err = rmsgo.HeadDocument(recorder, req)
 	if err != nil {
 		t.Fatalf("HEAD document failed: %v\n", err)
 	}

@@ -1,7 +1,7 @@
 package rmsgo
 
 type UserStorage interface {
-	Find(id string) User
+	Find(id string) (User, error)
 }
 
 type User interface {

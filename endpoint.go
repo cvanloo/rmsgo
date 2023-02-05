@@ -6,7 +6,9 @@ import (
 	"net/http"
 )
 
-type Server struct{}
+type Server struct{
+	WebRoot, StorageRoot string
+}
 
 // Serve HTTP requests. Unhandled errors are returned non-nil.
 func (s *Server) Serve(w http.ResponseWriter, r *http.Request) error {
@@ -22,27 +24,31 @@ func (s *Server) Serve(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (s *Server) GetFolder(w http.ResponseWriter, r *http.Request) error {
+func GetFolder(w http.ResponseWriter, r *http.Request) error {
 	return errors.New("not implemented")
 }
 
-func (s *Server) HeadFolder(w http.ResponseWriter, r *http.Request) error {
+func HeadFolder(w http.ResponseWriter, r *http.Request) error {
 	return errors.New("not implemented")
 }
 
-func (s *Server) GetDocument(w http.ResponseWriter, r *http.Request) error {
+func GetDocument(w http.ResponseWriter, r *http.Request) error {
+	// full document contents in body
+	// Content-Type
+	// Content-Length
+	// ETag (strong)
 	return errors.New("not implemented")
 }
 
-func (s *Server) HeadDocument(w http.ResponseWriter, r *http.Request) error {
+func HeadDocument(w http.ResponseWriter, r *http.Request) error {
 	return errors.New("not implemented")
 }
 
-func (s *Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
+func PutDocument(w http.ResponseWriter, r *http.Request) error {
 	return errors.New("not implemented")
 }
 
-func (s *Server) DeleteDocument(w http.ResponseWriter, r *http.Request) error {
+func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 	return errors.New("not implemented")
 }
 
