@@ -3,7 +3,9 @@ package rmsgo
 import (
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"net/http"
+	"os"
 )
 
 // ServerConfig holds the server configuration.
@@ -12,6 +14,29 @@ var ServerConfig = struct {
 }{
 	WebRoot:     "/storage/",
 	StorageRoot: "/tmp/storage/",
+}
+
+// useFS is delegates to the os methods.
+var useFS fileSystem = osFS{}
+
+// fileSystem implements method for working with files.
+// This abstraction allows mocking the file system when testing.
+type fileSystem interface {
+	Open(name string) (fs.File, error)
+	Stat(name string) (os.FileInfo, error)
+	WriteFile(name string, data []byte, perm os.FileMode) error
+}
+
+type osFS struct{}
+
+func (osFS) Open(name string) (fs.File, error) {
+	return os.Open(name)
+}
+func (osFS) Stat(name string) (os.FileInfo, error) {
+	return os.Stat(name)
+}
+func (osFS) WriteFile(name string, data []byte, perm os.FileMode) error {
+	return os.WriteFile(name, data, perm)
 }
 
 // Serve HTTP requests. Unhandled errors are returned non-nil.
@@ -53,11 +78,11 @@ func Serve(w http.ResponseWriter, r *http.Request) error {
 }
 
 func GetFolder(w http.ResponseWriter, r *http.Request) error {
-	return errors.New("not implemented")
+	return writeError(w, errors.New("not implemented"))
 }
 
 func HeadFolder(w http.ResponseWriter, r *http.Request) error {
-	return errors.New("not implemented")
+	return writeError(w, errors.New("not implemented"))
 }
 
 func GetDocument(w http.ResponseWriter, r *http.Request) error {
@@ -65,19 +90,19 @@ func GetDocument(w http.ResponseWriter, r *http.Request) error {
 	// Content-Type
 	// Content-Length
 	// ETag (strong)
-	return errors.New("not implemented")
+	return writeError(w, errors.New("not implemented"))
 }
 
 func HeadDocument(w http.ResponseWriter, r *http.Request) error {
-	return errors.New("not implemented")
+	return writeError(w, errors.New("not implemented"))
 }
 
 func PutDocument(w http.ResponseWriter, r *http.Request) error {
-	return errors.New("not implemented")
+	return writeError(w, errors.New("not implemented"))
 }
 
 func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
-	return errors.New("not implemented")
+	return writeError(w, errors.New("not implemented"))
 }
 
 func writeError(w http.ResponseWriter, err error) error {
