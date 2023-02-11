@@ -22,13 +22,11 @@ func main() {
 		StorageRoot = "/www/somesite.com/public/storage/"
 	)
 
-	server := rmsgo.Server{
-		WebRoot: WebRoot,
-		StorageRoot: ServerRoot
-	}
+	rmsgo.ServerConfig.StorageRoot = StorageRoot
+	rmsgo.ServerConfig.WebRoot = WebRoot
 
-	mux.HandleFunc(rmsRoot, func(w http.ResponseWriter, r *http.Request) {
-		err := server.Serve(w, r)
+	mux.HandleFunc(WebRoot, func(w http.ResponseWriter, r *http.Request) {
+		err := rmsgo.Serve(w, r)
 		if err != nil {
 			// TODO: More intelligent logging / error handling
 			log.Printf("%v\n", err)
