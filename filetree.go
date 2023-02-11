@@ -6,8 +6,8 @@ import (
 )
 
 var (
-	root string
-	nodes map[string]*Node
+	root  string
+	nodes map[string]NodeInfo
 )
 
 type NodeInfo interface {
@@ -16,28 +16,25 @@ type NodeInfo interface {
 	Description() map[string]any
 }
 
-type Node struct {
-	Name string
-	Version ETag
-}
-
-type Folder struct {
-	Node
-	Children []*Node
+type folder struct {
+	name    string
+	version ETag
+	children []NodeInfo
 }
 
 // Folder implements Node
-var _ NodeInfo = (*Folder)(nil)
+var _ NodeInfo = (*folder)(nil)
 
-type Document struct {
-	Node
-	Mime string
-	Length uint
-	LastMod time.Time
+type document struct {
+	name    string
+	version ETag
+	mime    string
+	length  uint
+	lastMod time.Time
 }
 
 // Document implements Node
-var _ NodeInfo = (*Document)(nil)
+var _ NodeInfo = (*document)(nil)
 
 func Add(n NodeInfo) {
 	//n := &Document{
@@ -68,8 +65,16 @@ func Get(name string) (NodeInfo, error) {
 	return nil, NodeNotFound
 }
 
+func (d document) Name() string {
+	panic("not implemented")
+}
+
+func (d document) Resolve() string {
+	panic("not implemented")
+}
+
 // Description generates a JSON-LD description of the node.
-func (d Document) Description() map[string]any {
+func (d document) Description() map[string]any {
 	// Content-Type: application/ld+json
 
 	//  ETag: string
@@ -80,7 +85,15 @@ func (d Document) Description() map[string]any {
 	panic("not implemented")
 }
 
-func (f Folder) Description() map[string]any {
+func (f folder) Name() string {
+	panic("not implemented")
+}
+
+func (f folder) Resolve() string {
+	panic("not implemented")
+}
+
+func (f folder) Description() map[string]any {
 	//  ETag: string
 	//
 	// @context: http://remotestorage.io/spec/folder-description

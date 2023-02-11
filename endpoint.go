@@ -6,19 +6,47 @@ import (
 	"net/http"
 )
 
-type Server struct{
+// ServerConfig holds the server configuration.
+var ServerConfig = struct {
 	WebRoot, StorageRoot string
+}{
+	WebRoot:     "/storage/",
+	StorageRoot: "/tmp/storage/",
 }
 
 // Serve HTTP requests. Unhandled errors are returned non-nil.
-func (s *Server) Serve(w http.ResponseWriter, r *http.Request) error {
-	// GET folder
-	// HEAD folder
-	// GET document
-	// HEAD document
-	// PUT document
-	// DELETE document
-	// OPTIONS
+func Serve(w http.ResponseWriter, r *http.Request) error {
+	rPath := r.URL.Path
+	isFolder := false
+	{
+		l := len(rPath)
+		if rPath[l-1] == '/' {
+			isFolder = true
+		}
+	}
+
+	rMethod := r.Method
+	if isFolder {
+		switch rMethod {
+		case http.MethodGet:
+			return GetFolder(w, r)
+		case http.MethodHead:
+			return HeadFolder(w, r)
+		}
+	} else {
+		switch rMethod {
+		case http.MethodGet:
+			return GetDocument(w, r)
+		case http.MethodHead:
+			return HeadDocument(w, r)
+		case http.MethodPut:
+			return PutDocument(w, r)
+		case http.MethodDelete:
+			return DeleteDocument(w, r)
+		}
+	}
+
+	// TODO: Handle OPTIONS requests
 
 	// Request not handled
 	return nil

@@ -7,13 +7,13 @@ import (
 	"time"
 )
 
-const BufSize = 1024*32
+const BufSize = 1024 * 32
 
 type ETag []byte
 
 // TODO: Write tests...
 
-func DocumentVersion(n *Node) (etag ETag, err error) {
+func DocumentVersion(n *document) (etag ETag, err error) {
 	serverName, err := os.Hostname()
 	if err != nil {
 		return nil, err
@@ -26,7 +26,7 @@ func DocumentVersion(n *Node) (etag ETag, err error) {
 	hash.Write([]byte(timeFmt))
 	hash.Write([]byte(serverName))
 
-	file, err := os.Open(n.path)
+	file, err := os.Open(n.Resolve())
 	if err != nil {
 		return nil, err
 	}
@@ -49,9 +49,7 @@ func DocumentVersion(n *Node) (etag ETag, err error) {
 	return hash.Sum(nil), err
 }
 
-func FolderVersion(n *Node) (ETag, error) {
-	// FIXME: Make separate types for folders and documents, to avoid
-	//  having passed in nodes of the wrong type...
+func FolderVersion(n *folder) (ETag, error) {
 	serverName, err := os.Hostname()
 	if err != nil {
 		return nil, err
@@ -60,42 +58,47 @@ func FolderVersion(n *Node) (ETag, error) {
 	hash := md5.New()
 	hash.Write([]byte(serverName))
 
-	folders := []*Node{n}
+	nodes := []NodeInfo{n}
 
-	for len(folders) > 0 {
-		n := folders[0]
-		hash.Write([]byte(n.name))
-		for _, c := range n.children {
-			if c.ntype == Document {
-				hash.Write([]byte(c.name))
-				hash.Write([]byte(c.mime))
-				timeFmt := n.lastMod.Format(time.RFC822Z)
-				hash.Write([]byte(timeFmt))
+	for len(nodes) > 0 {
+		n := nodes[0]
+		nodes = nodes[1:]
+		hash.Write([]byte(n.Name()))
 
-				file, err := os.Open(n.path)
-				if err != nil {
-					return nil, err
+		if f, ok := n.(folder); ok {
+			for _, c := range f.children {
+				if cdoc, ok := c.(document); ok {
+					hash.Write([]byte(cdoc.name))
+					hash.Write([]byte(cdoc.mime))
+					timeFmt := cdoc.lastMod.Format(time.RFC822Z)
+					hash.Write([]byte(timeFmt))
+
+					file, err := os.Open(cdoc.Resolve())
+					if err != nil {
+						return nil, err
+					}
+
+					buf := make([]byte, BufSize)
+					for {
+						n, rerr := file.Read(buf)
+						if n > 0 {
+							hash.Write(buf[:n])
+						}
+						if rerr == io.EOF {
+							break
+						}
+						if rerr != nil {
+							err = rerr
+							break
+						}
+					}
+					file.Close()
+				} else {
+					nodes = append(nodes, c)
 				}
-
-				buf := make([]byte, BufSize)
-				for {
-					n, rerr := file.Read(buf)
-					if n > 0 {
-						hash.Write(buf[:n])
-					}
-					if rerr == io.EOF {
-						break
-					}
-					if rerr != nil {
-						err = rerr
-						break
-					}
-				}
-				file.Close()
-			} else if c.ntype == Folder {
-				folders = append(folders, c)
 			}
 		}
+
 	}
 
 	return hash.Sum(nil), err

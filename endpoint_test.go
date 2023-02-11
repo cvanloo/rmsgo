@@ -8,33 +8,25 @@ import (
 	"framagit.org/attaboy/rmsgo"
 )
 
-func TestHeadDocument(t *testing.T) {
-	req, err := http.NewRequest(http.MethodHead, "/storage/someuser/kittens.png", nil)
-	if err != nil {
-		t.Fatalf("failed to create request: %v\n", err)
-	}
+var testRequests = [...]*http.Request{
+	httptest.NewRequest(http.MethodGet, "/storage/someuser/kittens.png", nil),
+	httptest.NewRequest(http.MethodHead, "/storage/someuser/kittens.png", nil),
+	httptest.NewRequest(http.MethodPut, "/storage/someuser/kittens.png", nil), // TODO: Put needs to read from somewhere
+	httptest.NewRequest(http.MethodDelete, "/storage/someuser/kittens.png", nil),
+	httptest.NewRequest(http.MethodGet, "/storage/someuser/documents/", nil),
+	httptest.NewRequest(http.MethodHead, "/storage/someuser/documents/", nil),
+}
 
-	recorder := httptest.NewRecorder()
+func TestServer(t *testing.T) {
+	for _, req := range testRequests {
+		rec := httptest.NewRecorder()
+		err := rmsgo.Serve(rec, req)
+		if err != nil {
+			t.Errorf("%s `%s' failed: %v\n", req.Method, req.URL.Path, err)
+		}
 
-	//mux := http.NewServeMux()
-
-	//s := rmsgo.Server{}
-
-	//mux.HandleFunc("/storage/", func(w http.ResponseWriter, r *http.Request) {
-	//	err := s.Serve(w, r)
-	//	if err != nil {
-	//		t.Fatalf("failed to serve request: %v\n", err)
-	//	}
-	//})
-	//testServer := httptest.NewServer(mux)
-
-	//err = s.Serve(recorder, req)
-	err = rmsgo.HeadDocument(recorder, req)
-	if err != nil {
-		t.Fatalf("HEAD document failed: %v\n", err)
-	}
-
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("want 200 OK, got: %d\n", recorder.Code)
+		if rec.Code != http.StatusOK {
+			t.Errorf("want 200 OK, got: %d\n", rec.Code)
+		}
 	}
 }
