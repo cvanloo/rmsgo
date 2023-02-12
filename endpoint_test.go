@@ -29,13 +29,9 @@ func TestServer(t *testing.T) {
 }
 
 func TestPutDocument(t *testing.T) {
-	fsTest := fsMock{
-		"test.txt": {
-			contents: []byte("if you are reading this you are cute!"),
-		},
-	}
-	useFS = fsTest
 	const testContents = "If you are reading this you are cute!"
+	fsTest := fsMock{}
+	useFS = fsTest
 	req := httptest.NewRequest(http.MethodPut, "/storage/someuser/test.txt", strings.NewReader(testContents))
 	rec := httptest.NewRecorder()
 	err := Serve(rec, req)
@@ -45,11 +41,23 @@ func TestPutDocument(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Errorf("want 201 CREATED, got: %d\n", rec.Code)
 	}
+	cf, err := fsTest.Open("/tmp/storage/someuser/test.txt")
+	if err != nil {
+		t.Fatalf("expected document `test.txt' to exist\n")
+	}
+	buf := make([]byte, 128)
+	size, _ := cf.Read(buf)
+	if size != len(testContents) {
+		t.Errorf("want document size %d, got: %d\n", len(testContents), size)
+	}
+	if string(buf[:size]) != testContents {
+		t.Errorf("document contains wrong contents: %s\n", string(buf))
+	}
 }
 
 func TestDeleteDocument(t *testing.T) {
 	fsTest := fsMock{
-		"test.txt": {
+		"/tmp/storage/someuser/test.txt": {
 			contents: []byte("if you are reading this you are cute!"),
 		},
 	}
@@ -62,5 +70,8 @@ func TestDeleteDocument(t *testing.T) {
 	}
 	if rec.Code != http.StatusOK {
 		t.Errorf("want 200 OK, got: %d\n", rec.Code)
+	}
+	if _, err = fsTest.Stat("/tmp/storage/someuser/test.txt"); err == nil {
+		t.Error("want err, got nil")
 	}
 }

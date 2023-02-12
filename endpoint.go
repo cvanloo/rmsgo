@@ -25,6 +25,7 @@ type fileSystem interface {
 	Open(name string) (fs.File, error)
 	Stat(name string) (os.FileInfo, error)
 	WriteFile(name string, data []byte, perm os.FileMode) error
+	Remove(name string) error
 }
 
 type osFS struct{}
@@ -37,6 +38,9 @@ func (osFS) Stat(name string) (os.FileInfo, error) {
 }
 func (osFS) WriteFile(name string, data []byte, perm os.FileMode) error {
 	return os.WriteFile(name, data, perm)
+}
+func (osFS) Remove(name string) error {
+	return os.Remove(name)
 }
 
 // Serve HTTP requests. Unhandled errors are returned non-nil.

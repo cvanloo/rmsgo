@@ -22,7 +22,13 @@ func (*fileMock) Close() error {
 }
 
 func (f *fileMock) Read(buf []byte) (int, error) {
-	buf = append(buf, f.contents...)
+	l := len(f.contents)
+	if lb := len(buf); lb < l {
+		l = lb
+	}
+	for i := 0; i < l; i++ {
+		buf[i] = f.contents[i]
+	}
 	return len(f.contents), nil
 }
 
@@ -88,5 +94,13 @@ func (fs fsMock) WriteFile(name string, data []byte, perm fs.FileMode) error {
 		modTime:  time.Now(),
 		isDir:    isDir,
 	}
+	return nil
+}
+
+func (fs fsMock) Remove(name string) error {
+	if _, ok := fs[name]; !ok {
+		return os.ErrNotExist
+	}
+	delete(fs, name)
 	return nil
 }
