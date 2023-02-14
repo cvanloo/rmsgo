@@ -29,11 +29,7 @@ func TestServer(t *testing.T) {
 }
 
 func TestPutDocument(t *testing.T) {
-	fsTest := fsMock{
-		"test.txt": {
-			contents: []byte("if you are reading this you are cute!"),
-		},
-	}
+	fsTest := fsMock{}
 	useFS = fsTest
 	const testContents = "If you are reading this you are cute!"
 	req := httptest.NewRequest(http.MethodPut, "/storage/someuser/test.txt", strings.NewReader(testContents))
@@ -45,11 +41,21 @@ func TestPutDocument(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Errorf("want 201 CREATED, got: %d\n", rec.Code)
 	}
+	file, err := useFS.Open("/tmp/storage/someuser/test.txt")
+	if err != nil {
+		t.Fatalf("expected file to exist")
+	}
+	buf := make([]byte, 128)
+	n, _ := file.Read(buf)
+	astr := string(buf[:n])
+	if astr != testContents {
+		t.Errorf("invalid file contents; got: `%s', want `%s'", astr, testContents)
+	}
 }
 
 func TestDeleteDocument(t *testing.T) {
 	fsTest := fsMock{
-		"test.txt": {
+		"/tmp/storage/someuser/test.txt": {
 			contents: []byte("if you are reading this you are cute!"),
 		},
 	}
@@ -62,5 +68,9 @@ func TestDeleteDocument(t *testing.T) {
 	}
 	if rec.Code != http.StatusOK {
 		t.Errorf("want 200 OK, got: %d\n", rec.Code)
+	}
+	_, err = fsTest.Open("/tmp/storage/someuser/test.txt")
+	if err == nil {
+		t.Error("want: ErrNotExist, got: nil")
 	}
 }

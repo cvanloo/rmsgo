@@ -12,6 +12,7 @@ type fileMock struct {
 	path     string
 	modTime  time.Time
 	isDir    bool
+	ptr     int
 }
 
 var _ fs.File = (*fileMock)(nil)
@@ -22,8 +23,15 @@ func (*fileMock) Close() error {
 }
 
 func (f *fileMock) Read(buf []byte) (int, error) {
-	buf = append(buf, f.contents...)
-	return len(f.contents), nil
+	i := 0
+	cl := len(f.contents)
+	bl := len(buf)
+	for i < bl && f.ptr < cl {
+		buf[i] = f.contents[f.ptr];
+		f.ptr++
+		i++
+	}
+	return i, nil
 }
 
 func (f *fileMock) Stat() (fs.FileInfo, error) {
@@ -88,5 +96,13 @@ func (fs fsMock) WriteFile(name string, data []byte, perm fs.FileMode) error {
 		modTime:  time.Now(),
 		isDir:    isDir,
 	}
+	return nil
+}
+
+func (fs fsMock) Remove(name string) error {
+	if _, ok := fs[name]; !ok {
+		return os.ErrNotExist
+	}
+	delete(fs, name)
 	return nil
 }
