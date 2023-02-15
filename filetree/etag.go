@@ -1,4 +1,4 @@
-package rmsgo
+package filetree
 
 import (
 	"crypto/md5"
@@ -11,11 +11,19 @@ const BufSize = 1024 * 64
 
 type ETag []byte
 
+func (etag ETag) String() string {
+	return string(etag)
+}
+
 // TODO: Write tests...
 // TODO: Avoid recalculating the ETags every time (only recalculate when
 //   something actually changes).
 
-func DocumentVersion(n *Document) (etag ETag, err error) {
+func Resolve(n NodeInfo) string {
+	panic("not implemented")
+}
+
+func DocumentVersion(n Document) (etag ETag, err error) {
 	serverName, err := os.Hostname()
 	if err != nil {
 		return nil, err
@@ -51,7 +59,7 @@ func DocumentVersion(n *Document) (etag ETag, err error) {
 	return hash.Sum(nil), err
 }
 
-func FolderVersion(n *Folder) (ETag, error) {
+func FolderVersion(n Folder) (ETag, error) {
 	serverName, err := os.Hostname()
 	if err != nil {
 		return nil, err

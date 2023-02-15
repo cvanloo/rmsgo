@@ -1,11 +1,43 @@
 package rmsgo
 
 import (
-	"io/fs"
+	ioFS "io/fs"
 	"os"
 	"path/filepath"
 	"time"
 )
+
+// fs holds the fileSystem implementation to use.
+// For mocking purposes this can be overwritten by a mock fs.
+var fs fileSystem = osFS{}
+
+// fileSystem implements method for working with files.
+// This abstraction allows mocking the file system when testing.
+type fileSystem interface {
+	Open(name string) (ioFS.File, error)
+	Stat(name string) (os.FileInfo, error)
+	WriteFile(name string, data []byte, perm os.FileMode) error
+	Remove(name string) error
+}
+
+// osFS is a fileSystem implementatino that delegates to the os methods.
+type osFS struct{}
+
+func (osFS) Open(name string) (ioFS.File, error) {
+	return os.Open(name)
+}
+
+func (osFS) Stat(name string) (os.FileInfo, error) {
+	return os.Stat(name)
+}
+
+func (osFS) WriteFile(name string, data []byte, perm os.FileMode) error {
+	return os.WriteFile(name, data, perm)
+}
+
+func (osFS) Remove(name string) error {
+	return os.Remove(name)
+}
 
 type fileMock struct {
 	contents []byte
@@ -15,8 +47,8 @@ type fileMock struct {
 	ptr     int
 }
 
-var _ fs.File = (*fileMock)(nil)
-var _ fs.FileInfo = (*fileMock)(nil)
+var _ ioFS.File = (*fileMock)(nil)
+var _ ioFS.FileInfo = (*fileMock)(nil)
 
 func (*fileMock) Close() error {
 	return nil
@@ -34,7 +66,7 @@ func (f *fileMock) Read(buf []byte) (int, error) {
 	return i, nil
 }
 
-func (f *fileMock) Stat() (fs.FileInfo, error) {
+func (f *fileMock) Stat() (ioFS.FileInfo, error) {
 	return f, nil
 }
 
@@ -46,7 +78,7 @@ func (f *fileMock) ModTime() time.Time {
 	return f.modTime
 }
 
-func (*fileMock) Mode() fs.FileMode {
+func (*fileMock) Mode() ioFS.FileMode {
 	panic("unimplemented")
 }
 
@@ -66,7 +98,7 @@ type fsMock map[string]fileMock
 
 var _ fileSystem = (*fsMock)(nil)
 
-func (fs fsMock) Open(name string) (fs.File, error) {
+func (fs fsMock) Open(name string) (ioFS.File, error) {
 	file, ok := fs[name]
 	if !ok {
 		return nil, os.ErrNotExist
@@ -75,7 +107,7 @@ func (fs fsMock) Open(name string) (fs.File, error) {
 	return &file, nil
 }
 
-func (fs fsMock) Stat(name string) (fs.FileInfo, error) {
+func (fs fsMock) Stat(name string) (ioFS.FileInfo, error) {
 	file, ok := fs[name]
 	if !ok {
 		return nil, os.ErrNotExist
@@ -84,7 +116,7 @@ func (fs fsMock) Stat(name string) (fs.FileInfo, error) {
 	return file.Stat()
 }
 
-func (fs fsMock) WriteFile(name string, data []byte, perm fs.FileMode) error {
+func (fs fsMock) WriteFile(name string, data []byte, perm ioFS.FileMode) error {
 	isDir := false
 	l := len(name)
 	if name[l-1] == '/' {

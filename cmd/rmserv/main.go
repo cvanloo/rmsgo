@@ -7,6 +7,19 @@ import (
 	"framagit.org/attaboy/rmsgo"
 )
 
+type mockUser struct{
+	name string
+	quota uint
+}
+
+func (mu mockUser) Name() string {
+	return mu.name
+}
+
+func (mu mockUser) Quota() uint {
+	return mu.quota
+}
+
 func main() {
 	mux := http.NewServeMux()
 
@@ -22,13 +35,23 @@ func main() {
 		StorageRoot = "/www/somesite.com/public/storage/"
 	)
 
-	rmsgo.ServerConfig.StorageRoot = StorageRoot
-	rmsgo.ServerConfig.WebRoot = WebRoot
+	srv := rmsgo.NewServer(WebRoot, StorageRoot, func(r *http.Request) (User, error) {
+		authHeader := r.Header.Get("Authorization")
+		// TODO: parse bearer token, validate with db, ...
+		if authHeader == "Bearer testikus123" {
+			return &mockUser{
+				name: "testikus",
+				quota: 1024*1024*64,
+			}
+		}
+		return nil, ErrUnauthorized
+	})
 
 	mux.HandleFunc(WebRoot, func(w http.ResponseWriter, r *http.Request) {
-		err := rmsgo.Serve(w, r)
+		err := srv.Serve(w, r)
 		if err != nil {
 			// TODO: More intelligent logging / error handling
+			//   slog maybe?
 			log.Printf("%v\n", err)
 		}
 	})

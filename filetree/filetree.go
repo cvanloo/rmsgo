@@ -1,9 +1,9 @@
-package rmsgo
+package filetree
 
 import (
-	"errors"
 	"time"
 	"io"
+	"encoding/json"
 )
 
 var nodes map[string]NodeInfo
@@ -39,7 +39,8 @@ func Add(n NodeInfo) {
 }
 
 func Get(name string) (NodeInfo, bool) {
-	return nodes[name]
+	n, ok := nodes[name]
+	return n, ok
 }
 
 func Remove(name string) {
@@ -62,7 +63,11 @@ func (d Document) Description() map[string]any {
 }
 
 func (d Document) ETag() []byte {
-	return DocumentVersion(d)
+	ver, err :=  DocumentVersion(d)
+	if err != nil {
+		panic(err) // FIXME: bad, but for now...
+	}
+	return ver
 }
 
 func (f Folder) Name() string {
@@ -77,11 +82,14 @@ func (f Folder) Description() map[string]any {
 }
 
 func (f Folder) ETag() []byte {
-	return FolderVersion(f)
+	ver, err := FolderVersion(f)
+	if err != nil {
+		panic(err) // FIXME: bad, but for now...
+	}
+	return ver
 }
 
-// FIXME: NodeInfo cannot be passed in as a Folder!
-func WriteDescription(w io.Writer, n Folder) error {
+func WriteDescription(w io.Writer, f Folder) error {
 	// TODO: GET empty folder, show folder with empty items {}
 	// TODO: Do not list empty folder in GET of parent (remove empty folders
 	//   from filetree as soon as they become empty)
@@ -89,7 +97,7 @@ func WriteDescription(w io.Writer, n Folder) error {
 	items := map[string]any{}
 	for _, child := range f.children {
 		// TODO: must be relative name (?)
-		times[child.Name()] = child.Description()
+		items[child.Name()] = child.Description()
 	}
 
 	desc := map[string]any{
