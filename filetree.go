@@ -3,29 +3,27 @@ package rmsgo
 import (
 	"errors"
 	"time"
+	"io"
 )
 
-var (
-	root  string
-	nodes map[string]NodeInfo
-)
+var nodes map[string]NodeInfo
 
 type NodeInfo interface {
 	Name() string
-	Resolve() string
 	Description() map[string]any
+	ETag() []byte
 }
 
-type folder struct {
+type Folder struct {
 	name    string
 	version ETag
 	children []NodeInfo
 }
 
 // Folder implements Node
-var _ NodeInfo = (*folder)(nil)
+var _ NodeInfo = (*Folder)(nil)
 
-type document struct {
+type Document struct {
 	name    string
 	version ETag
 	mime    string
@@ -34,74 +32,70 @@ type document struct {
 }
 
 // Document implements Node
-var _ NodeInfo = (*document)(nil)
+var _ NodeInfo = (*Document)(nil)
 
 func Add(n NodeInfo) {
-	//n := &Document{
-	//	Name:    "/user/kittens.png",
-	//	Version: []byte{},
-	//	Mime:    "",
-	//	Length:  uint(0),
-	//	LastMod: time.Time{},
-	//}
-
-	//n := &Folder{
-	//	Name:     "/user/Documents/",
-	//	Version:  []byte{},
-	//	Children: []*Node{},
-	//}
-
 	nodes[n.Name()] = n
 }
 
-var NodeNotFound = errors.New("node not found")
-
-func Get(name string) (NodeInfo, error) {
-	for k, v := range nodes {
-		if k == name {
-			return v, nil
-		}
-	}
-	return nil, NodeNotFound
+func Get(name string) (NodeInfo, bool) {
+	return nodes[name]
 }
 
-func (d document) Name() string {
-	panic("not implemented")
+func Remove(name string) {
+	delete(nodes, name)
 }
 
-func (d document) Resolve() string {
-	panic("not implemented")
+func (d Document) Name() string {
+	return d.name
 }
 
 // Description generates a JSON-LD description of the node.
-func (d document) Description() map[string]any {
-	// Content-Type: application/ld+json
-
-	//  ETag: string
-	//  Content-Type: string
-	//  Content-Length: int (in octects)
-	//  Last-Modified: string (HTTP date)
-
-	panic("not implemented")
+func (d Document) Description() map[string]any {
+	desc := map[string]any{
+		"ETag": d.ETag(),
+		"Content-Type": d.mime,
+		"Content-Length": d.length,
+		"Last-Modified": d.lastMod.Format(time.RFC1123Z),
+	}
+	return desc
 }
 
-func (f folder) Name() string {
-	panic("not implemented")
+func (d Document) ETag() []byte {
+	return DocumentVersion(d)
 }
 
-func (f folder) Resolve() string {
-	panic("not implemented")
+func (f Folder) Name() string {
+	return f.name
 }
 
-func (f folder) Description() map[string]any {
-	//  ETag: string
-	//
-	// @context: http://remotestorage.io/spec/folder-description
-	// items: {
-	//   folder and document descriptions
-	// }
-	//
-	// GET empty folder, show folder with empty items {}
-	// Do not list empty folder in GET of parent
-	panic("not implemented")
+func (f Folder) Description() map[string]any {
+	desc := map[string]any{
+		"ETag": f.ETag(),
+	}
+	return desc
+}
+
+func (f Folder) ETag() []byte {
+	return FolderVersion(f)
+}
+
+// FIXME: NodeInfo cannot be passed in as a Folder!
+func WriteDescription(w io.Writer, n Folder) error {
+	// TODO: GET empty folder, show folder with empty items {}
+	// TODO: Do not list empty folder in GET of parent (remove empty folders
+	//   from filetree as soon as they become empty)
+
+	items := map[string]any{}
+	for _, child := range f.children {
+		// TODO: must be relative name (?)
+		times[child.Name()] = child.Description()
+	}
+
+	desc := map[string]any{
+		"@context": "http://remotestorage.io/spec/folder-description",
+		"items": items,
+	}
+
+	return json.NewEncoder(w).Encode(desc)
 }

@@ -8,6 +8,10 @@ import (
 	"os"
 )
 
+func authenticate(bearer string) (name, secret string, err error) {
+	panic("not implemented")
+}
+
 // ServerConfig holds the server configuration.
 var ServerConfig = struct {
 	WebRoot, StorageRoot string
@@ -93,17 +97,20 @@ func GetFolder(w http.ResponseWriter, r *http.Request) error {
 		return writeError(w, err)
 	}
 
+	// TODO: check user access permissions
+	_ = user
+
+	// TODO: remove web root from path
 	name := r.URL.Path
-	node, err := filetree.Get(name)
-	if err != nil {
-		return writeError(w, err)
+	node, ok := Get(name)
+	if !ok {
+		return writeError(w, ErrNotFound)
 	}
 
-	// Respond with JSON-LD document
 	w.Header().Set("Content-Type", "application/ld+json")
+	w.Header().Set("ETag", string(node.ETag()))
 	w.WriteHeader(http.StatusOK)
-	w.Write(node.Description())
-	return nil
+	return WriteDescription(w, node)
 }
 
 func HeadFolder(w http.ResponseWriter, r *http.Request) error {
@@ -117,10 +124,14 @@ func HeadFolder(w http.ResponseWriter, r *http.Request) error {
 		return writeError(w, err)
 	}
 
+	// TODO: check user access permissions
+	_ = user
+
+	// TODO: remove web root from path
 	name := r.URL.Path
-	node, err := filetree.Get(name)
-	if err != nil {
-		return writeError(w, err)
+	_, ok := Get(name)
+	if !ok {
+		return writeError(w, ErrNotFound)
 	}
 
 	// Respond with JSON-LD document
@@ -140,10 +151,14 @@ func GetDocument(w http.ResponseWriter, r *http.Request) error {
 		return writeError(w, err)
 	}
 
+	// TODO: check access permissions
+	_ = user
+
+	// TODO: remove web root from path
 	name := r.URL.Path
-	node, err := filetree.Get(name)
-	if err != nil {
-		return writeError(w, err)
+	node, ok := Get(name)
+	if !ok {
+		return writeError(w, ErrNotFound)
 	}
 
 	reader, err := storage.Retrieve(name)
@@ -152,8 +167,8 @@ func GetDocument(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	headers := w.Header()
-	headers.Set("Content-Type", node.mime)
-	headers.Set("Content-Length", node.size)
+	headers.Set("Content-Type", node.Mime())
+	headers.Set("Content-Length", node.Length())
 	headers.Set("ETag", node.ETag())
 	w.WriteHeader(http.StatusOK)
 	w.Write(reader)
@@ -171,8 +186,9 @@ func HeadDocument(w http.ResponseWriter, r *http.Request) error {
 		return writeError(w, err)
 	}
 
+	// TODO: remove web root from path
 	name := r.URL.Path
-	node, err := filetree.Get(name)
+	node, err := Get(name)
 	if err != nil {
 		return writeError(w, err)
 	}
@@ -203,6 +219,7 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 		// TODO: go get github.com/gabriel-vasile/mimetype
 	}
 
+	// TODO: remove web root from path
 	// store request body as document contents
 	// silently create parent/ancestor folders
 	name := r.URL.Path
@@ -213,7 +230,7 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 
 	// update filetree, add document to its folder, add each folder to its parent
 	// update etags of document and all its ancestor folders
-	filetree.Add(node)
+	Add(node)
 
 	w.Header().Set("ETag", node.ETag())
 	w.WriteHeader(http.StatusCreated)
@@ -231,6 +248,7 @@ func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 		return writeError(w, err)
 	}
 
+	// TODO: remove web root from path
 	// delete document from storage
 	name := r.URL.Path
 	err = storage.Remove(name)
@@ -241,10 +259,7 @@ func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 	// delete document from parent folder
 	// deletion of any ancestors left empty by this action
 	// update version (ETag) of all ancestors
-	err := filetree.Remove(name)
-	if err != nil {
-		return writeError(w, err)
-	}
+	Remove(name)
 
 	w.WriteHeader(http.StatusOK)
 	return nil
