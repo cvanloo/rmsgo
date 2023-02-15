@@ -23,13 +23,13 @@ func TestServer(t *testing.T) {
 		},
 		"/tmp/storage/someuser/documents/": {
 			isDir: true,
-		}
+		},
 	}
 	srv := NewServer("/storage", "/tmp/storage", func(r *http.Request) (User, error) {
 		return &mockUser{
 			name: "testikus",
 			quota: 1024*1024*64,
-		}
+		}, nil
 	})
 	for _, req := range testRequests {
 		rec := httptest.NewRecorder()
@@ -49,7 +49,7 @@ func TestPutDocument(t *testing.T) {
 		return &mockUser{
 			name: "testikus",
 			quota: 1024*1024*64,
-		}
+		}, nil
 	})
 	fsTest := fsMock{}
 	fs = fsTest
@@ -80,7 +80,7 @@ func TestDeleteDocument(t *testing.T) {
 		return &mockUser{
 			name: "testikus",
 			quota: 1024*1024*64,
-		}
+		}, nil
 	})
 	fsTest := fsMock{
 		"/tmp/storage/someuser/test.txt": {
