@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const BufSize = 1024 * 64
+const BufSize = 1024 * 1024 * 64
 
 type ETag []byte
 
@@ -32,8 +32,8 @@ func DocumentVersion(n Document) (etag ETag, err error) {
 	hash := md5.New()
 	hash.Write([]byte(serverName))
 	hash.Write([]byte(n.name))
-	hash.Write([]byte(n.mime))
-	timeFmt := n.lastMod.Format(time.RFC1123Z)
+	hash.Write([]byte(n.Mime))
+	timeFmt := n.LastMod.Format(time.RFC1123Z)
 	hash.Write([]byte(timeFmt))
 
 	file, err := os.Open(Resolve(n))
@@ -75,14 +75,16 @@ func FolderVersion(n Folder) (ETag, error) {
 		nodes = nodes[1:]
 		hash.Write([]byte(n.Name()))
 
-		if f, ok := n.(Folder); ok {
+		if n.IsFolder() {
+			f := n.Folder()
 			for _, c := range f.children {
 				nodes = append(nodes, c)
 			}
-		} else if d, ok := n.(Document); ok {
+		} else {
+			d := n.Document()
 			hash.Write([]byte(d.name))
-			hash.Write([]byte(d.mime))
-			timeFmt := d.lastMod.Format(time.RFC1123Z)
+			hash.Write([]byte(d.Mime))
+			timeFmt := d.LastMod.Format(time.RFC1123Z)
 			hash.Write([]byte(timeFmt))
 
 			file, err := os.Open(Resolve(d))
@@ -106,7 +108,6 @@ func FolderVersion(n Folder) (ETag, error) {
 			}
 			file.Close()
 		}
-		// FIXME: else ... shouldn't even be possible
 	}
 
 	return hash.Sum(nil), err

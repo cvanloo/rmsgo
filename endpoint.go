@@ -2,6 +2,7 @@ package rmsgo
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"io"
 
@@ -62,7 +63,7 @@ func (srv Server) GetFolder(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	w.Header().Set("Content-Type", "application/ld+json")
-	w.Header().Set("ETag", string(node.ETag()))
+	w.Header().Set("ETag", string(node.Version()))
 	w.WriteHeader(http.StatusOK)
 	//return filetree.WriteDescription(w, node)
 	panic("not implemented")
@@ -110,10 +111,12 @@ func (srv Server) GetDocument(w http.ResponseWriter, r *http.Request) error {
 		return writeError(w, err)
 	}
 
+	doc := node.Document()
+
 	headers := w.Header()
-	headers.Set("Content-Type", node.Mime())
-	headers.Set("Content-Length", node.Length())
-	headers.Set("ETag", string(node.ETag()))
+	headers.Set("Content-Type", doc.Mime)
+	headers.Set("Content-Length", fmt.Sprintf("%d", doc.Length))
+	headers.Set("ETag", string(doc.Version()))
 	w.WriteHeader(http.StatusOK)
 	io.Copy(w, reader)
 	return nil
@@ -135,10 +138,12 @@ func (srv Server) HeadDocument(w http.ResponseWriter, r *http.Request) error {
 		return writeError(w, ErrNotFound)
 	}
 
+	doc := node.Document()
+
 	headers := w.Header()
-	headers.Set("Content-Type", node.Mime())
-	headers.Set("Content-Length", node.Size())
-	headers.Set("ETag", string(node.ETag()))
+	headers.Set("Content-Type", doc.Mime)
+	headers.Set("Content-Length", fmt.Sprintf("%d", doc.Length))
+	headers.Set("ETag", string(doc.Version()))
 	w.WriteHeader(http.StatusOK)
 	return nil
 }
@@ -168,14 +173,14 @@ func (srv Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 		return writeError(w, err)
 	}
 
-	// How do we create a node?
-	var node filetree.NodeInfo
+	// How do we create a Document?
+	var doc filetree.Document
 
 	// update filetree, add document to its folder, add each folder to its parent
 	// update etags of document and all its ancestor folders
-	filetree.Add(node)
+	filetree.Add(doc)
 
-	w.Header().Set("ETag", string(node.ETag()))
+	w.Header().Set("ETag", string(doc.Version()))
 	w.WriteHeader(http.StatusCreated)
 	return nil
 }
