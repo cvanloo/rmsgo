@@ -165,19 +165,16 @@ func (srv Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// TODO: remove web root from path
-	// store request body as document contents
-	// silently create parent/ancestor folders
 	name := r.URL.Path
 	err = storage.Store(name, r.Body)
 	if err != nil {
 		return writeError(w, err)
 	}
 
-	// How do we create a Document?
-	var doc filetree.Document
-
-	// update filetree, add document to its folder, add each folder to its parent
-	// update etags of document and all its ancestor folders
+	doc, err := filetree.NewDocument(name, contentType)
+	if err != nil {
+		return writeError(w, err)
+	}
 	filetree.Add(doc)
 
 	w.Header().Set("ETag", string(doc.Version()))

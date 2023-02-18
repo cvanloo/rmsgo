@@ -8,11 +8,13 @@ type Server struct {
 	auth        AuthenticationFunc
 }
 
+type AuthenticationFunc func(r *http.Request) (User, error)
+
 func NewServer(webRoot, storageRoot string, auth AuthenticationFunc) Server {
 	return Server{
-		webRoot: webRoot,
+		webRoot:     webRoot,
 		storageRoot: storageRoot,
-		auth: auth,
+		auth:        auth,
 	}
 }
 
@@ -20,5 +22,3 @@ type User interface {
 	Name() string
 	Quota() uint
 }
-
-type AuthenticationFunc func(r *http.Request) (User, error)

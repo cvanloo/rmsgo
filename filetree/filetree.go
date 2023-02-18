@@ -1,9 +1,12 @@
 package filetree
 
 import (
-	"time"
-	"io"
 	"encoding/json"
+	"errors"
+	"io"
+	"os"
+	"path/filepath"
+	"time"
 )
 
 // TODO: how do we represent the root?
@@ -36,9 +39,9 @@ type NodeInfo interface {
 }
 
 type Folder struct {
-	parent  *Folder
-	name    string
-	version ETag
+	parent   *Folder
+	name     string
+	version  ETag
 	children map[string]NodeInfo
 }
 
@@ -57,13 +60,83 @@ type Document struct {
 // Document implements Node
 var _ NodeInfo = (*Document)(nil)
 
-var nodes map[string]NodeInfo
+var (
+	root                 *Folder
+	nodes                map[string]NodeInfo
+	storageRoot, webRoot string
+)
+
+func init() {
+	root = &Folder{
+		parent: nil,
+		name:   "/",
+	}
+	root.parent = root
+	nodes = make(map[string]NodeInfo)
+	nodes[root.name] = root
+}
+
+// NewDocument creates a new document node.
+// If mime is left empty, it will be detected based on the file's contents.
+func NewDocument(name, mime string) (doc Document, err error) {
+	storagePath := filepath.Join(storageRoot, name)
+	fi, err := os.Stat(storagePath)
+	if err != nil {
+		return doc, err
+	}
+
+	if fi.IsDir() {
+		return doc, errors.New("path is a folder; want document")
+	}
+
+	doc = Document{
+		name:    name,
+		Mime:    mime,
+		Length:  uint(fi.Size()),
+		LastMod: fi.ModTime(),
+	}
+
+	return doc, nil
+}
 
 // Add a document to the tree.
 // Any necessary ancestor directories are created automatically.
 func Add(doc Document) {
-	// TODO: How do we create the NodeInfo, add its children/parent ...?
-	//   And Resolve() ?
+	var lmp *Folder
+	cPath := doc.name
+	for {
+		pPath := filepath.Dir(cPath)
+		pn, ok := nodes[pPath]
+		if !ok {
+			nf := &Folder{
+				parent:   nil,
+				name:     pPath,
+				children: make(map[string]NodeInfo),
+			}
+			if lmp != nil {
+				nf.children[lmp.name] = lmp
+				lmp.parent = nf
+			}
+			nodes[nf.name] = nf
+			lmp = nf
+			cPath = pPath
+		} else {
+			pf := pn.Folder()
+			if lmp != nil {
+				lmp.parent = &pf
+				pf.children[lmp.name] = lmp
+			}
+			break
+		}
+	}
+
+	pn, ok := nodes[filepath.Dir(doc.name)]
+	if !ok {
+		panic("expected parent node to have been created")
+	}
+	pf := pn.Folder()
+	pf.children[doc.name] = doc
+	doc.parent = &pf
 	nodes[doc.Name()] = doc
 }
 
@@ -117,17 +190,17 @@ func (d Document) Name() string {
 
 func (d Document) Description() map[string]any {
 	desc := map[string]any{
-		"ETag": d.Version(),
-		"Content-Type": d.Mime,
+		"ETag":           d.Version(),
+		"Content-Type":   d.Mime,
 		"Content-Length": d.Length,
-		"Last-Modified": d.LastMod.Format(time.RFC1123Z),
+		"Last-Modified":  d.LastMod.Format(time.RFC1123Z),
 	}
 	return desc
 }
 
 func (d Document) Version() ETag {
 	// TODO: only recalculate version when a child changes?
-	ver, err :=  DocumentVersion(d)
+	ver, err := DocumentVersion(d)
 	if err != nil {
 		panic(err) // FIXME: bad, but for now...
 	}
@@ -174,12 +247,13 @@ func WriteDescription(w io.Writer, f Folder) error {
 	items := map[string]any{}
 	for _, child := range f.children {
 		// TODO: must be relative name (?)
+		//   Maybe we should already store just the relative name in the node.name?
 		items[child.Name()] = child.Description()
 	}
 
 	desc := map[string]any{
 		"@context": "http://remotestorage.io/spec/folder-description",
-		"items": items,
+		"items":    items,
 	}
 
 	return json.NewEncoder(w).Encode(desc)
