@@ -3,10 +3,11 @@ package rmsgo
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"io"
+	"net/http"
 
 	"framagit.org/attaboy/rmsgo/filetree"
+	"framagit.org/attaboy/rmsgo/path"
 	"framagit.org/attaboy/rmsgo/storage"
 )
 
@@ -19,6 +20,8 @@ func (srv Server) Serve(w http.ResponseWriter, r *http.Request) error {
 		isFolder = true
 	}
 
+	// TODO: Handle OPTIONS/CORS requests
+
 	rMethod := r.Method
 	if isFolder {
 		switch rMethod {
@@ -26,6 +29,8 @@ func (srv Server) Serve(w http.ResponseWriter, r *http.Request) error {
 			return srv.GetFolder(w, r)
 		case http.MethodHead:
 			return srv.HeadFolder(w, r)
+		case http.MethodOptions:
+			return writeError(w, ErrNotImplemented)
 		}
 	} else {
 		switch rMethod {
@@ -37,13 +42,12 @@ func (srv Server) Serve(w http.ResponseWriter, r *http.Request) error {
 			return srv.PutDocument(w, r)
 		case http.MethodDelete:
 			return srv.DeleteDocument(w, r)
+		case http.MethodOptions:
+			return writeError(w, ErrNotImplemented)
 		}
 	}
 
-	// TODO: Handle OPTIONS/CORS requests
-
-	// Request not handled
-	return nil
+	return writeError(w, ErrMethodNotAllowed)
 }
 
 func (srv Server) GetFolder(w http.ResponseWriter, r *http.Request) error {
@@ -52,12 +56,15 @@ func (srv Server) GetFolder(w http.ResponseWriter, r *http.Request) error {
 		return writeError(w, err)
 	}
 
-	// what now? (storage access)
+	// what now? (storage access, validate quota, ...?)
 	_ = user
 
-	// TODO: remove web root from path
-	name := r.URL.Path
-	node, ok := filetree.Get(name)
+	path, err := srv.makePath(r.URL.Path)
+	if err != nil {
+		return writeError(w, err)
+	}
+
+	node, ok := filetree.Get(path)
 	if !ok {
 		return writeError(w, ErrNotFound)
 	}
@@ -65,8 +72,7 @@ func (srv Server) GetFolder(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", "application/ld+json")
 	w.Header().Set("ETag", string(node.Version()))
 	w.WriteHeader(http.StatusOK)
-	//return filetree.WriteDescription(w, node)
-	panic("not implemented")
+	return filetree.WriteDescription(w, node.Folder())
 }
 
 func (srv Server) HeadFolder(w http.ResponseWriter, r *http.Request) error {
@@ -78,9 +84,11 @@ func (srv Server) HeadFolder(w http.ResponseWriter, r *http.Request) error {
 	// what now? (storage access)
 	_ = user
 
-	// TODO: remove web root from path
-	name := r.URL.Path
-	_, ok := filetree.Get(name)
+	path, err := srv.makePath(r.URL.Path)
+	if err != nil {
+		return writeError(w, err)
+	}
+	_, ok := filetree.Get(path)
 	if !ok {
 		return writeError(w, ErrNotFound)
 	}
@@ -99,14 +107,16 @@ func (srv Server) GetDocument(w http.ResponseWriter, r *http.Request) error {
 	// what now? (storage access)
 	_ = user
 
-	// TODO: remove web root from path
-	name := r.URL.Path
-	node, ok := filetree.Get(name)
+	path, err := srv.makePath(r.URL.Path)
+	if err != nil {
+		return writeError(w, err)
+	}
+	node, ok := filetree.Get(path)
 	if !ok {
 		return writeError(w, ErrNotFound)
 	}
 
-	reader, err := storage.Retrieve(name)
+	reader, err := storage.Retrieve(path)
 	if err != nil {
 		return writeError(w, err)
 	}
@@ -131,9 +141,11 @@ func (srv Server) HeadDocument(w http.ResponseWriter, r *http.Request) error {
 	// what now? (storage access)
 	_ = user
 
-	// TODO: remove web root from path
-	name := r.URL.Path
-	node, ok := filetree.Get(name)
+	path, err := srv.makePath(r.URL.Path)
+	if err != nil {
+		return writeError(w, err)
+	}
+	node, ok := filetree.Get(path)
 	if !ok {
 		return writeError(w, ErrNotFound)
 	}
@@ -164,14 +176,16 @@ func (srv Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 		// TODO: go get github.com/gabriel-vasile/mimetype
 	}
 
-	// TODO: remove web root from path
-	name := r.URL.Path
-	err = storage.Store(name, r.Body)
+	path, err := srv.makePath(r.URL.Path)
+	if err != nil {
+		return writeError(w, err)
+	}
+	err = storage.Store(path, r.Body)
 	if err != nil {
 		return writeError(w, err)
 	}
 
-	doc, err := filetree.NewDocument(name, contentType)
+	doc, err := filetree.NewDocument(path, contentType)
 	if err != nil {
 		return writeError(w, err)
 	}
@@ -193,8 +207,11 @@ func (srv Server) DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 
 	// TODO: remove web root from path
 	// delete document from storage
-	name := r.URL.Path
-	err = storage.Remove(name)
+	path, err := srv.makePath(r.URL.Path)
+	if err != nil {
+		return writeError(w, err)
+	}
+	err = storage.Remove(path)
 	if err != nil {
 		return writeError(w, err)
 	}
@@ -202,10 +219,14 @@ func (srv Server) DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 	// delete document from parent folder
 	// deletion of any ancestors left empty by this action
 	// update version (ETag) of all ancestors
-	filetree.Remove(name)
+	filetree.Remove(path)
 
 	w.WriteHeader(http.StatusOK)
 	return nil
+}
+
+func (srv Server) makePath(webPath string) (path.RmsPath, error) {
+	return path.NewPath(srv.webRoot, srv.storageRoot, webPath)
 }
 
 func writeError(w http.ResponseWriter, err error) error {

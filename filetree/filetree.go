@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"framagit.org/attaboy/rmsgo/path"
 )
 
 // TODO: how do we represent the root?
@@ -78,9 +80,8 @@ func init() {
 
 // NewDocument creates a new document node.
 // If mime is left empty, it will be detected based on the file's contents.
-func NewDocument(name, mime string) (doc Document, err error) {
-	storagePath := filepath.Join(storageRoot, name)
-	fi, err := os.Stat(storagePath)
+func NewDocument(path path.CompletePath, mime string) (doc Document, err error) {
+	fi, err := os.Stat(path.Storage())
 	if err != nil {
 		return doc, err
 	}
@@ -90,7 +91,7 @@ func NewDocument(name, mime string) (doc Document, err error) {
 	}
 
 	doc = Document{
-		name:    name,
+		name:    path.Remote(),
 		Mime:    mime,
 		Length:  uint(fi.Size()),
 		LastMod: fi.ModTime(),
@@ -141,16 +142,16 @@ func Add(doc Document) {
 }
 
 // Get a node from its name.
-func Get(name string) (NodeInfo, bool) {
-	n, ok := nodes[name]
+func Get(path path.RemotePath) (NodeInfo, bool) {
+	n, ok := nodes[path.Remote()]
 	return n, ok
 }
 
 // Remove a node from the tree.
 // If the node's parent is left empty, it is removed as well, and its parent,
 // and so on...
-func Remove(name string) {
-	n, ok := nodes[name]
+func Remove(path path.RemotePath) {
+	n, ok := nodes[path.Remote()]
 	if !ok {
 		return
 	}

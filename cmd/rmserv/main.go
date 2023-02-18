@@ -5,10 +5,11 @@ import (
 	"net/http"
 
 	"framagit.org/attaboy/rmsgo"
+	"framagit.org/attaboy/rmsgo/mocks"
 )
 
-type mockUser struct{
-	name string
+type mockUser struct {
+	name  string
 	quota uint
 }
 
@@ -31,30 +32,32 @@ func main() {
 
 		// StorageRoot specifies where on the server documents are stored.
 		// The server path for `/user/kitten.png` would be
-		// `/www/somesite.com/public/storage/user/kitten.png`
-		StorageRoot = "/www/somesite.com/public/storage/"
+		// `/var/www/somesite.com/public/storage/user/kitten.png`
+		StorageRoot = "/var/www/somesite.com/public/storage/"
 	)
 
-	srv := rmsgo.NewServer(WebRoot, StorageRoot, func(r *http.Request) (User, error) {
+	srv := rmsgo.NewServer(WebRoot, StorageRoot, func(r *http.Request) (rmsgo.User, error) {
 		authHeader := r.Header.Get("Authorization")
-		// TODO: parse bearer token, validate with db, ...
-		if authHeader == "Bearer testikus123" {
-			return &mockUser{
-				name: "testikus",
-				quota: 1024*1024*64,
-			}
-		}
-		return nil, ErrUnauthorized
+		// Parse bearer token, validate with db, ...
+		_ = authHeader
+		return mocks.TestUser, nil
 	})
 
-	mux.HandleFunc(WebRoot, func(w http.ResponseWriter, r *http.Request) {
-		err := srv.Serve(w, r)
-		if err != nil {
-			// TODO: More intelligent logging / error handling
-			//   slog maybe?
-			log.Printf("%v\n", err)
-		}
+	srv.Listen(mux, func(err error) {
+		// TODO: More intelligent logging / error handling
+		//   slog maybe?
+		log.Printf("%v\n", err)
 	})
+
+	// Alternatively:
+	// mux.HandleFunc(WebRoot, func(w http.ResponseWriter, r *http.Request) {
+	// 	err := srv.Serve(w, r)
+	// 	if err != nil {
+	// 		// TODO: More intelligent logging / error handling
+	// 		//   slog maybe?
+	// 		log.Printf("%v\n", err)
+	// 	}
+	// })
 
 	// TODO: Use ListenAndServeTLS()
 	http.ListenAndServe(":3000", mux)
