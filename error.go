@@ -18,6 +18,7 @@ var (
 	ErrTooManyRequests     = errors.New("too many requests")
 	ErrMethodNotAllowed    = errors.New("method not allowed")
 	ErrInsufficientStorage = errors.New("insufficient storage")
+	ErrBadRequest          = errors.New("bad request")
 )
 
 // StatusCodes maps errors to their respective HTTP status codes
@@ -36,4 +37,5 @@ var StatusCodes = map[error]int{
 	ErrTooManyRequests:     429,
 	ErrMethodNotAllowed:    405,
 	ErrInsufficientStorage: 507,
+	ErrBadRequest:          400,
 }

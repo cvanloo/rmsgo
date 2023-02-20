@@ -2,13 +2,9 @@ package filetree
 
 import (
 	"encoding/json"
-	"errors"
 	"io"
-	"os"
 	"path/filepath"
 	"time"
-
-	"framagit.org/attaboy/rmsgo/path"
 )
 
 // TODO: how do we represent the root?
@@ -26,7 +22,7 @@ type NodeInfo interface {
 	// Description produces a ld+json-like map describing the node.
 	Description() map[string]any
 	// Version calculates the node's etag.
-	Version() ETag
+	Version() []byte
 	// IsFolder returns true only when the node is of type Folder;
 	// false if it is a Document.
 	IsFolder() bool
@@ -43,7 +39,7 @@ type NodeInfo interface {
 type Folder struct {
 	parent   *Folder
 	name     string
-	version  ETag
+	version  []byte
 	children map[string]NodeInfo
 }
 
@@ -53,7 +49,7 @@ var _ NodeInfo = (*Folder)(nil)
 type Document struct {
 	parent  *Folder
 	name    string
-	version ETag
+	version []byte
 	Mime    string
 	Length  uint
 	LastMod time.Time
@@ -80,24 +76,13 @@ func init() {
 
 // NewDocument creates a new document node.
 // If mime is left empty, it will be detected based on the file's contents.
-func NewDocument(path path.CompletePath, mime string) (doc Document, err error) {
-	fi, err := os.Stat(path.Storage())
-	if err != nil {
-		return doc, err
-	}
-
-	if fi.IsDir() {
-		return doc, errors.New("path is a folder; want document")
-	}
-
-	doc = Document{
-		name:    path.Remote(),
+func NewDocument(name, mime string, length uint, lastMod time.Time) Document {
+	return Document{
+		name:    name,
 		Mime:    mime,
-		Length:  uint(fi.Size()),
-		LastMod: fi.ModTime(),
+		Length:  length,
+		LastMod: lastMod,
 	}
-
-	return doc, nil
 }
 
 // Add a document to the tree.
@@ -142,16 +127,16 @@ func Add(doc Document) {
 }
 
 // Get a node from its name.
-func Get(path path.RemotePath) (NodeInfo, bool) {
-	n, ok := nodes[path.Remote()]
+func Get(name string) (NodeInfo, bool) {
+	n, ok := nodes[name]
 	return n, ok
 }
 
 // Remove a node from the tree.
 // If the node's parent is left empty, it is removed as well, and its parent,
 // and so on...
-func Remove(path path.RemotePath) {
-	n, ok := nodes[path.Remote()]
+func Remove(name string) {
+	n, ok := nodes[name]
 	if !ok {
 		return
 	}
@@ -199,13 +184,8 @@ func (d Document) Description() map[string]any {
 	return desc
 }
 
-func (d Document) Version() ETag {
-	// TODO: only recalculate version when a child changes?
-	ver, err := DocumentVersion(d)
-	if err != nil {
-		panic(err) // FIXME: bad, but for now...
-	}
-	return ver
+func (d Document) Version() []byte {
+	return d.version
 }
 
 func (f Folder) IsFolder() bool {
@@ -235,13 +215,8 @@ func (f Folder) Description() map[string]any {
 	return desc
 }
 
-func (f Folder) Version() ETag {
-	// TODO: only recalculate version when a child changes?
-	ver, err := FolderVersion(f)
-	if err != nil {
-		panic(err) // FIXME: bad, but for now...
-	}
-	return ver
+func (f Folder) Version() []byte {
+	return f.version
 }
 
 func WriteDescription(w io.Writer, f Folder) error {

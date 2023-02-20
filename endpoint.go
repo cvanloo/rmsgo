@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
+	"strconv"
+	"time"
 
 	"framagit.org/attaboy/rmsgo/filetree"
-	"framagit.org/attaboy/rmsgo/path"
 	"framagit.org/attaboy/rmsgo/storage"
 )
 
@@ -59,7 +61,7 @@ func (srv Server) GetFolder(w http.ResponseWriter, r *http.Request) error {
 	// what now? (storage access, validate quota, ...?)
 	_ = user
 
-	path, err := srv.makePath(r.URL.Path)
+	path, err := filepath.Rel(srv.webRoot, r.URL.Path)
 	if err != nil {
 		return writeError(w, err)
 	}
@@ -84,7 +86,7 @@ func (srv Server) HeadFolder(w http.ResponseWriter, r *http.Request) error {
 	// what now? (storage access)
 	_ = user
 
-	path, err := srv.makePath(r.URL.Path)
+	path, err := filepath.Rel(srv.webRoot, r.URL.Path)
 	if err != nil {
 		return writeError(w, err)
 	}
@@ -107,7 +109,7 @@ func (srv Server) GetDocument(w http.ResponseWriter, r *http.Request) error {
 	// what now? (storage access)
 	_ = user
 
-	path, err := srv.makePath(r.URL.Path)
+	path, err := filepath.Rel(srv.webRoot, r.URL.Path)
 	if err != nil {
 		return writeError(w, err)
 	}
@@ -141,7 +143,7 @@ func (srv Server) HeadDocument(w http.ResponseWriter, r *http.Request) error {
 	// what now? (storage access)
 	_ = user
 
-	path, err := srv.makePath(r.URL.Path)
+	path, err := filepath.Rel(srv.webRoot, r.URL.Path)
 	if err != nil {
 		return writeError(w, err)
 	}
@@ -169,6 +171,12 @@ func (srv Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 	// what now? (storage access)
 	_ = user
 
+	contentLengthStr := r.Header.Get("Content-Length")
+	contentLength, err := strconv.ParseUint(contentLengthStr, 10, 64)
+	if err != nil {
+		// TODO: wrap errors to provide more info to the client
+		return writeError(w, ErrBadRequest)
+	}
 	contentType := r.Header.Get("Content-Type")
 	if len(contentType) == 0 {
 		// if request without Content-Type, server MAY refuse request
@@ -176,7 +184,7 @@ func (srv Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 		// TODO: go get github.com/gabriel-vasile/mimetype
 	}
 
-	path, err := srv.makePath(r.URL.Path)
+	path, err := filepath.Rel(srv.webRoot, r.URL.Path)
 	if err != nil {
 		return writeError(w, err)
 	}
@@ -185,7 +193,7 @@ func (srv Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 		return writeError(w, err)
 	}
 
-	doc, err := filetree.NewDocument(path, contentType)
+	doc := filetree.NewDocument(path, contentType, uint(contentLength), time.Now())
 	if err != nil {
 		return writeError(w, err)
 	}
@@ -207,7 +215,7 @@ func (srv Server) DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 
 	// TODO: remove web root from path
 	// delete document from storage
-	path, err := srv.makePath(r.URL.Path)
+	path, err := filepath.Rel(srv.webRoot, r.URL.Path)
 	if err != nil {
 		return writeError(w, err)
 	}
@@ -223,10 +231,6 @@ func (srv Server) DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 
 	w.WriteHeader(http.StatusOK)
 	return nil
-}
-
-func (srv Server) makePath(webPath string) (path.RmsPath, error) {
-	return path.NewPath(srv.webRoot, srv.storageRoot, webPath)
 }
 
 func writeError(w http.ResponseWriter, err error) error {

@@ -4,12 +4,23 @@ import (
 	"crypto/md5"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 )
 
+type ETag []byte
+
 const BufSize = 1024 * 1024 * 64
 
-type ETag []byte
+var serverName string
+
+func init() {
+	hn, err := os.Hostname()
+	if err != nil {
+		panic(err)
+	}
+	serverName = hn
+}
 
 func (etag ETag) String() string {
 	return string(etag)
@@ -20,23 +31,18 @@ func (etag ETag) String() string {
 //   something actually changes).
 
 func Resolve(n NodeInfo) string {
-	panic("not implemented")
+	return filepath.Join(storageRoot, n.Name())
 }
 
-func DocumentVersion(n Document) (etag ETag, err error) {
-	serverName, err := os.Hostname()
-	if err != nil {
-		return nil, err
-	}
-
+func DocumentVersion(doc Document) (etag ETag, err error) {
 	hash := md5.New()
 	hash.Write([]byte(serverName))
-	hash.Write([]byte(n.name))
-	hash.Write([]byte(n.Mime))
-	timeFmt := n.LastMod.Format(time.RFC1123Z)
+	hash.Write([]byte(doc.name))
+	hash.Write([]byte(doc.Mime))
+	timeFmt := doc.LastMod.Format(time.RFC1123Z)
 	hash.Write([]byte(timeFmt))
 
-	file, err := os.Open(Resolve(n))
+	file, err := os.Open(Resolve(doc))
 	if err != nil {
 		return nil, err
 	}
@@ -59,16 +65,11 @@ func DocumentVersion(n Document) (etag ETag, err error) {
 	return hash.Sum(nil), err
 }
 
-func FolderVersion(n Folder) (ETag, error) {
-	serverName, err := os.Hostname()
-	if err != nil {
-		return nil, err
-	}
-
+func FolderVersion(fol Folder) (ETag, error) {
 	hash := md5.New()
 	hash.Write([]byte(serverName))
 
-	nodes := []NodeInfo{n}
+	nodes := []NodeInfo{fol}
 
 	for len(nodes) > 0 {
 		n := nodes[0]
@@ -110,5 +111,5 @@ func FolderVersion(n Folder) (ETag, error) {
 		}
 	}
 
-	return hash.Sum(nil), err
+	return hash.Sum(nil), nil
 }

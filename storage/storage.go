@@ -4,17 +4,17 @@ import (
 	"bufio"
 	"io"
 	"os"
-
-	"framagit.org/attaboy/rmsgo/path"
+	"path/filepath"
 )
 
 const bufSize = 1024 * 1024 * 64
+var storageRoot string
 
-func Store(path path.StoragePath, reader io.Reader) error {
-	name := path.Storage()
+func Store(name string, reader io.Reader) error {
+	path := filepath.Join(storageRoot, name)
 	// TODO: create ancestors?
 	// TODO: permissions?
-	fo, err := os.Create(name)
+	fo, err := os.Create(path)
 	if err != nil {
 		return err
 	}
@@ -40,16 +40,18 @@ func Store(path path.StoragePath, reader io.Reader) error {
 	return nil
 }
 
-func Retrieve(path path.StoragePath) (io.Reader, error) {
-	fi, err := os.Open(path.Storage())
+func Retrieve(name string) (io.Reader, error) {
+	path := filepath.Join(storageRoot, name)
+	fi, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	return fi, nil
 }
 
-func Remove(path path.StoragePath) error {
+func Remove(name string) error {
+	path := filepath.Join(storageRoot, name)
 	// TODO: remove empty ancestors?
-	err := os.Remove(path.Storage())
+	err := os.Remove(path)
 	return err
 }
