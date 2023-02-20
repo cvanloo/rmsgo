@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -188,6 +189,8 @@ func (srv Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return writeError(w, err)
 	}
+	// TODO: put logging into an interceptor / middle service
+	log.Printf("request: %s, remote: %s", r.URL.Path, path)
 	err = storage.Store(path, r.Body)
 	if err != nil {
 		return writeError(w, err)

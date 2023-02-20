@@ -2,20 +2,23 @@ package rmsgo
 
 import (
 	"net/http"
+
+	"framagit.org/attaboy/rmsgo/filetree"
+	"framagit.org/attaboy/rmsgo/storage"
 )
 
 func NewServer(webRoot, storageRoot string, auth AuthenticationFunc) Server {
+	storage.Setup(storageRoot)
+	filetree.Setup(storageRoot)
 	return Server{
-		webRoot:     webRoot,
-		storageRoot: storageRoot,
-		auth:        auth,
+		webRoot: webRoot,
+		auth:    auth,
 	}
 }
 
 type Server struct {
-	webRoot     string
-	storageRoot string
-	auth        AuthenticationFunc
+	webRoot string
+	auth    AuthenticationFunc
 }
 
 type AuthenticationFunc func(r *http.Request) (User, error)

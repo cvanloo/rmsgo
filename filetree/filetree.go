@@ -59,9 +59,9 @@ type Document struct {
 var _ NodeInfo = (*Document)(nil)
 
 var (
-	root                 *Folder
-	nodes                map[string]NodeInfo
-	storageRoot, webRoot string
+	root        *Folder
+	nodes       map[string]NodeInfo
+	storageRoot string
 )
 
 func init() {
@@ -72,6 +72,12 @@ func init() {
 	root.parent = root
 	nodes = make(map[string]NodeInfo)
 	nodes[root.name] = root
+
+	storageRoot = "/tmp/storage/"
+}
+
+func Setup(root string) {
+	storageRoot = root
 }
 
 // NewDocument creates a new document node.

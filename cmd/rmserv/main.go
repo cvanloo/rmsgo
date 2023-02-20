@@ -33,7 +33,8 @@ func main() {
 		// StorageRoot specifies where on the server documents are stored.
 		// The server path for `/user/kitten.png` would be
 		// `/var/www/somesite.com/public/storage/user/kitten.png`
-		StorageRoot = "/var/www/somesite.com/public/storage/"
+		//StorageRoot = "/var/www/somesite.com/public/storage/"
+		StorageRoot = "/tmp/storage/"
 	)
 
 	srv := rmsgo.NewServer(WebRoot, StorageRoot, func(r *http.Request) (rmsgo.User, error) {
@@ -60,5 +61,8 @@ func main() {
 	// })
 
 	// TODO: Use ListenAndServeTLS()
+	log.Println("listening on :3000")
+	log.Printf("WebRoot: %s\n", WebRoot)
+	log.Printf("StorageRoot: %s\n", StorageRoot)
 	http.ListenAndServe(":3000", mux)
 }

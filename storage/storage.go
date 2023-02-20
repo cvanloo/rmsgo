@@ -3,15 +3,22 @@ package storage
 import (
 	"bufio"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 )
 
 const bufSize = 1024 * 1024 * 64
-var storageRoot string
+
+var storageRoot string = "/tmp/storage/"
+
+func Setup(root string) {
+	storageRoot = root
+}
 
 func Store(name string, reader io.Reader) error {
 	path := filepath.Join(storageRoot, name)
+	log.Printf("saving %s", path)
 	// TODO: create ancestors?
 	// TODO: permissions?
 	fo, err := os.Create(path)
