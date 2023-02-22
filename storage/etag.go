@@ -1,45 +1,36 @@
-package filetree
+package storage
 
 import (
 	"crypto/md5"
+	"encoding/base64"
+	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"time"
 )
 
 type ETag []byte
 
-const BufSize = 1024 * 1024 * 64
+func (e ETag) Base64() string {
+	return base64.StdEncoding.EncodeToString(e)
+}
 
 var serverName string
 
 func init() {
-	hn, err := os.Hostname()
+	name, err := os.Hostname()
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("could not obtain hostname information: %v", err))
 	}
-	serverName = hn
-}
-
-func (etag ETag) String() string {
-	return string(etag)
-}
-
-// TODO: Write tests...
-// TODO: Avoid recalculating the ETags every time (only recalculate when
-//   something actually changes).
-
-func Resolve(n NodeInfo) string {
-	return filepath.Join(storageRoot, n.Name())
+	serverName = name
 }
 
 func DocumentVersion(doc Document) (etag ETag, err error) {
 	hash := md5.New()
 	hash.Write([]byte(serverName))
-	hash.Write([]byte(doc.name))
-	hash.Write([]byte(doc.Mime))
-	timeFmt := doc.LastMod.Format(time.RFC1123Z)
+	hash.Write([]byte(doc.Name()))
+	hash.Write([]byte(doc.Mime()))
+	timeFmt := doc.LastMod().Format(time.RFC1123Z)
 	hash.Write([]byte(timeFmt))
 
 	file, err := os.Open(Resolve(doc))
@@ -78,14 +69,14 @@ func FolderVersion(fol Folder) (ETag, error) {
 
 		if n.IsFolder() {
 			f := n.Folder()
-			for _, c := range f.children {
+			for _, c := range f.Children() {
 				nodes = append(nodes, c)
 			}
 		} else {
 			d := n.Document()
-			hash.Write([]byte(d.name))
-			hash.Write([]byte(d.Mime))
-			timeFmt := d.LastMod.Format(time.RFC1123Z)
+			hash.Write([]byte(d.Name()))
+			hash.Write([]byte(d.Mime()))
+			timeFmt := d.LastMod().Format(time.RFC1123Z)
 			hash.Write([]byte(timeFmt))
 
 			file, err := os.Open(Resolve(d))
@@ -103,8 +94,7 @@ func FolderVersion(fol Folder) (ETag, error) {
 					break
 				}
 				if rerr != nil {
-					err = rerr
-					break
+					return nil, rerr
 				}
 			}
 			file.Close()

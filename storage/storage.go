@@ -2,13 +2,18 @@ package storage
 
 import (
 	"bufio"
+	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
+	"time"
 )
 
-const bufSize = 1024 * 1024 * 64
+// TODO: Recalculate ETag only when something actually changed
+// TODO: Initialize file tree from file system
+// TODO: Alternative file tree that uses database
+
+const BufSize = 1024 * 1024 * 64
 
 var storageRoot string = "/tmp/storage/"
 
@@ -16,49 +21,75 @@ func Setup(root string) {
 	storageRoot = root
 }
 
-func Store(name string, reader io.Reader) error {
-	path := filepath.Join(storageRoot, name)
-	log.Printf("saving %s", path)
-	// TODO: create ancestors?
-	// TODO: permissions?
-	fo, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-
-	w := bufio.NewWriter(fo)
-	buf := make([]byte, bufSize)
-
-	for {
-		n, err := reader.Read(buf)
-		if err != nil && err != io.EOF {
-			return err
-		}
-
-		if n == 0 {
-			break
-		}
-
-		if _, err := w.Write(buf); err != nil {
-			return err
-		}
-	}
-
-	return nil
+func Resolve(n NodeInfo) string {
+	return filepath.Join(storageRoot, n.Name())
 }
 
-func Retrieve(name string) (io.Reader, error) {
+func Store(name string, reader io.Reader, contentType string, contentLength uint64) (node NodeInfo, err error) {
+	// TODO: create ancestor directories if necessary
 	path := filepath.Join(storageRoot, name)
-	fi, err := os.Open(path)
+	outFile, err := os.Create(path)
 	if err != nil {
 		return nil, err
 	}
-	return fi, nil
+	defer func(outFile *os.File) {
+		err = outFile.Close()
+	}(outFile)
+
+	err = outFile.Chmod(0660)
+	if err != nil {
+		return nil, err
+	}
+
+	writer := bufio.NewWriter(outFile)
+	_, err = io.Copy(writer, reader)
+	if err != nil {
+		return nil, err
+	}
+
+	doc := &document{
+		name:    name,
+		mime:    contentType,
+		length:  contentLength,
+		lastMod: time.Now(),
+	}
+	doc.parent = nil
+	doc.version, err = DocumentVersion(doc)
+	if err != nil {
+		return nil, err
+	}
+	node = doc
+
+	return node, nil
+}
+
+func Retrieve(name string) (NodeInfo, bool) {
+	node, found := nodes[name]
+	return node, found
 }
 
 func Remove(name string) error {
-	path := filepath.Join(storageRoot, name)
-	// TODO: remove empty ancestors?
-	err := os.Remove(path)
-	return err
+	n, ok := nodes[name]
+	if !ok {
+		return fmt.Errorf("invalid node specified: `%s' does not exist", name)
+	}
+
+	for {
+		delete(nodes, n.Name())
+		p := n.Parent()
+		delete(p.Children(), n.Name())
+		if p == rootNode {
+			break
+		}
+		if len(p.Children()) > 0 {
+			break
+		}
+		n = p // delete empty parent
+	}
+
+	err := os.RemoveAll(Resolve(n))
+	if err != nil {
+		return fmt.Errorf("failed to remove node(s) `%s' from file system: %v", n.Name(), err)
+	}
+	return nil
 }

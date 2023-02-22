@@ -3,13 +3,14 @@ package rmsgo
 import (
 	"net/http"
 
-	"framagit.org/attaboy/rmsgo/filetree"
 	"framagit.org/attaboy/rmsgo/storage"
 )
 
 func NewServer(webRoot, storageRoot string, auth AuthenticationFunc) Server {
 	storage.Setup(storageRoot)
-	filetree.Setup(storageRoot)
+	if webRoot[len(webRoot)-1] != '/' {
+		webRoot += "/"
+	}
 	return Server{
 		webRoot: webRoot,
 		auth:    auth,
