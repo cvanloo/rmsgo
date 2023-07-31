@@ -1,36 +1,27 @@
 package rmsgo
 
 import (
+	"fmt"
 	"testing"
 )
 
-//func TestMain(m *testing.M) {
-//	FS = &MockFileSystem{}
-//	code := m.Run()
-//	os.Exit(code)
-//}
-
 func TestGetFolder(t *testing.T) {
-	FS = &mockFileSystem{
-		contents: map[string]*mockFile{
-			"test.txt": {
-				isDir: false,
-				name:  "test.txt",
-				bytes: []byte("Hello, World!"),
-			},
-			"Pictures": {
-				isDir: true,
-				name: "Pictures",
-				children: map[string]*mockFile{
-					"Kittens.png": {
-						isDir: false,
-						name: "Kittens.png",
-						bytes: []byte("Just imagine this to be a picture of kittens."),
-					},
-				},
-			},
-		},
-	}
+	fs := CreateMockFS()
+	fs.
+		AddFile("test.txt", "Hello, World!").
+		AddDirectory("Pictures").
+		Into().
+		AddFile("Kittens.png", "A cute kitten!").
+		AddFile("Gopher.jpg", "It's Gopher!").
+		Leave().
+		AddDirectory("Documents").
+		Into().
+		AddFile("doc.txt", "Lorem ipsum dolores sit amet").
+		AddFile("taxes.txt", "I ain't paying 'em!")
+
+	fmt.Printf("%v\n", fs)
+
+	FS = fs
 }
 
 func TestHeadFolder(t *testing.T) {
