@@ -80,16 +80,14 @@ func (m *mockFileSystem) Stat(name string) (fs.FileInfo, error) {
 }
 
 func (m *mockFileSystem) WalkDir(root string, fn fs.WalkDirFunc) error {
-	fs := []struct {
+	type fsmap struct {
 		name string
 		file *mockFile
-	}{}
+	}
+	fs := []fsmap{}
 	for name, file := range m.contents {
 		if strings.HasPrefix(name, root) {
-			fs = append(fs, struct {
-				name string
-				file *mockFile
-			}{name, file})
+			fs = append(fs, fsmap{name, file})
 		}
 	}
 	sort.Slice(fs, func(i, j int) bool {
@@ -103,7 +101,7 @@ func (m *mockFileSystem) WalkDir(root string, fn fs.WalkDirFunc) error {
 
 func (m *mockFileSystem) Truncate(name string, size int64) error {
 	if f, ok := m.contents[name]; ok {
-		f.bytes = f.bytes[0:size]
+		f.bytes = f.bytes[:size]
 		return nil
 	}
 	return os.ErrNotExist
@@ -121,7 +119,16 @@ func (m *mockFileSystem) WriteFile(name string, data []byte, perm os.FileMode) e
 		f.bytes = data
 		return nil
 	}
-	return os.ErrNotExist
+	parts := strings.Split(name, "/")
+	m.contents[name] = &mockFile{
+		isDir:   false,
+		name:    parts[len(parts)-1],
+		bytes:   data,
+		cursor:  0,
+		mode:    perm,
+		lastMod: time.Now(),
+	}
+	return nil
 }
 
 type mockFile struct {
@@ -162,7 +169,12 @@ func (m *mockFile) Read(b []byte) (n int, err error) {
 }
 
 func (m *mockFile) Write(b []byte) (n int, err error) {
-	n = copy(m.bytes[m.cursor:], b)
+	nl := len(b) + len(m.bytes[:m.cursor])
+	nbs := make([]byte, nl)
+	copy(nbs, m.bytes[:m.cursor])
+	n = copy(nbs[m.cursor:], b)
+	m.bytes = nbs
+	m.cursor += int64(n)
 	return n, nil
 }
 
@@ -212,7 +224,7 @@ func (*mockFile) Sys() any {
 
 func CreateMockFS() (fs *mockFileSystem) {
 	fs = &mockFileSystem{
-		contents:  map[string]*mockFile{},
+		contents: map[string]*mockFile{},
 	}
 	//fs.AddDirectory("/")
 	//fs.Into()
@@ -227,7 +239,7 @@ func (m *mockFileSystem) AddFile(name, data string) *mockFileSystem {
 		name:    name,
 		bytes:   []byte(data),
 		cursor:  0,
-		mode:    0664,
+		mode:    0644,
 		lastMod: time.Now(),
 	}
 	return m
