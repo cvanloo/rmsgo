@@ -17,7 +17,7 @@ func writeError(w http.ResponseWriter, err error) error {
 		// @todo: "message": err.Message()?
 	}
 
-	w.Header().Set("Content-Type", "ld+json") // @fixme: correct?
+	w.Header().Set("Content-Type", "application/ld+json")
 	w.WriteHeader(status)
 	return json.NewEncoder(w).Encode(data)
 }
