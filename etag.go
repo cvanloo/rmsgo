@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"time"
+
+	"golang.org/x/exp/maps"
 )
 
 type ETag []byte
@@ -31,7 +33,7 @@ func generateETag(n *node) (ETag, error) {
 
 		if cn.isFolder {
 			io.WriteString(hash, cn.name)
-			ns = append(ns, cn.children...)
+			ns = append(ns, maps.Values(cn.children)...)
 		} else {
 			io.WriteString(hash, cn.name)
 			io.WriteString(hash, cn.mime)

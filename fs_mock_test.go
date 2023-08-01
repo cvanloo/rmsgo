@@ -417,3 +417,44 @@ func TestFileStat(t *testing.T) {
 	}
 	//s.ModTime()
 }
+
+func TestRemove(t *testing.T) {
+	m := createMock()
+	const path = "/Documents/fakenius.txt"
+	_, err := m.Open(path)
+	if err != nil {
+		t.Fatalf("Open: got error: `%v' (expected file to exist)", err)
+	}
+	err = m.Remove(path)
+	if err != nil {
+		t.Errorf("Remove: got error: `%v'", err)
+	}
+	_, err = m.Open(path)
+	if err != os.ErrNotExist {
+		t.Errorf("Open: got: `%v', want: `%s' (expected file to be inexistent)", err, os.ErrNotExist)
+	}
+}
+
+func TestRemoveAll(t *testing.T) {
+	m := createMock()
+	_, err := m.Open("/Documents/fakenius.txt")
+	if err != nil {
+		t.Fatalf("Open: got error: `%v' (expected file to exist)", err)
+	}
+	err = m.RemoveAll("/Documents/")
+	if err != nil {
+		t.Errorf("RemoveAll: got error: `%v'", err)
+	}
+	_, err = m.Open("/Documents/fakenius.txt")
+	if err != os.ErrNotExist {
+		t.Errorf("Open: got: `%v', want: `%s' (expected file to be inexistent)", err, os.ErrNotExist)
+	}
+	_, err = m.Open("/Documents/doc.txt")
+	if err != os.ErrNotExist {
+		t.Errorf("Open: got: `%v', want: `%s' (expected file to be inexistent)", err, os.ErrNotExist)
+	}
+	_, err = m.Open("/Documents/")
+	if err != os.ErrNotExist {
+		t.Errorf("Open: got: `%v', want: `%s' (expected file to be inexistent)", err, os.ErrNotExist)
+	}
+}

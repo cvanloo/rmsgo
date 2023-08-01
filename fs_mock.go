@@ -18,6 +18,8 @@ type fileSystem interface {
 	Truncate(name string, size int64) error
 	ReadFile(name string) ([]byte, error)
 	WriteFile(name string, data []byte, perm os.FileMode) error
+	Remove(name string) error
+	RemoveAll(name string) error
 }
 
 type file interface {
@@ -55,6 +57,14 @@ func (*osFileSystem) ReadFile(name string) ([]byte, error) {
 
 func (*osFileSystem) WriteFile(name string, data []byte, perm os.FileMode) error {
 	return os.WriteFile(name, data, perm)
+}
+
+func (*osFileSystem) Remove(name string) error {
+	return os.Remove(name)
+}
+
+func (*osFileSystem) RemoveAll(name string) error {
+	return os.RemoveAll(name)
 }
 
 type mockFileSystem struct {
@@ -127,6 +137,32 @@ func (m *mockFileSystem) WriteFile(name string, data []byte, perm os.FileMode) e
 		cursor:  0,
 		mode:    perm,
 		lastMod: time.Now(),
+	}
+	return nil
+}
+
+func (m *mockFileSystem) Remove(name string) error {
+	if f, ok := m.contents[name]; ok {
+		if f.isDir && len(f.children) != 0 {
+			return &os.PathError{
+				Op:   "Remove",
+				Path: name,
+				Err:  fmt.Errorf("cannot delete non-empty directory"),
+			}
+		}
+		delete(m.contents, name)
+	}
+	return nil
+}
+
+func (m *mockFileSystem) RemoveAll(name string) error {
+	if f, ok := m.contents[name]; ok {
+		if f.isDir {
+			m.WalkDir(name, func(path string, d fs.DirEntry, err error) error {
+				delete(m.contents, path)
+				return nil
+			})
+		}
 	}
 	return nil
 }
