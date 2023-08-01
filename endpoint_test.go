@@ -21,7 +21,7 @@ func TestGetFolder(t *testing.T) {
 
 	fmt.Printf("%v\n", fs)
 
-	FS = fs
+	mfs = fs
 }
 
 func TestHeadFolder(t *testing.T) {
