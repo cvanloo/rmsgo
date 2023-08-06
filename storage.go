@@ -33,6 +33,7 @@ type node struct {
 
 type Storage struct {
 	files map[string]*node
+	root  *node
 }
 
 var ErrFileExists = errors.New("file already exists")
@@ -47,11 +48,12 @@ func NewStorage() (s Storage) {
 	}
 	s.files = make(map[string]*node)
 	s.files["/"] = rn
+	s.root = rn
 	return
 }
 
 func (s Storage) Root() *node {
-	return s.files["/"]
+	return s.root
 }
 
 func (s Storage) CreateDocument(cfg Server, rname string, data []byte, mime string) (*node, error) {
@@ -152,10 +154,10 @@ func (s Storage) RemoveDocument(cfg Server, rname string) (*node, error) {
 	if f, ok := s.files[rname]; ok {
 		assert(!f.isFolder, "removeDocument must not be called on a folder")
 		p := f
-		for p != nil && p.name != "/" {
+		for p != nil && p != s.root {
 			if len(p.children) == 0 {
 				mfs.Remove(p.sname)
-				pp := p.parent // @fixme: could parent be nil (eg at the fs root)?
+				pp := p.parent
 				delete(pp.children, p.rname)
 				delete(s.files, p.rname)
 				p = pp
@@ -177,7 +179,7 @@ func (s Storage) Node(cfg Server, rname string) (*node, error) {
 }
 
 func (s Storage) String() string {
-	return s.Root().StringIdent(0)
+	return s.root.StringIdent(0)
 }
 
 func (n node) String() string {
