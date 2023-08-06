@@ -77,15 +77,14 @@ var _ fileSystem = (*mockFileSystem)(nil)
 
 func (m *mockFileSystem) Open(name string) (file, error) {
 	if f, ok := m.contents[name]; ok {
-		f.cursor = 0 // @fixme: ugh, maybe just create a new structure when opening?
-		return f, nil
+		return f.AsFd(), nil
 	}
 	return nil, os.ErrNotExist
 }
 
 func (m *mockFileSystem) Stat(name string) (fs.FileInfo, error) {
 	if f, ok := m.contents[name]; ok {
-		return f, nil
+		return f.AsFd(), nil
 	}
 	return nil, os.ErrNotExist
 }
@@ -105,7 +104,7 @@ func (m *mockFileSystem) WalkDir(root string, fn fs.WalkDirFunc) error {
 		return fs[i].name < fs[j].name
 	})
 	for _, v := range fs {
-		fn(v.name, v.file, nil)
+		fn(v.name, v.file.AsFd(), nil)
 	}
 	return nil
 }
@@ -135,7 +134,6 @@ func (m *mockFileSystem) WriteFile(name string, data []byte, perm os.FileMode) e
 		isDir:   false,
 		name:    parts[len(parts)-1],
 		bytes:   data,
-		cursor:  0,
 		mode:    perm,
 		lastMod: time.Now(),
 	}
@@ -172,50 +170,58 @@ type mockFile struct {
 	isDir    bool
 	name     string
 	bytes    []byte
-	cursor   int64
 	children map[string]*mockFile
 	mode     fs.FileMode
 	lastMod  time.Time
 }
 
-var _ file = (*mockFile)(nil)
-var _ fs.DirEntry = (*mockFile)(nil)
-var _ fs.FileInfo = (*mockFile)(nil)
+func (m *mockFile) AsFd() *mockFileFd {
+	return &mockFileFd{m, 0}
+}
 
-func (*mockFile) Close() error {
+type mockFileFd struct {
+	file   *mockFile
+	cursor int64
+}
+
+var _ file = (*mockFileFd)(nil)
+var _ fs.DirEntry = (*mockFileFd)(nil)
+var _ fs.FileInfo = (*mockFileFd)(nil)
+
+func (*mockFileFd) Close() error {
 	// nop
 	return nil
 }
 
-func (m *mockFile) Name() string {
-	return m.name
+func (m *mockFileFd) Name() string {
+	return m.file.name
 }
 
-func (m *mockFile) Stat() (fs.FileInfo, error) {
+func (m *mockFileFd) Stat() (fs.FileInfo, error) {
 	// m implements fs.FileInfo
 	return m, nil
 }
 
-func (m *mockFile) Read(b []byte) (n int, err error) {
-	if m.cursor == int64(len(m.bytes)) {
+func (m *mockFileFd) Read(b []byte) (n int, err error) {
+	if m.cursor == int64(len(m.file.bytes)) {
 		return 0, io.EOF
 	}
-	n = copy(b, m.bytes[m.cursor:])
+	n = copy(b, m.file.bytes[m.cursor:])
 	m.cursor += int64(n)
 	return
 }
 
-func (m *mockFile) Write(b []byte) (n int, err error) {
-	nl := len(b) + len(m.bytes[:m.cursor])
+func (m *mockFileFd) Write(b []byte) (n int, err error) {
+	nl := len(b) + len(m.file.bytes[:m.cursor])
 	nbs := make([]byte, nl)
-	copy(nbs, m.bytes[:m.cursor])
+	copy(nbs, m.file.bytes[:m.cursor])
 	n = copy(nbs[m.cursor:], b)
-	m.bytes = nbs
+	m.file.bytes = nbs
 	m.cursor += int64(n)
 	return n, nil
 }
 
-func (m *mockFile) Seek(offset int64, whence int) (int64, error) {
+func (m *mockFileFd) Seek(offset int64, whence int) (int64, error) {
 	switch whence {
 	case 0:
 		// relative to the origin of the file
@@ -225,38 +231,38 @@ func (m *mockFile) Seek(offset int64, whence int) (int64, error) {
 		m.cursor += offset
 	case 2:
 		// relative to the end of the file
-		m.cursor = int64(len(m.bytes)) - offset
+		m.cursor = int64(len(m.file.bytes)) - offset
 	}
 	return m.cursor, nil
 }
 
-func (m *mockFile) Info() (fs.FileInfo, error) {
+func (m *mockFileFd) Info() (fs.FileInfo, error) {
 	// m implements fs.FileInfo
 	return m, nil
 }
 
-func (m *mockFile) IsDir() bool {
-	return m.isDir
+func (m *mockFileFd) IsDir() bool {
+	return m.file.isDir
 }
 
-func (m *mockFile) Type() fs.FileMode {
-	return m.mode
+func (m *mockFileFd) Type() fs.FileMode {
+	return m.file.mode
 }
 
-func (m *mockFile) ModTime() time.Time {
-	return m.lastMod
+func (m *mockFileFd) ModTime() time.Time {
+	return m.file.lastMod
 }
 
-func (m *mockFile) Mode() fs.FileMode {
-	return m.mode
+func (m *mockFileFd) Mode() fs.FileMode {
+	return m.file.mode
 }
 
-func (m *mockFile) Size() int64 {
-	return int64(len(m.bytes))
+func (m *mockFileFd) Size() int64 {
+	return int64(len(m.file.bytes))
 }
 
-func (*mockFile) Sys() any {
-	return nil
+func (m *mockFileFd) Sys() any {
+	return m.file
 }
 
 func CreateMockFS() (fs *mockFileSystem) {
@@ -275,7 +281,6 @@ func (m *mockFileSystem) AddFile(name, data string) *mockFileSystem {
 		isDir:   false,
 		name:    name,
 		bytes:   []byte(data),
-		cursor:  0,
 		mode:    0644,
 		lastMod: time.Now(),
 	}
