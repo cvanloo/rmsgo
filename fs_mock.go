@@ -77,6 +77,7 @@ var _ fileSystem = (*mockFileSystem)(nil)
 
 func (m *mockFileSystem) Open(name string) (file, error) {
 	if f, ok := m.contents[name]; ok {
+		f.cursor = 0 // @fixme: ugh, maybe just create a new structure when opening?
 		return f, nil
 	}
 	return nil, os.ErrNotExist

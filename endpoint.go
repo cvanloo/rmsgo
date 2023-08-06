@@ -3,6 +3,7 @@ package rmsgo
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 )
@@ -32,6 +33,18 @@ var mfs fileSystem = &osFileSystem{}
 // - / hash file names of document contents (the entire subtree)
 // - last modified time
 // - ...?
+
+type Server struct {
+	Rroot, Sroot string
+}
+
+func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	err := Serve(w, r)
+	if err != nil {
+		// @todo: allow user to configure a logging function
+		log.Printf("rms-server: %s", err)
+	}
+}
 
 func Serve(w http.ResponseWriter, r *http.Request) error {
 	path := r.URL.Path

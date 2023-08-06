@@ -7,9 +7,8 @@ import (
 	"github.com/cvanloo/rmsgo.git"
 )
 
-// @todo: include those values in a server struct{}
 const (
-	RemoteRoot  = "/storage/"
+	RemoteRoot  = "/storage" // @todo: ensure this is always ends without a /
 	StorageRoot = "/tmp/rms/storage/"
 )
 
@@ -20,24 +19,13 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// @todo: we could create a server struct{} and turn the `rmsgo.Serve` function
-// into a `ServeHTTP` method.
-//
-//	type http.Handler interface {
-//	    ServeHTTP(ResponseWriter, *Request)
-//	}
-func serveRms() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		err := rmsgo.Serve(w, r)
-		if err != nil {
-			log.Printf("rms-server: %s", err)
-		}
-	})
-}
-
 func main() {
 	mux := http.NewServeMux()
-	mux.Handle(RemoteRoot, loggingMiddleware(serveRms()))
+	rms := rmsgo.Server{
+		Rroot: RemoteRoot,
+		Sroot: StorageRoot,
+	}
+	mux.Handle(RemoteRoot, loggingMiddleware(rms))
 	log.Println("Listening on :8080")
 	http.ListenAndServe(":8080", mux)
 }
