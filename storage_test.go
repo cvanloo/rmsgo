@@ -215,3 +215,113 @@ func TestRemoveDocument(t *testing.T) {
 		t.Errorf("got: `%v', want: `%v'", err, ErrNotFound)
 	}
 }
+
+func TestETagUpdatedWhenDocumentAdded(t *testing.T) {
+	mfs = CreateMockFS()
+	server := Server{
+		Rroot: "/storage/",
+		Sroot: "/tmp/rms/storage/",
+	}
+	store := NewStorage()
+
+	_, err := store.CreateDocument(server, "/code/hello.go", []byte("func hello() string {\n\treturn \"Hello, World\"\n}"), "text/plain")
+	if err != nil {
+		t.Error(err)
+	}
+
+	codeFolder, err := store.Node(server, "/code/")
+	if err != nil {
+		t.Error(err)
+	}
+
+	v1 := codeFolder.etag
+	t.Logf("etag v1: %x", v1)
+
+	_, err = store.CreateDocument(server, "/code/error.go", []byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")"), "text/plain")
+	if err != nil {
+		t.Error(err)
+	}
+
+	v2 := codeFolder.etag
+	t.Logf("etag v2: %x", v2)
+
+	if string(v1) == string(v2) {
+		t.Error("expected version to have changed")
+	}
+}
+
+func TestETagUpdatedWhenDocumentRemoved(t *testing.T) {
+	mfs = CreateMockFS()
+	server := Server{
+		Rroot: "/storage/",
+		Sroot: "/tmp/rms/storage/",
+	}
+	store := NewStorage()
+
+	_, err := store.CreateDocument(server, "/code/hello.go", []byte("func hello() string {\n\treturn \"Hello, World\"\n}"), "text/plain")
+	if err != nil {
+		t.Error(err)
+	}
+	_, err = store.CreateDocument(server, "/code/error.go", []byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")"), "text/plain")
+	if err != nil {
+		t.Error(err)
+	}
+
+	codeFolder, err := store.Node(server, "/code/")
+	if err != nil {
+		t.Error(err)
+	}
+
+	v1 := codeFolder.etag
+	t.Logf("etag v1: %x", v1)
+
+	_, err = store.RemoveDocument(server, "/code/hello.go")
+	if err != nil {
+		t.Error(err)
+	}
+
+	v2 := codeFolder.etag
+	t.Logf("etag v2: %x", v2)
+
+	if string(v1) == string(v2) {
+		t.Error("expected version to have changed")
+	}
+}
+
+func TestETagUpdatedWhenDocumentUpdated(t *testing.T) {
+	mfs = CreateMockFS()
+	server := Server{
+		Rroot: "/storage/",
+		Sroot: "/tmp/rms/storage/",
+	}
+	store := NewStorage()
+
+	_, err := store.CreateDocument(server, "/code/hello.go", []byte("func hello() string {\n\treturn \"Hello, World\"\n}"), "text/plain")
+	if err != nil {
+		t.Error(err)
+	}
+	_, err = store.CreateDocument(server, "/code/error.go", []byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")"), "text/plain")
+	if err != nil {
+		t.Error(err)
+	}
+
+	codeFolder, err := store.Node(server, "/code/")
+	if err != nil {
+		t.Error(err)
+	}
+
+	v1 := codeFolder.etag
+	t.Logf("etag v1: %x", v1)
+
+	_, err = store.UpdateDocument(server, "/code/error.go", []byte("var ErrExistentialCrisis = errors.New(\"why?\")"), "text/plain")
+	if err != nil {
+		t.Error(err)
+	}
+
+	v2 := codeFolder.etag
+	t.Logf("etag v2: %x", v2)
+
+	if string(v1) == string(v2) {
+		t.Error("expected version to have changed")
+	}
+}

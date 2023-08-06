@@ -39,7 +39,7 @@ func generateETag(n *node) (ETag, error) {
 			io.WriteString(hash, cn.mime)
 			io.WriteString(hash, cn.lastMod.Format(time.RFC1123))
 
-			fd, err := mfs.Open(n.sname)
+			fd, err := mfs.Open(cn.sname)
 			if err != nil {
 				return nil, err
 			}
