@@ -129,7 +129,7 @@ func CreateDocument(cfg Server, rname string, data io.Reader, mime string) (*nod
 			pn = &node{
 				parent:   p,
 				isFolder: true,
-				name:     parts[i],
+				name:     parts[i] + "/",
 				rname:    pname,
 				mime:     "inode/directory",
 				children: map[string]*node{},

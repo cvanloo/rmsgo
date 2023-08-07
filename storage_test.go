@@ -48,23 +48,23 @@ func TestCreateDocument(t *testing.T) {
 		name, rname string
 	}{
 		{
-			name:  "Documents",
+			name:  "Documents/",
 			rname: "/Documents/",
 		},
 		{
-			name:  "Homework",
+			name:  "Homework/",
 			rname: "/Documents/Homework/",
 		},
 		{
-			name:  "Assignments",
+			name:  "Assignments/",
 			rname: "/Documents/Homework/Assignments/",
 		},
 		{
-			name:  "2023",
+			name:  "2023/",
 			rname: "/Documents/Homework/Assignments/2023/",
 		},
 		{
-			name:  "04",
+			name:  "04/",
 			rname: "/Documents/Homework/Assignments/2023/04/",
 		},
 	}
