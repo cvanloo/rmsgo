@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"time"
 
 	"golang.org/x/exp/maps"
@@ -45,24 +46,30 @@ func init() {
 	}
 }
 
-func calculateETag(n *node) error {
+func calculateETag(n *Node) error {
 	hash := md5.New()
 	io.WriteString(hash, hostname)
 
-	ns := []*node{n}
+	ns := []*Node{n}
 	for len(ns) > 0 {
 		cn := ns[0]
 		ns = ns[1:]
 
-		if cn.isFolder {
-			io.WriteString(hash, cn.name)
-			ns = append(ns, maps.Values(cn.children)...)
+		if cn.IsFolder {
+			io.WriteString(hash, cn.Name)
+			children := maps.Values(cn.children)
+			// Ensure that etag is deterministic by always hashing the chilren
+			// in the same order.
+			sort.Slice(children, func(i, j int) bool {
+				return children[i].Rname < children[j].Rname
+			})
+			ns = append(ns, children...)
 		} else {
-			io.WriteString(hash, cn.name)
-			io.WriteString(hash, cn.mime)
-			io.WriteString(hash, cn.lastMod.Format(time.RFC1123))
+			io.WriteString(hash, cn.Name)
+			io.WriteString(hash, cn.Mime)
+			io.WriteString(hash, cn.LastMod.Format(time.RFC1123))
 
-			fd, err := mfs.Open(cn.sname)
+			fd, err := mfs.Open(cn.Sname)
 			if err != nil {
 				return err
 			}
@@ -76,12 +83,12 @@ func calculateETag(n *node) error {
 		}
 	}
 
-	n.etag = hash.Sum(nil)
+	n.ETag = hash.Sum(nil)
 	n.etagValid = true
 	return nil
 }
 
-func recalculateAncestorETags(n *node) error {
+func recalculateAncestorETags(n *Node) error {
 	for n != nil {
 		err := calculateETag(n)
 		if err != nil {

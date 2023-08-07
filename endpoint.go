@@ -88,12 +88,12 @@ const rmsTimeFormat = time.RFC1123
 func (s Server) GetFolder(w http.ResponseWriter, r *http.Request) error {
 	rpath := strings.TrimPrefix(r.URL.Path, s.Rroot)
 
-	n, err := Node(rpath)
+	n, err := Retrieve(rpath)
 	if err != nil {
 		return writeError(w, err)
 	}
 
-	etag, err := n.ETag()
+	etag, err := n.Version()
 	if err != nil {
 		return writeError(w, err)
 	}
@@ -113,17 +113,17 @@ func (s Server) GetFolder(w http.ResponseWriter, r *http.Request) error {
 	items := ldjson{}
 	for _, child := range n.children {
 		desc := ldjson{}
-		etag, err := child.ETag()
+		etag, err := child.Version()
 		if err != nil {
 			return writeError(w, err)
 		}
 		desc["ETag"] = etag.String()
-		if !child.isFolder {
-			desc["Content-Type"] = child.mime
-			desc["Content-Length"] = child.length
-			desc["Last-Modified"] = child.lastMod.Format(rmsTimeFormat)
+		if !child.IsFolder {
+			desc["Content-Type"] = child.Mime
+			desc["Content-Length"] = child.Length
+			desc["Last-Modified"] = child.LastMod.Format(rmsTimeFormat)
 		}
-		items[child.name] = desc
+		items[child.Name] = desc
 	}
 
 	desc := ldjson{
@@ -141,12 +141,12 @@ func (s Server) GetFolder(w http.ResponseWriter, r *http.Request) error {
 func (s Server) GetDocument(w http.ResponseWriter, r *http.Request) error {
 	rpath := strings.TrimPrefix(r.URL.Path, s.Rroot)
 
-	n, err := Node(rpath)
+	n, err := Retrieve(rpath)
 	if err != nil {
 		return writeError(w, err)
 	}
 
-	etag, err := n.ETag()
+	etag, err := n.Version()
 	if err != nil {
 		return writeError(w, err)
 	}
@@ -163,7 +163,7 @@ func (s Server) GetDocument(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	fd, err := mfs.Open(n.sname)
+	fd, err := mfs.Open(n.Sname)
 	if err != nil {
 		return writeError(w, err)
 	}
@@ -171,7 +171,7 @@ func (s Server) GetDocument(w http.ResponseWriter, r *http.Request) error {
 	hs := w.Header()
 	hs.Set("Cache-Control", "no-cache")
 	hs.Set("ETag", etag.String())
-	hs.Set("Content-Type", n.mime)
+	hs.Set("Content-Type", n.Mime)
 	_, err = io.Copy(w, fd)
 	return err
 }
@@ -179,7 +179,7 @@ func (s Server) GetDocument(w http.ResponseWriter, r *http.Request) error {
 func (s Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 	rpath := strings.TrimPrefix(r.URL.Path, s.Rroot)
 
-	n, err := Node(rpath)
+	n, err := Retrieve(rpath)
 	notFound := errors.Is(err, ErrNotFound)
 	if err != nil && !notFound {
 		return writeError(w, err)
@@ -196,7 +196,7 @@ func (s Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return writeError(w, err) // @todo: ErrBadRequest when this fails
 		}
-		etag, err := n.ETag()
+		etag, err := n.Version()
 		if err != nil {
 			return writeError(w, err)
 		}
@@ -211,20 +211,30 @@ func (s Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 		return writeError(w, ErrBadRequest) // @todo(#desc_error): provide a content type
 	}
 
-	// @todo: funny...
-	//   merge Create and Update into one function?
-	var fun func(Server, string, io.Reader, string) (*node, error)
+	// @todo: merge Create and Update into one function?
 	if notFound {
-		fun = CreateDocument
+		sname, fsize, err := WriteFile(s, rpath, "", r.Body)
+		if err != nil {
+			return err
+		}
+
+		n, err = AddDocument(rpath, sname, fsize, contentType)
+		if err != nil {
+			return writeError(w, err)
+		}
 	} else {
-		fun = UpdateDocument
-	}
-	n, err = fun(s, rpath, r.Body, contentType)
-	if err != nil {
-		return writeError(w, err)
+		_, fsize, err := WriteFile(s, rpath, n.Sname, r.Body)
+		if err != nil {
+			return err
+		}
+
+		n, err = UpdateDocument(rpath, fsize, contentType)
+		if err != nil {
+			return writeError(w, err)
+		}
 	}
 
-	etag, err := n.ETag()
+	etag, err := n.Version()
 	if err != nil {
 		return writeError(w, err)
 	}
@@ -237,12 +247,12 @@ func (s Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 func (s Server) DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 	rpath := strings.TrimPrefix(r.URL.Path, s.Rroot)
 
-	n, err := Node(rpath)
+	n, err := Retrieve(rpath)
 	if err != nil {
 		return writeError(w, err)
 	}
 
-	etag, err := n.ETag()
+	etag, err := n.Version()
 	if err != nil {
 		return writeError(w, err)
 	}
@@ -257,7 +267,7 @@ func (s Server) DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	n, err = RemoveDocument(s, rpath)
+	n, err = RemoveDocument(rpath)
 	if err != nil {
 		return writeError(w, err)
 	}

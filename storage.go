@@ -1,114 +1,280 @@
 package rmsgo
 
 import (
+	"bytes"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/cvanloo/rmsgo.git/isdelve"
+	"github.com/gabriel-vasile/mimetype"
 	"github.com/google/uuid"
+	"golang.org/x/exp/maps"
 )
 
 var (
-	files map[string]*node
-	root  *node
+	files map[string]*Node
+	root  *Node
+
+	createUUID = uuid.NewRandom
+	getTime    = time.Now
 )
 
 var ErrFileExists = errors.New("file already exists") // @todo: remove error?
 
-type node struct {
-	parent   *node
-	isFolder bool
+type Node struct {
+	parent   *Node
+	IsFolder bool `xml:"IsFolder,attr"`
 
 	// "Kittens.png"
-	name string
+	Name string
 
 	// "/Pictures/Kittens.png"
-	rname string
+	Rname string
 
 	// "/var/rms/storage/(uuid)"
-	sname string
+	Sname string `xml:"Sname,omitempty"`
 
-	etag      ETag
+	ETag      ETag `xml:"ETag,omitempty"`
 	etagValid bool
 
-	mime     string
-	length   int64
-	lastMod  time.Time
-	children map[string]*node
+	Mime     string
+	Length   int64      `xml:"Length,omitempty"`
+	LastMod  *time.Time `xml:"LastMod,omitempty"`
+	children map[string]*Node
 }
 
-func (n *node) Valid() bool {
+func (n *Node) Valid() bool {
 	return n.etagValid
 }
 
-func (n *node) Invalidate() {
+func (n *Node) Invalidate() {
 	n.etagValid = false
 }
 
-func (n *node) ETag() (e ETag, err error) {
+func (n *Node) Version() (e ETag, err error) {
 	if !n.etagValid {
 		err = calculateETag(n)
 	}
-	e = n.etag
+	e = n.ETag
 	return
 }
 
-func (n *node) Equal(other *node) bool {
+func (n *Node) Equal(other *Node) bool {
 	if !(n.etagValid && other.etagValid) {
 		return false
 	}
-	return n.etag.Equal(other.etag)
+	return n.ETag.Equal(other.ETag)
+}
+
+func (n *Node) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
+	type XMLNode struct {
+		Node
+		ParentRName string `xml:"ParentRName,omitempty"`
+	}
+	if n == root {
+		return nil
+	}
+	if n.parent != nil {
+		return e.EncodeElement(XMLNode{*n, n.parent.Rname}, start)
+	}
+	return e.EncodeElement(XMLNode{*n, ""}, start)
+}
+
+func (n *Node) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	var tmp struct {
+		IsFolder    bool `xml:"IsFolder,attr"`
+		Name        string
+		Rname       string
+		Sname       string `xml:"Sname,omitempty"`
+		ETag        ETag   `xml:"ETag,omitempty"`
+		Mime        string
+		Length      int64      `xml:"Length,omitempty"`
+		LastMod     *time.Time `xml:"LastMod,omitempty"`
+		ParentRName string
+	}
+	err := d.DecodeElement(&tmp, &start)
+	if err != nil {
+		return err
+	}
+
+	n.IsFolder = tmp.IsFolder
+	n.Name = tmp.Name
+	n.Rname = tmp.Rname
+	n.Sname = tmp.Sname
+	n.ETag = tmp.ETag
+	n.Mime = tmp.Mime
+	n.Length = tmp.Length
+	n.LastMod = tmp.LastMod
+	n.children = make(map[string]*Node)
+
+	// root does not have a parent
+	if tmp.ParentRName != "" && n.Name != "/" {
+		// N.b. this assumes that parents are always parsed before their
+		// children! [#parent_first]
+		// This function also modifies the global files.
+		p := files[tmp.ParentRName]
+		p.children[n.Rname] = n
+		n.parent = p
+	}
+	files[n.Rname] = n
+	return nil
 }
 
 func init() {
-	rn := &node{
-		isFolder: true,
-		name:     "/",
-		rname:    "/",
-		mime:     "inode/directory",
-		children: map[string]*node{},
+	Reset()
+}
+
+func Reset() {
+	rn := &Node{
+		IsFolder: true,
+		Name:     "/",
+		Rname:    "/",
+		Mime:     "inode/directory",
+		children: map[string]*Node{},
 	}
-	files = make(map[string]*node)
+	files = make(map[string]*Node)
 	files["/"] = rn
 	root = rn
 }
 
-func ResetStorage(cfg Server) error {
-	for k, v := range files {
-		if v != root {
-			delete(files, k)
-		}
+func Load(persistFile file) error {
+	bs, err := io.ReadAll(persistFile)
+	if err != nil {
+		return err
 	}
-	root.children = make(map[string]*node)
-	// @todo: re-initialize from file system cfg.Sroot
-	return ErrNotImplemented
+
+	var persist struct {
+		Nodes []*Node
+	}
+	err = xml.Unmarshal(bs, &persist)
+	if err != nil {
+		return err
+	}
+
+	root = files["/"]
+
+	log.Printf("Storage listing follows:\n%s\n", root)
+
+	return nil
 }
 
-func CreateDocument(cfg Server, rname string, data io.Reader, mime string) (*node, error) {
+func Persist(persistFile file) (err error) {
+	files := maps.Values(files)
+	// Ensure that parents are always serialized before their children, so that
+	// they will also be read in first. [#parent_first]
+	sort.Slice(files, func(i, j int) bool {
+		// Alphabetically, a shorter word is sorted before a longer.
+		// The parent's path will always be shorter than the child's path.
+		return files[i].Rname < files[j].Rname
+	})
+	type Root struct {
+		Nodes []*Node
+	}
+	var (
+		bs      []byte
+		persist = Root{files}
+	)
+	if isdelve.Enabled {
+		bs, err = xml.MarshalIndent(persist, "", "\t")
+	} else {
+		bs, err = xml.Marshal(persist)
+	}
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(persistFile, bytes.NewReader(bs))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Migrate traverses the root directory and copies any files contained therein
+// into the remoteStorage root (cfg.Sroot).
+func Migrate(cfg Server, root string) (errs []error) {
+	err := mfs.WalkDir(root, func(spath string, d fs.DirEntry, err error) error {
+		if err != nil {
+			errs = append(errs, err)
+			return nil
+		}
+
+		rpath := strings.TrimPrefix(root, spath)
+		if d.IsDir() {
+			return nil
+		}
+
+		fd, err := mfs.Open(spath)
+		if err != nil {
+			errs = append(errs, err)
+			return nil
+		}
+
+		bs := make([]byte, 0, 128)
+		_, err = fd.Read(bs)
+		if err != nil {
+			errs = append(errs, err)
+			return nil
+		}
+
+		mime := mimetype.Detect(bs)
+
+		sname, fsize, err := WriteFile(cfg, rpath, "", fd)
+		if err != nil {
+			errs = append(errs, err)
+			return nil
+		}
+
+		AddDocument(rpath, sname, fsize, mime.String())
+		return nil
+	})
+	if err != nil {
+		errs = append(errs, err)
+	}
+	return errs
+}
+
+func WriteFile(cfg Server, rname, sname string, data io.Reader) (nsname string, fsize int64, err error) {
+	if sname == "" {
+		u, err := createUUID()
+		if err != nil {
+			return "", 0, err
+		}
+		nsname = filepath.Join(cfg.Sroot, u.String())
+	} else {
+		nsname = sname
+	}
+
+	fd, err := mfs.Create(nsname) // @todo: set permissions
+	if err != nil {
+		return nsname, 0, err
+	}
+
+	fsize, err = io.Copy(fd, data)
+	if err != nil {
+		return nsname, fsize, err
+	}
+	return nsname, fsize, nil
+}
+
+func DeleteDocument(sname string) error {
+	return mfs.Remove(sname)
+}
+
+func AddDocument(rname, sname string, fsize int64, mime string) (*Node, error) {
 	if f, ok := files[rname]; ok {
 		return f, ErrFileExists
 	}
 
 	assert(rname[len(rname)-1] != '/', "CreateDocument must only be used to create files")
-
-	u, err := uuid.NewRandom()
-	if err != nil {
-		return nil, err
-	}
-
-	sname := filepath.Join(cfg.Sroot, u.String())
-	fd, err := mfs.Create(sname) // @todo: set permissions
-	if err != nil {
-		return nil, err
-	}
-	fsize, err := io.Copy(fd, data)
-	if err != nil {
-		return nil, err
-	}
 
 	pname := filepath.Dir(rname)
 	var parts []string
@@ -124,13 +290,13 @@ func CreateDocument(cfg Server, rname string, data io.Reader, mime string) (*nod
 		pname := "/" + strings.Join(parts[:i+1], string(os.PathSeparator)) + "/"
 		pn, ok := files[pname]
 		if !ok {
-			pn = &node{
+			pn = &Node{
 				parent:   p,
-				isFolder: true,
-				name:     parts[i] + "/",
-				rname:    pname,
-				mime:     "inode/directory",
-				children: map[string]*node{},
+				IsFolder: true,
+				Name:     parts[i] + "/", // folder names must end in a slash
+				Rname:    pname,
+				Mime:     "inode/directory",
+				children: map[string]*Node{},
 			}
 			p.children[pname] = pn
 			files[pname] = pn
@@ -140,16 +306,17 @@ func CreateDocument(cfg Server, rname string, data io.Reader, mime string) (*nod
 	// p now points to the file's immediate parent [#1]
 
 	name := filepath.Base(rname)
+	tnow := getTime()
 
-	f := &node{
+	f := &Node{
 		parent:   p, // [#1] assign parent
-		isFolder: false,
-		name:     name,
-		rname:    rname,
-		sname:    sname,
-		mime:     mime,
-		length:   int64(fsize),
-		lastMod:  time.Now(),
+		IsFolder: false,
+		Name:     name,
+		Rname:    rname,
+		Sname:    sname,
+		Mime:     mime,
+		Length:   fsize,
+		LastMod:  &tnow,
 	}
 	p.children[rname] = f
 	files[rname] = f
@@ -163,26 +330,18 @@ func CreateDocument(cfg Server, rname string, data io.Reader, mime string) (*nod
 	return f, nil
 }
 
-func UpdateDocument(cfg Server, rname string, data io.Reader, mime string) (*node, error) {
+func UpdateDocument(rname string, fsize int64, mime string) (*Node, error) {
 	f, ok := files[rname]
 	if !ok {
 		return nil, ErrNotFound
 	}
 
-	assert(!f.isFolder, "UpdateDocument must not be called on a folder")
+	assert(!f.IsFolder, "UpdateDocument must not be called on a folder")
 
-	fd, err := mfs.Create(f.sname) // @todo: set permissions?
-	if err != nil {
-		return f, err
-	}
-	fsize, err := io.Copy(fd, data)
-	if err != nil {
-		return f, err
-	}
-
-	f.mime = mime
-	f.length = int64(fsize)
-	f.lastMod = time.Now()
+	tnow := getTime()
+	f.Mime = mime
+	f.Length = int64(fsize)
+	f.LastMod = &tnow
 
 	n := f
 	for n != nil {
@@ -193,20 +352,19 @@ func UpdateDocument(cfg Server, rname string, data io.Reader, mime string) (*nod
 	return f, nil
 }
 
-func RemoveDocument(cfg Server, rname string) (*node, error) {
+func RemoveDocument(rname string) (*Node, error) {
 	f, ok := files[rname]
 	if !ok {
 		return nil, ErrNotFound
 	}
 
-	assert(!f.isFolder, "RemoveDocument must not be called on a folder")
+	assert(!f.IsFolder, "RemoveDocument must not be called on a folder")
 
 	p := f
 	for len(p.children) == 0 && p != root {
-		mfs.Remove(p.sname)
 		pp := p.parent
-		delete(pp.children, p.rname)
-		delete(files, p.rname)
+		delete(pp.children, p.Rname)
+		delete(files, p.Rname)
 		p = pp
 	}
 	// p now points to the parent deepest down the ancestry that is not empty
@@ -216,31 +374,38 @@ func RemoveDocument(cfg Server, rname string) (*node, error) {
 		p = p.parent
 	}
 
-	return f, nil
+	err := mfs.Remove(f.Sname)
+	return f, err
 }
 
-func Node(rname string) (*node, error) {
+func Retrieve(rname string) (*Node, error) {
 	if f, ok := files[rname]; ok {
 		return f, nil
 	}
 	return nil, ErrNotFound
 }
 
-func (n node) String() string {
+func (n Node) String() string {
 	return n.StringIdent(0)
 }
 
-func (n node) StringIdent(ident int) (s string) {
+func (n Node) StringIdent(ident int) (s string) {
 	for i := 0; i < ident; i++ {
 		s += "  "
 	}
-	if n.isFolder {
-		s += fmt.Sprintf("{F} %s [%s] [%x]\n", n.name, n.rname, must(n.ETag())[:4])
-		for _, c := range n.children {
+	if n.IsFolder {
+		s += fmt.Sprintf("{F} %s [%s] [%x]\n", n.Name, n.Rname, must(n.Version())[:4])
+		children := maps.Values(n.children)
+		// Ensure that output is deterministic by always printing in the same
+		// order. (Exmaple functions need this to verify their output.)
+		sort.Slice(children, func(i, j int) bool {
+			return children[i].Rname < children[j].Rname
+		})
+		for _, c := range children {
 			s += c.StringIdent(ident + 1)
 		}
 	} else {
-		s += fmt.Sprintf("{D} %s (%s, %d) [%s -> %s] [%x]\n", n.name, n.mime, n.length, n.rname, n.sname, must(n.ETag())[:4])
+		s += fmt.Sprintf("{D} %s (%s, %d) [%s -> %s] [%x]\n", n.Name, n.Mime, n.Length, n.Rname, n.Sname, must(n.Version())[:4])
 	}
 	return
 }

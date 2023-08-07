@@ -117,19 +117,31 @@ func (m *mockFileSystem) WalkDir(root string, fn fs.WalkDirFunc) error {
 		name string
 		file *mockFile
 	}
-	fs := []fsmap{}
+	files := []fsmap{}
 	for name, file := range m.contents {
 		if strings.HasPrefix(name, root) {
-			fs = append(fs, fsmap{name, file})
+			files = append(files, fsmap{name, file})
 		}
 	}
-	sort.Slice(fs, func(i, j int) bool {
-		return fs[i].name < fs[j].name
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].name < files[j].name
 	})
-	for _, v := range fs {
-		fn(v.name, v.file.Fd(), nil)
+	var walkErr error
+	for _, v := range files {
+		err := fn(v.name, v.file.Fd(), nil)
+		switch err {
+		case nil:
+			continue
+		case fs.SkipDir:
+		// @todo: this will be much easier to implement if we have children references
+		case fs.SkipAll:
+			break
+		default:
+			walkErr = err
+			break
+		}
 	}
-	return nil
+	return walkErr
 }
 
 func (m *mockFileSystem) Truncate(name string, size int64) error {
