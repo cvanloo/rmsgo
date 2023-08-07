@@ -3,9 +3,14 @@ package rmsgo
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
+
+	"github.com/cvanloo/rmsgo.git/isdelve"
 )
 
 func writeError(w http.ResponseWriter, err error) error {
@@ -31,15 +36,22 @@ type Server struct {
 	Rroot, Sroot string
 }
 
+func init() {
+	if isdelve.Enabled {
+		mfs = CreateMockFS()
+		log.Println("Debugger detected, using mock filesystem")
+	}
+}
+
 func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	err := Serve(w, r)
+	err := s.Serve(w, r)
 	if err != nil {
 		// @todo: allow user to configure a logging function
 		log.Printf("rms-server: %s", err)
 	}
 }
 
-func Serve(w http.ResponseWriter, r *http.Request) error {
+func (s Server) Serve(w http.ResponseWriter, r *http.Request) error {
 	path := r.URL.Path
 	isFolder := false
 	if path[len(path)-1] == '/' {
@@ -49,22 +61,20 @@ func Serve(w http.ResponseWriter, r *http.Request) error {
 	if isFolder {
 		switch r.Method {
 		case http.MethodHead:
-			//return HeadFolder(w, r)
 			fallthrough
 		case http.MethodGet:
-			return GetFolder(w, r)
+			return s.GetFolder(w, r)
 		}
 	} else {
 		switch r.Method {
 		case http.MethodHead:
-			//return HeadDocument(w, r)
 			fallthrough
 		case http.MethodGet:
-			return GetDocument(w, r)
+			return s.GetDocument(w, r)
 		case http.MethodPut:
-			return PutDocument(w, r)
+			return s.PutDocument(w, r)
 		case http.MethodDelete:
-			return DeleteDocument(w, r)
+			return s.DeleteDocument(w, r)
 		}
 	}
 
@@ -97,7 +107,7 @@ func authenticationMiddleware(next http.Handler) http.Handler {
 
 type ldjson = map[string]any
 
-func GetFolder(w http.ResponseWriter, r *http.Request) error {
+func (s Server) GetFolder(w http.ResponseWriter, r *http.Request) error {
 	// verify If-Non-Match: (revisions) header (fail with 304 if folder included in revisions)
 
 	// empty folders: "items": {}
@@ -127,57 +137,102 @@ func GetFolder(w http.ResponseWriter, r *http.Request) error {
 	return json.NewEncoder(w).Encode(desc)
 }
 
-func HeadFolder(w http.ResponseWriter, r *http.Request) error {
-	// @todo: I think this should work if we just redirect the head to GetFolder,
-	// Go will omit the body automatically (?)
+func (s Server) GetDocument(w http.ResponseWriter, r *http.Request) error {
+	rpath := strings.TrimPrefix(r.URL.Path, s.Rroot)
 
-	// same as GetFolder, but omitting the response body
-	return writeError(w, ErrNotImplemented)
-}
+	n, err := Node(rpath)
+	if err != nil {
+		return writeError(w, err)
+	}
 
-func GetDocument(w http.ResponseWriter, r *http.Request) error {
-	// verify If-Non-Match: (revisions) header (fail with 304 if document included in revisions)
+	if ifMatch := r.Header["If-Non-Match"]; len(ifMatch) > 0 {
+		for _, rev := range ifMatch {
+			rev, err := ParseETag(rev)
+			if err != nil {
+				return writeError(w, err)
+			}
+			if rev.Equal(n.etag) {
+				return writeError(w, ErrNotModified)
+			}
+		}
+	}
 
-	// return content-type, current version (ETag), and contents
+	etag, err := n.ETag()
+	if err != nil {
+		return writeError(w, err)
+	}
+
+	fd, err := mfs.Open(n.sname)
+	if err != nil {
+		return writeError(w, err)
+	}
 
 	hs := w.Header()
 	hs.Set("Cache-Control", "no-cache")
-	hs.Set("ETag", "????")
-	return writeError(w, ErrNotImplemented)
+	hs.Set("ETag", etag.String())
+	hs.Set("Content-Type", n.mime)
+	_, err = io.Copy(w, fd)
+	return err
 }
 
-func HeadDocument(w http.ResponseWriter, r *http.Request) error {
-	// @todo: I think this should work if we just redirect the head to GetDocument,
-	// Go will omit the body automatically (?)
+func (s Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
+	rpath := strings.TrimPrefix(r.URL.Path, s.Rroot)
 
-	// like GetDocument, but omitting the response body
-	return writeError(w, ErrNotImplemented)
-}
+	n, err := Node(rpath)
+	notFound := errors.Is(err, ErrNotFound)
+	if err != nil && !notFound {
+		return writeError(w, err)
+	}
 
-func PutDocument(w http.ResponseWriter, r *http.Request) error {
-	// verify If-Match header (fail with 412)
-	// verify If-Non-Match: * header (fail with 412 if document already exists)
+	if ifNonMatch := r.Header.Get("If-Non-Match"); ifNonMatch == "*" {
+		if !notFound {
+			return writeError(w, ErrPreconditionFailed) // @todo(#desc_error): the document already exists
+		}
+	}
 
-	// store new version, content-type, and contents, conditional on the
-	// current version
+	if ifMatch := r.Header.Get("If-Match"); ifMatch != "" {
+		rev, err := ParseETag(ifMatch)
+		if err != nil {
+			return writeError(w, err)
+		}
+		etag, err := n.ETag()
+		if err != nil {
+			return writeError(w, err)
+		}
+		if !etag.Equal(rev) {
+			return writeError(w, ErrPreconditionFailed) // @todo(#desc_error): version mismatch
+		}
+	}
 
-	// bs := r.Body write to new file vers
+	// @todo: we could also automatically determine the mime type
+	contentType := r.Header.Get("Content-Type")
+	if contentType == "" {
+		return writeError(w, ErrBadRequest) // @todo(#desc_error): provide a content type
+	}
 
-	// auto-create ancestor folders as necessary, add document to parent
-	// folder, add each ancestor to its parent
-
-	// ctype := r.Header.Get("Content-Type") store as document's content type
-	// if no content type was specified, automatically determine it
-	//   --> or: reject request with a descriptive error message
-
-	// update document's ETag, as well as ETag of all ancestor folders
+	// @todo: funny...
+	//   merge Create and Update into one function?
+	var fun func(Server, string, io.Reader, string) (*node, error)
+	if notFound {
+		fun = CreateDocument
+	} else {
+		fun = UpdateDocument
+	}
+	n, err = fun(s, rpath, r.Body, contentType)
+	if err != nil {
+		return writeError(w, err)
+	}
+	etag, err := n.ETag()
+	if err != nil {
+		return writeError(w, err)
+	}
 
 	hs := w.Header()
-	hs.Set("ETag", "????") // new etag
-	return writeError(w, ErrNotImplemented)
+	hs.Set("ETag", etag.String())
+	return nil
 }
 
-func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
+func (s Server) DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 	// verify If-Match header (fail with 412)
 
 	// remove document from storage, conditional on the current version

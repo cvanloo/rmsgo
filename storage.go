@@ -3,6 +3,7 @@ package rmsgo
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,14 +52,21 @@ func (n *node) ETag() (ETag, error) {
 	return n.etag, nil
 }
 
-type Storage struct {
+func (n *node) Equal(other *node) bool {
+	if !(n.etagValid && other.etagValid) {
+		return false
+	}
+	return n.etag.Equal(other.etag)
+}
+
+var (
 	files map[string]*node
 	root  *node
-}
+)
 
 var ErrFileExists = errors.New("file already exists")
 
-func NewStorage() (s Storage) {
+func init() {
 	rn := &node{
 		isFolder: true,
 		name:     "/",
@@ -66,19 +74,24 @@ func NewStorage() (s Storage) {
 		mime:     "inode/directory",
 		children: map[string]*node{},
 	}
-	s.files = make(map[string]*node)
-	s.files["/"] = rn
-	s.root = rn
-	return
+	files = make(map[string]*node)
+	files["/"] = rn
+	root = rn
 }
 
-func (s Storage) Root() *node {
-	assert(s.root != nil, "/ (root) exists")
-	return s.root
+func ResetStorage(cfg Server) error {
+	for k, v := range files {
+		if v != root {
+			delete(files, k)
+		}
+	}
+	root.children = make(map[string]*node)
+	// @todo: re-initialize from file system cfg.Sroot
+	return ErrNotImplemented
 }
 
-func (s Storage) CreateDocument(cfg Server, rname string, data []byte, mime string) (*node, error) {
-	if f, ok := s.files[rname]; ok {
+func CreateDocument(cfg Server, rname string, data io.Reader, mime string) (*node, error) {
+	if f, ok := files[rname]; ok {
 		return f, ErrFileExists
 	}
 
@@ -90,7 +103,11 @@ func (s Storage) CreateDocument(cfg Server, rname string, data []byte, mime stri
 	}
 
 	sname := filepath.Join(cfg.Sroot, u.String())
-	err = mfs.WriteFile(sname, data, 0640)
+	fd, err := mfs.Create(sname) // @todo: set permissions
+	if err != nil {
+		return nil, err
+	}
+	fsize, err := io.Copy(fd, data)
 	if err != nil {
 		return nil, err
 	}
@@ -103,11 +120,11 @@ func (s Storage) CreateDocument(cfg Server, rname string, data []byte, mime stri
 		}
 	}
 
-	p := s.root
+	p := root
 
 	for i := range parts {
 		pname := "/" + strings.Join(parts[:i+1], string(os.PathSeparator)) + "/"
-		pn, ok := s.files[pname]
+		pn, ok := files[pname]
 		if !ok {
 			pn = &node{
 				parent:   p,
@@ -118,7 +135,7 @@ func (s Storage) CreateDocument(cfg Server, rname string, data []byte, mime stri
 				children: map[string]*node{},
 			}
 			p.children[pname] = pn
-			s.files[pname] = pn
+			files[pname] = pn
 		}
 		p = pn
 	}
@@ -133,11 +150,11 @@ func (s Storage) CreateDocument(cfg Server, rname string, data []byte, mime stri
 		rname:    rname,
 		sname:    sname,
 		mime:     mime,
-		length:   int64(len(data)),
+		length:   int64(fsize),
 		lastMod:  time.Now(),
 	}
 	p.children[rname] = f
-	s.files[rname] = f
+	files[rname] = f
 
 	n := f
 	for n != nil {
@@ -148,21 +165,25 @@ func (s Storage) CreateDocument(cfg Server, rname string, data []byte, mime stri
 	return f, nil
 }
 
-func (s Storage) UpdateDocument(cfg Server, rname string, data []byte, mime string) (*node, error) {
-	f, ok := s.files[rname]
+func UpdateDocument(cfg Server, rname string, data io.Reader, mime string) (*node, error) {
+	f, ok := files[rname]
 	if !ok {
 		return nil, ErrNotFound
 	}
 
 	assert(!f.isFolder, "UpdateDocument must not be called on a folder")
 
-	err := mfs.WriteFile(f.sname, data, 0640)
+	fd, err := mfs.Create(f.sname) // @todo: set permissions?
+	if err != nil {
+		return f, err
+	}
+	fsize, err := io.Copy(fd, data)
 	if err != nil {
 		return f, err
 	}
 
 	f.mime = mime
-	f.length = int64(len(data))
+	f.length = int64(fsize)
 	f.lastMod = time.Now()
 
 	n := f
@@ -174,8 +195,8 @@ func (s Storage) UpdateDocument(cfg Server, rname string, data []byte, mime stri
 	return f, nil
 }
 
-func (s Storage) RemoveDocument(cfg Server, rname string) (*node, error) {
-	f, ok := s.files[rname]
+func RemoveDocument(cfg Server, rname string) (*node, error) {
+	f, ok := files[rname]
 	if !ok {
 		return nil, ErrNotFound
 	}
@@ -183,11 +204,11 @@ func (s Storage) RemoveDocument(cfg Server, rname string) (*node, error) {
 	assert(!f.isFolder, "RemoveDocument must not be called on a folder")
 
 	p := f
-	for len(p.children) == 0 && p != s.root {
+	for len(p.children) == 0 && p != root {
 		mfs.Remove(p.sname)
 		pp := p.parent
 		delete(pp.children, p.rname)
-		delete(s.files, p.rname)
+		delete(files, p.rname)
 		p = pp
 	}
 	// p now points to the parent deepest down the ancestry that is not empty
@@ -200,15 +221,11 @@ func (s Storage) RemoveDocument(cfg Server, rname string) (*node, error) {
 	return f, nil
 }
 
-func (s Storage) Node(cfg Server, rname string) (*node, error) {
-	if f, ok := s.files[rname]; ok {
+func Node(rname string) (*node, error) {
+	if f, ok := files[rname]; ok {
 		return f, nil
 	}
 	return nil, ErrNotFound
-}
-
-func (s Storage) String() string {
-	return s.root.StringIdent(0)
 }
 
 func (n node) String() string {

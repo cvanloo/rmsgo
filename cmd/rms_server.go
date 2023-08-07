@@ -3,18 +3,20 @@ package main
 import (
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/cvanloo/rmsgo.git"
 )
 
 const (
-	RemoteRoot  = "/storage" // @todo: ensure this is always ends without a /
+	// @todo: ensure this is always handled correctly with(out) a at the end /
+	RemoteRoot  = "/storage/"
 	StorageRoot = "/tmp/rms/storage/"
 )
 
 func loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("%s %s", r.Method, r.URL.Path)
+		log.Printf("%s %s [%s]", r.Method, r.URL.Path, strings.TrimPrefix(r.URL.Path, RemoteRoot[:len(RemoteRoot)-1]))
 		next.ServeHTTP(w, r)
 	})
 }
@@ -22,7 +24,7 @@ func loggingMiddleware(next http.Handler) http.Handler {
 func main() {
 	mux := http.NewServeMux()
 	rms := rmsgo.Server{
-		Rroot: RemoteRoot,
+		Rroot: RemoteRoot[:len(RemoteRoot)-1],
 		Sroot: StorageRoot,
 	}
 	mux.Handle(RemoteRoot, loggingMiddleware(rms))

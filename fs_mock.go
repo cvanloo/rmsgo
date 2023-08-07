@@ -12,6 +12,7 @@ import (
 )
 
 type fileSystem interface {
+	Create(name string) (file, error)
 	Open(name string) (file, error)
 	Stat(name string) (os.FileInfo, error)
 	WalkDir(root string, fn fs.WalkDirFunc) error
@@ -34,6 +35,10 @@ type file interface {
 type osFileSystem struct{}
 
 var _ fileSystem = (*osFileSystem)(nil)
+
+func (*osFileSystem) Create(name string) (file, error) {
+	return os.Create(name)
+}
 
 func (*osFileSystem) Open(name string) (file, error) {
 	return os.Open(name)
@@ -75,16 +80,34 @@ type mockFileSystem struct {
 
 var _ fileSystem = (*mockFileSystem)(nil)
 
+func (m *mockFileSystem) Create(name string) (file, error) {
+	if f, ok := m.contents[name]; ok {
+		f.bytes = nil
+		f.lastMod = time.Now()
+		return f.Fd(), nil
+	}
+	parts := strings.Split(name, "/")
+	f := &mockFile{
+		isDir:   false,
+		name:    parts[len(parts)-1],
+		bytes:   nil,
+		mode:    0666,
+		lastMod: time.Now(),
+	}
+	m.contents[name] = f
+	return f.Fd(), nil
+}
+
 func (m *mockFileSystem) Open(name string) (file, error) {
 	if f, ok := m.contents[name]; ok {
-		return f.AsFd(), nil
+		return f.Fd(), nil
 	}
 	return nil, os.ErrNotExist
 }
 
 func (m *mockFileSystem) Stat(name string) (fs.FileInfo, error) {
 	if f, ok := m.contents[name]; ok {
-		return f.AsFd(), nil
+		return f.Fd(), nil
 	}
 	return nil, os.ErrNotExist
 }
@@ -104,7 +127,7 @@ func (m *mockFileSystem) WalkDir(root string, fn fs.WalkDirFunc) error {
 		return fs[i].name < fs[j].name
 	})
 	for _, v := range fs {
-		fn(v.name, v.file.AsFd(), nil)
+		fn(v.name, v.file.Fd(), nil)
 	}
 	return nil
 }
@@ -172,14 +195,14 @@ func (m *mockFileSystem) RemoveAll(name string) error {
 }
 
 type mockFile struct {
-	isDir    bool
-	name     string
-	bytes    []byte
-	mode     fs.FileMode
-	lastMod  time.Time
+	isDir   bool
+	name    string
+	bytes   []byte
+	mode    fs.FileMode
+	lastMod time.Time
 }
 
-func (m *mockFile) AsFd() *mockFileFd {
+func (m *mockFile) Fd() *mockFileFd {
 	return &mockFileFd{m, 0}
 }
 
@@ -298,10 +321,10 @@ func (m *mockFileSystem) AddDirectory(name string) *mockFileSystem {
 		path += "/"
 	}
 	m.contents[path] = &mockFile{
-		isDir:    true,
-		name:     name,
-		mode:     0755,
-		lastMod:  time.Now(),
+		isDir:   true,
+		name:    name,
+		mode:    0755,
+		lastMod: time.Now(),
 	}
 	m.lastAdded = name
 	return m

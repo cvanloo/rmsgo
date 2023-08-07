@@ -2,6 +2,7 @@ package rmsgo
 
 import (
 	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +12,28 @@ import (
 )
 
 type ETag []byte
+
+func ParseETag(s string) (ETag, error) {
+	return hex.DecodeString(s)
+}
+
+func (e ETag) Equal(other ETag) bool {
+	le := len(e)
+	lo := len(other)
+	if le != lo {
+		return false
+	}
+	for i := 0; i < le; i++ {
+		if e[i] != other[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func (e ETag) String() string {
+	return hex.EncodeToString(e)
+}
 
 var hostname string
 

@@ -1,6 +1,7 @@
 package rmsgo
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 )
@@ -11,7 +12,7 @@ func TestCreateDocument(t *testing.T) {
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
-	store := NewStorage()
+	ResetStorage(server) // @todo: handle error
 
 	const (
 		docPath    = "/Documents/Homework/Assignments/2023/04/Vector Geometry.md"
@@ -19,7 +20,7 @@ func TestCreateDocument(t *testing.T) {
 		docMime    = "text/markdown"
 	)
 
-	n, err := store.CreateDocument(server, docPath, []byte(docContent), docMime)
+	n, err := CreateDocument(server, docPath, bytes.NewReader([]byte(docContent)), docMime)
 	if err != nil {
 		t.Error(err)
 	}
@@ -68,11 +69,11 @@ func TestCreateDocument(t *testing.T) {
 		},
 	}
 
-	t.Logf("\n%s", store)
+	t.Logf("\n%s", root)
 
-	p := store.Root()
+	p := root
 	for _, c := range checks {
-		n, err := store.Node(server, c.rname)
+		n, err := Node(c.rname)
 		if err != nil {
 			t.Error(err)
 		}
@@ -106,24 +107,24 @@ func TestCreateDocuments(t *testing.T) {
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
-	store := NewStorage()
+	ResetStorage(server) // @todo: handle error
 
-	_, err := store.CreateDocument(server, "/code/hello.go", []byte("func hello() string {\n\treturn \"Hello, World\"\n}"), "text/plain")
+	_, err := CreateDocument(server, "/code/hello.go", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")), "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = store.CreateDocument(server, "/code/error.go", []byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")"), "text/plain")
+	_, err = CreateDocument(server, "/code/error.go", bytes.NewReader([]byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")")), "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
 
-	t.Logf("\n%s", store)
+	t.Logf("\n%s", root)
 
-	if l := len(store.Root().children); l != 1 {
+	if l := len(root.children); l != 1 {
 		t.Errorf("got: `%d', want: 1", l)
 	}
 
-	n, err := store.Node(server, "/code/")
+	n, err := Node("/code/")
 	if err != nil {
 		t.Error(err)
 	}
@@ -138,16 +139,16 @@ func TestUpdateDocument(t *testing.T) {
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
-	store := NewStorage()
+	ResetStorage(server) // @todo: handle error
 
 	const path = "/FunFacts/Part1.txt"
 
-	n1, err := store.CreateDocument(server, path, []byte("Elephants can't jump."), "text/plain")
+	n1, err := CreateDocument(server, path, bytes.NewReader([]byte("Elephants can't jump.")), "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
 
-	n2, err := store.UpdateDocument(server, path, []byte("Honey never spoils."), "text/plain")
+	n2, err := UpdateDocument(server, path, bytes.NewReader([]byte("Honey never spoils.")), "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
@@ -163,16 +164,16 @@ func TestNode(t *testing.T) {
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
-	store := NewStorage()
+	ResetStorage(server) // @todo: handle error
 
 	const path = "/FunFacts/Part2.txt"
 
-	n1, err := store.CreateDocument(server, path, []byte("The first person convicted of speeding was going eight mph."), "text/plain")
+	n1, err := CreateDocument(server, path, bytes.NewReader([]byte("The first person convicted of speeding was going eight mph.")), "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
 
-	n2, err := store.Node(server, path)
+	n2, err := Node(path)
 	if err != nil {
 		t.Error(err)
 	}
@@ -187,21 +188,21 @@ func TestRemoveDocument(t *testing.T) {
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
-	store := NewStorage()
+	ResetStorage(server) // @todo: handle error
 
 	const path = "/FunFacts/Part3.txt"
 
-	n1, err := store.CreateDocument(server, path, []byte("The severed head of a sea slug can grow a whole new body."), "text/plain")
+	n1, err := CreateDocument(server, path, bytes.NewReader([]byte("The severed head of a sea slug can grow a whole new body.")), "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
 
-	n2, err := store.Node(server, path)
+	n2, err := Node(path)
 	if err != nil {
 		t.Error(err)
 	}
 
-	n3, err := store.RemoveDocument(server, path)
+	n3, err := RemoveDocument(server, path)
 	if err != nil {
 		t.Error(err)
 	}
@@ -210,7 +211,7 @@ func TestRemoveDocument(t *testing.T) {
 		t.Error("expected nodes to be the same")
 	}
 
-	_, err = store.Node(server, path)
+	_, err = Node(path)
 	if err != ErrNotFound {
 		t.Errorf("got: `%v', want: `%v'", err, ErrNotFound)
 	}
@@ -222,14 +223,14 @@ func TestETagUpdatedWhenDocumentAdded(t *testing.T) {
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
-	store := NewStorage()
+	ResetStorage(server) // @todo: handle error
 
-	_, err := store.CreateDocument(server, "/code/hello.go", []byte("func hello() string {\n\treturn \"Hello, World\"\n}"), "text/plain")
+	_, err := CreateDocument(server, "/code/hello.go", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")), "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
 
-	codeFolder, err := store.Node(server, "/code/")
+	codeFolder, err := Node("/code/")
 	if err != nil {
 		t.Error(err)
 	}
@@ -240,7 +241,7 @@ func TestETagUpdatedWhenDocumentAdded(t *testing.T) {
 	}
 	t.Logf("etag v1: %x", v1)
 
-	_, err = store.CreateDocument(server, "/code/error.go", []byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")"), "text/plain")
+	_, err = CreateDocument(server, "/code/error.go", bytes.NewReader([]byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")")), "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
@@ -265,18 +266,18 @@ func TestETagUpdatedWhenDocumentRemoved(t *testing.T) {
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
-	store := NewStorage()
+	ResetStorage(server) // @todo: handle error
 
-	_, err := store.CreateDocument(server, "/code/hello.go", []byte("func hello() string {\n\treturn \"Hello, World\"\n}"), "text/plain")
+	_, err := CreateDocument(server, "/code/hello.go", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")), "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = store.CreateDocument(server, "/code/error.go", []byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")"), "text/plain")
+	_, err = CreateDocument(server, "/code/error.go", bytes.NewReader([]byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")")), "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
 
-	codeFolder, err := store.Node(server, "/code/")
+	codeFolder, err := Node("/code/")
 	if err != nil {
 		t.Error(err)
 	}
@@ -287,7 +288,7 @@ func TestETagUpdatedWhenDocumentRemoved(t *testing.T) {
 	}
 	t.Logf("etag v1: %x", v1)
 
-	_, err = store.RemoveDocument(server, "/code/hello.go")
+	_, err = RemoveDocument(server, "/code/hello.go")
 	if err != nil {
 		t.Error(err)
 	}
@@ -312,13 +313,13 @@ func TestETagUpdatedWhenDocumentUpdated(t *testing.T) {
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
-	store := NewStorage()
+	ResetStorage(server) // @todo: handle error
 
-	_, err := store.CreateDocument(server, "/code/hello.go", []byte("func hello() string {\n\treturn \"Hello, World\"\n}"), "text/plain")
+	_, err := CreateDocument(server, "/code/hello.go", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")), "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
-	errorDoc, err := store.CreateDocument(server, "/code/error.go", []byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")"), "text/plain")
+	errorDoc, err := CreateDocument(server, "/code/error.go", bytes.NewReader([]byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")")), "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
@@ -329,7 +330,7 @@ func TestETagUpdatedWhenDocumentUpdated(t *testing.T) {
 	}
 	t.Logf("document etag v1: %x", dv1)
 
-	codeFolder, err := store.Node(server, "/code/")
+	codeFolder, err := Node("/code/")
 	if err != nil {
 		t.Error(err)
 	}
@@ -340,7 +341,7 @@ func TestETagUpdatedWhenDocumentUpdated(t *testing.T) {
 	}
 	t.Logf("folder etag v1: %x", fv1)
 
-	_, err = store.UpdateDocument(server, "/code/error.go", []byte("var ErrExistentialCrisis = errors.New(\"why?\")"), "text/plain")
+	_, err = UpdateDocument(server, "/code/error.go", bytes.NewReader([]byte("var ErrExistentialCrisis = errors.New(\"why?\")")), "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
@@ -377,18 +378,18 @@ func TestETagNotAffected(t *testing.T) {
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
-	store := NewStorage()
+	ResetStorage(server) // @todo: handle error
 
-	_, err := store.CreateDocument(server, "/code/hello.go", []byte("func hello() string {\n\treturn \"Hello, World\"\n}"), "text/plain")
+	_, err := CreateDocument(server, "/code/hello.go", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")), "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = store.CreateDocument(server, "/code/error.go", []byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")"), "text/plain")
+	_, err = CreateDocument(server, "/code/error.go", bytes.NewReader([]byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")")), "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
 
-	codeFolder, err := store.Node(server, "/code/")
+	codeFolder, err := Node("/code/")
 	if err != nil {
 		t.Error(err)
 	}
@@ -399,14 +400,14 @@ func TestETagNotAffected(t *testing.T) {
 	}
 	t.Logf("folder etag v1: %x", v1)
 
-	rv1, err := store.Root().ETag()
+	rv1, err := root.ETag()
 	if err != nil {
 		t.Error(err)
 	}
 	t.Logf("root etag v1: %x", rv1)
 
 	// 可愛い is 3 characters together taking up 9 bytes
-	f, err := store.CreateDocument(server, "/Pictures/Kittens.png", []byte("可愛い"), "image/png")
+	f, err := CreateDocument(server, "/Pictures/Kittens.png", bytes.NewReader([]byte("可愛い")), "image/png")
 	if err != nil {
 		t.Error(err)
 	}
@@ -427,10 +428,10 @@ func TestETagNotAffected(t *testing.T) {
 		t.Error("expected code folder etag to not have changed")
 	}
 
-	if store.Root().etagValid != false {
+	if root.etagValid != false {
 		t.Error("expected version to have been invalidated")
 	}
-	rv2, err := store.Root().ETag()
+	rv2, err := root.ETag()
 	if err != nil {
 		t.Error(err)
 	}
