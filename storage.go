@@ -24,11 +24,31 @@ type node struct {
 	// "/var/rms/storage/(uuid)"
 	sname string
 
-	etag     ETag
+	etag      ETag
+	etagValid bool
+
 	mime     string
 	length   int64
 	lastMod  time.Time
 	children map[string]*node
+}
+
+func (n *node) Valid() bool {
+	return n.etagValid
+}
+
+func (n *node) Invalidate() {
+	n.etagValid = false
+}
+
+func (n *node) ETag() (ETag, error) {
+	if !n.etagValid {
+		err := calculateETag(n)
+		if err != nil {
+			return n.etag, err
+		}
+	}
+	return n.etag, nil
 }
 
 type Storage struct {
@@ -121,11 +141,7 @@ func (s Storage) CreateDocument(cfg Server, rname string, data []byte, mime stri
 
 	n := f
 	for n != nil {
-		e, err := generateETag(n) // @perf(#etag)
-		if err != nil {
-			return f, err
-		}
-		n.etag = e
+		n.Invalidate()
 		n = n.parent
 	}
 
@@ -151,11 +167,7 @@ func (s Storage) UpdateDocument(cfg Server, rname string, data []byte, mime stri
 
 	n := f
 	for n != nil {
-		e, err := generateETag(n) // @perf(#etag)
-		if err != nil {
-			return n, err
-		}
-		n.etag = e
+		n.Invalidate()
 		n = n.parent
 	}
 
@@ -180,14 +192,8 @@ func (s Storage) RemoveDocument(cfg Server, rname string) (*node, error) {
 	}
 	// p now points to the parent deepest down the ancestry that is not empty
 
-	// @perf(#etag): maybe don't do the re-calculation here, only mark the etags as invalid
-	//   then use a getter ETag() that re-calculates when the invalid flag is set.
 	for p != nil {
-		e, err := generateETag(p)
-		if err != nil {
-			return f, err
-		}
-		p.etag = e
+		p.Invalidate()
 		p = p.parent
 	}
 
@@ -214,12 +220,12 @@ func (n node) StringIdent(ident int) (s string) {
 		s += "  "
 	}
 	if n.isFolder {
-		s += fmt.Sprintf("{F} %s [%s] [%x]\n", n.name, n.rname, n.etag[:4])
+		s += fmt.Sprintf("{F} %s [%s] [%x]\n", n.name, n.rname, must(n.ETag())[:4])
 		for _, c := range n.children {
 			s += c.StringIdent(ident + 1)
 		}
 	} else {
-		s += fmt.Sprintf("{D} %s (%s, %d) [%s -> %s] [%x]\n", n.name, n.mime, n.length, n.rname, n.sname, n.etag[:4])
+		s += fmt.Sprintf("{D} %s (%s, %d) [%s -> %s] [%x]\n", n.name, n.mime, n.length, n.rname, n.sname, must(n.ETag())[:4])
 	}
 	return
 }

@@ -15,7 +15,7 @@ func TestCreateDocument(t *testing.T) {
 
 	const (
 		docPath    = "/Documents/Homework/Assignments/2023/04/Vector Geometry.md"
-		docContent = "[1 3 5] × [5 6 7]"
+		docContent = "[1 3 5] × [5 6 7]" // × is one character taking up two bytes
 		docMime    = "text/markdown"
 	)
 
@@ -234,7 +234,10 @@ func TestETagUpdatedWhenDocumentAdded(t *testing.T) {
 		t.Error(err)
 	}
 
-	v1 := codeFolder.etag
+	v1, err := codeFolder.ETag()
+	if err != nil {
+		t.Error(err)
+	}
 	t.Logf("etag v1: %x", v1)
 
 	_, err = store.CreateDocument(server, "/code/error.go", []byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")"), "text/plain")
@@ -242,7 +245,13 @@ func TestETagUpdatedWhenDocumentAdded(t *testing.T) {
 		t.Error(err)
 	}
 
-	v2 := codeFolder.etag
+	if codeFolder.etagValid != false {
+		t.Error("expected etag to have been invalidated")
+	}
+	v2, err := codeFolder.ETag()
+	if err != nil {
+		t.Error(err)
+	}
 	t.Logf("etag v2: %x", v2)
 
 	if string(v1) == string(v2) {
@@ -272,7 +281,10 @@ func TestETagUpdatedWhenDocumentRemoved(t *testing.T) {
 		t.Error(err)
 	}
 
-	v1 := codeFolder.etag
+	v1, err := codeFolder.ETag()
+	if err != nil {
+		t.Error(err)
+	}
 	t.Logf("etag v1: %x", v1)
 
 	_, err = store.RemoveDocument(server, "/code/hello.go")
@@ -280,7 +292,13 @@ func TestETagUpdatedWhenDocumentRemoved(t *testing.T) {
 		t.Error(err)
 	}
 
-	v2 := codeFolder.etag
+	if codeFolder.etagValid != false {
+		t.Error("expected version to have been invalidated")
+	}
+	v2, err := codeFolder.ETag()
+	if err != nil {
+		t.Error(err)
+	}
 	t.Logf("etag v2: %x", v2)
 
 	if string(v1) == string(v2) {
@@ -305,7 +323,10 @@ func TestETagUpdatedWhenDocumentUpdated(t *testing.T) {
 		t.Error(err)
 	}
 
-	dv1 := errorDoc.etag
+	dv1, err := errorDoc.ETag()
+	if err != nil {
+		t.Error(err)
+	}
 	t.Logf("document etag v1: %x", dv1)
 
 	codeFolder, err := store.Node(server, "/code/")
@@ -313,7 +334,10 @@ func TestETagUpdatedWhenDocumentUpdated(t *testing.T) {
 		t.Error(err)
 	}
 
-	fv1 := codeFolder.etag
+	fv1, err := codeFolder.ETag()
+	if err != nil {
+		t.Error(err)
+	}
 	t.Logf("folder etag v1: %x", fv1)
 
 	_, err = store.UpdateDocument(server, "/code/error.go", []byte("var ErrExistentialCrisis = errors.New(\"why?\")"), "text/plain")
@@ -321,10 +345,22 @@ func TestETagUpdatedWhenDocumentUpdated(t *testing.T) {
 		t.Error(err)
 	}
 
-	dv2 := errorDoc.etag
+	if errorDoc.etagValid != false {
+		t.Error("expected document version to have been invalidated")
+	}
+	dv2, err := errorDoc.ETag()
+	if err != nil {
+		t.Error(err)
+	}
 	t.Logf("document etag v2: %x", dv2)
 
-	fv2 := codeFolder.etag
+	if codeFolder.etagValid != false {
+		t.Error("expected folder version to have been invalidated")
+	}
+	fv2, err := codeFolder.ETag()
+	if err != nil {
+		t.Error(err)
+	}
 	t.Logf("folder etag v2: %x", fv2)
 
 	if string(fv1) == string(fv2) {
@@ -357,12 +393,19 @@ func TestETagNotAffected(t *testing.T) {
 		t.Error(err)
 	}
 
-	v1 := codeFolder.etag
+	v1, err := codeFolder.ETag()
+	if err != nil {
+		t.Error(err)
+	}
 	t.Logf("folder etag v1: %x", v1)
 
-	rv1 := store.Root().etag
+	rv1, err := store.Root().ETag()
+	if err != nil {
+		t.Error(err)
+	}
 	t.Logf("root etag v1: %x", rv1)
 
+	// 可愛い is 3 characters together taking up 9 bytes
 	f, err := store.CreateDocument(server, "/Pictures/Kittens.png", []byte("可愛い"), "image/png")
 	if err != nil {
 		t.Error(err)
@@ -371,14 +414,26 @@ func TestETagNotAffected(t *testing.T) {
 		t.Errorf("got: `%d', want: 9", f.length)
 	}
 
-	v2 := codeFolder.etag
+	v2, err := codeFolder.ETag()
+	if err != nil {
+		t.Error(err)
+	}
 	t.Logf("folder etag v2: %x", v2)
 
+	if codeFolder.etagValid != true {
+		t.Error("expected etag to still be valid")
+	}
 	if string(v1) != string(v2) {
 		t.Error("expected code folder etag to not have changed")
 	}
 
-	rv2 := store.Root().etag
+	if store.Root().etagValid != false {
+		t.Error("expected version to have been invalidated")
+	}
+	rv2, err := store.Root().ETag()
+	if err != nil {
+		t.Error(err)
+	}
 	t.Logf("root etag v2: %x", rv2)
 
 	if string(rv1) == string(rv2) {

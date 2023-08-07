@@ -27,13 +27,6 @@ func writeError(w http.ResponseWriter, err error) error {
 
 var mfs fileSystem = &osFileSystem{}
 
-// @todo: strong ETags
-// - include hostname / server uri?
-// - hash file contents
-// - / hash file names of document contents (the entire subtree)
-// - last modified time
-// - ...?
-
 type Server struct {
 	Rroot, Sroot string
 }

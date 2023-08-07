@@ -22,7 +22,7 @@ func init() {
 	}
 }
 
-func generateETag(n *node) (ETag, error) {
+func calculateETag(n *node) error {
 	hash := md5.New()
 	io.WriteString(hash, hostname)
 
@@ -41,17 +41,30 @@ func generateETag(n *node) (ETag, error) {
 
 			fd, err := mfs.Open(cn.sname)
 			if err != nil {
-				return nil, err
+				return err
 			}
 
 			io.Copy(hash, fd)
 
 			err = fd.Close()
 			if err != nil {
-				return nil, err
+				return err
 			}
 		}
 	}
 
-	return hash.Sum(nil), nil
+	n.etag = hash.Sum(nil)
+	n.etagValid = true
+	return nil
+}
+
+func recalculateAncestorETags(n *node) error {
+	for n != nil {
+		err := calculateETag(n)
+		if err != nil {
+			return err
+		}
+		n = n.parent
+	}
+	return nil
 }
