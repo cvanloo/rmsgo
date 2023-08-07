@@ -26,6 +26,6 @@ func main() {
 		Sroot: StorageRoot,
 	}
 	mux.Handle(RemoteRoot, loggingMiddleware(rms))
-	log.Println("Listening on :8080")
-	http.ListenAndServe(":8080", mux)
+	log.Println("starting listener on :8080")
+	log.Fatal(http.ListenAndServe(":8080", mux))
 }

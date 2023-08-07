@@ -435,6 +435,14 @@ func TestRemove(t *testing.T) {
 	}
 }
 
+func TestRemoveNonEmpty(t *testing.T) {
+	m := createMock()
+	err := m.Remove("/Pictures/")
+	if err == nil {
+		t.Error("expected removal of non-empty directory to report error")
+	}
+}
+
 func TestRemoveAll(t *testing.T) {
 	m := createMock()
 	_, err := m.Open("/Documents/fakenius.txt")

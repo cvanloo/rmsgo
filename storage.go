@@ -53,6 +53,7 @@ func NewStorage() (s Storage) {
 }
 
 func (s Storage) Root() *node {
+	assert(s.root != nil, "/ (root) exists")
 	return s.root
 }
 
@@ -60,6 +61,8 @@ func (s Storage) CreateDocument(cfg Server, rname string, data []byte, mime stri
 	if f, ok := s.files[rname]; ok {
 		return f, ErrFileExists
 	}
+
+	assert(rname[len(rname)-1] != '/', "CreateDocument must only be used to create files")
 
 	u, err := uuid.NewRandom()
 	if err != nil {
@@ -74,11 +77,14 @@ func (s Storage) CreateDocument(cfg Server, rname string, data []byte, mime stri
 
 	pname := filepath.Dir(rname)
 	var parts []string
-	if pname != "/" {
-		parts = strings.Split(pname, string(os.PathSeparator))[1:] // don't include "" before first "/"
+	for _, s := range strings.Split(pname, string(os.PathSeparator)) {
+		if s != "" {
+			parts = append(parts, s)
+		}
 	}
-	p := s.files["/"]
-	assert(p != nil, "/ (root) exists")
+
+	p := s.root
+
 	for i := range parts {
 		pname := "/" + strings.Join(parts[:i+1], string(os.PathSeparator)) + "/"
 		pn, ok := s.files[pname]
@@ -132,6 +138,8 @@ func (s Storage) UpdateDocument(cfg Server, rname string, data []byte, mime stri
 		return nil, ErrNotFound
 	}
 
+	assert(!f.isFolder, "UpdateDocument must not be called on a folder")
+
 	err := mfs.WriteFile(f.sname, data, 0640)
 	if err != nil {
 		return f, err
@@ -155,32 +163,35 @@ func (s Storage) UpdateDocument(cfg Server, rname string, data []byte, mime stri
 }
 
 func (s Storage) RemoveDocument(cfg Server, rname string) (*node, error) {
-	if f, ok := s.files[rname]; ok {
-		assert(!f.isFolder, "removeDocument must not be called on a folder")
-		p := f
-		for len(p.children) == 0 && p != s.root {
-			mfs.Remove(p.sname)
-			pp := p.parent
-			delete(pp.children, p.rname)
-			delete(s.files, p.rname)
-			p = pp
-		}
-		// p now points to the parent deepest down the ancestry that is not empty
-
-		// @perf(#etag): maybe don't do the re-calculation here, only mark the etags as invalid
-		//   then use a getter ETag() that re-calculates when the invalid flag is set.
-		for p != nil {
-			e, err := generateETag(p)
-			if err != nil {
-				return f, err
-			}
-			p.etag = e
-			p = p.parent
-		}
-
-		return f, nil
+	f, ok := s.files[rname]
+	if !ok {
+		return nil, ErrNotFound
 	}
-	return nil, ErrNotFound
+
+	assert(!f.isFolder, "RemoveDocument must not be called on a folder")
+
+	p := f
+	for len(p.children) == 0 && p != s.root {
+		mfs.Remove(p.sname)
+		pp := p.parent
+		delete(pp.children, p.rname)
+		delete(s.files, p.rname)
+		p = pp
+	}
+	// p now points to the parent deepest down the ancestry that is not empty
+
+	// @perf(#etag): maybe don't do the re-calculation here, only mark the etags as invalid
+	//   then use a getter ETag() that re-calculates when the invalid flag is set.
+	for p != nil {
+		e, err := generateETag(p)
+		if err != nil {
+			return f, err
+		}
+		p.etag = e
+		p = p.parent
+	}
+
+	return f, nil
 }
 
 func (s Storage) Node(cfg Server, rname string) (*node, error) {

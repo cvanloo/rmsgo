@@ -120,7 +120,7 @@ func TestCreateDocuments(t *testing.T) {
 	t.Logf("\n%s", store)
 
 	if l := len(store.Root().children); l != 1 {
-		t.Errorf("got: `%d', want: 2", l)
+		t.Errorf("got: `%d', want: 1", l)
 	}
 
 	n, err := store.Node(server, "/code/")
@@ -211,7 +211,7 @@ func TestRemoveDocument(t *testing.T) {
 	}
 
 	_, err = store.Node(server, path)
-	if err == nil {
+	if err != ErrNotFound {
 		t.Errorf("got: `%v', want: `%v'", err, ErrNotFound)
 	}
 }
@@ -300,6 +300,53 @@ func TestETagUpdatedWhenDocumentUpdated(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	errorDoc, err := store.CreateDocument(server, "/code/error.go", []byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")"), "text/plain")
+	if err != nil {
+		t.Error(err)
+	}
+
+	dv1 := errorDoc.etag
+	t.Logf("document etag v1: %x", dv1)
+
+	codeFolder, err := store.Node(server, "/code/")
+	if err != nil {
+		t.Error(err)
+	}
+
+	fv1 := codeFolder.etag
+	t.Logf("folder etag v1: %x", fv1)
+
+	_, err = store.UpdateDocument(server, "/code/error.go", []byte("var ErrExistentialCrisis = errors.New(\"why?\")"), "text/plain")
+	if err != nil {
+		t.Error(err)
+	}
+
+	dv2 := errorDoc.etag
+	t.Logf("document etag v2: %x", dv2)
+
+	fv2 := codeFolder.etag
+	t.Logf("folder etag v2: %x", fv2)
+
+	if string(fv1) == string(fv2) {
+		t.Error("expected folder version to have changed")
+	}
+	if string(dv1) == string(dv2) {
+		t.Error("expected document version to have changed")
+	}
+}
+
+func TestETagNotAffected(t *testing.T) {
+	mfs = CreateMockFS()
+	server := Server{
+		Rroot: "/storage/",
+		Sroot: "/tmp/rms/storage/",
+	}
+	store := NewStorage()
+
+	_, err := store.CreateDocument(server, "/code/hello.go", []byte("func hello() string {\n\treturn \"Hello, World\"\n}"), "text/plain")
+	if err != nil {
+		t.Error(err)
+	}
 	_, err = store.CreateDocument(server, "/code/error.go", []byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")"), "text/plain")
 	if err != nil {
 		t.Error(err)
@@ -311,17 +358,30 @@ func TestETagUpdatedWhenDocumentUpdated(t *testing.T) {
 	}
 
 	v1 := codeFolder.etag
-	t.Logf("etag v1: %x", v1)
+	t.Logf("folder etag v1: %x", v1)
 
-	_, err = store.UpdateDocument(server, "/code/error.go", []byte("var ErrExistentialCrisis = errors.New(\"why?\")"), "text/plain")
+	rv1 := store.Root().etag
+	t.Logf("root etag v1: %x", rv1)
+
+	f, err := store.CreateDocument(server, "/Pictures/Kittens.png", []byte("可愛い"), "image/png")
 	if err != nil {
 		t.Error(err)
 	}
+	if f.length != 9 {
+		t.Errorf("got: `%d', want: 9", f.length)
+	}
 
 	v2 := codeFolder.etag
-	t.Logf("etag v2: %x", v2)
+	t.Logf("folder etag v2: %x", v2)
 
-	if string(v1) == string(v2) {
-		t.Error("expected version to have changed")
+	if string(v1) != string(v2) {
+		t.Error("expected code folder etag to not have changed")
+	}
+
+	rv2 := store.Root().etag
+	t.Logf("root etag v2: %x", rv2)
+
+	if string(rv1) == string(rv2) {
+		t.Error("expected root etag to have changed")
 	}
 }

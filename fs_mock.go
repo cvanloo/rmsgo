@@ -142,7 +142,12 @@ func (m *mockFileSystem) WriteFile(name string, data []byte, perm os.FileMode) e
 
 func (m *mockFileSystem) Remove(name string) error {
 	if f, ok := m.contents[name]; ok {
-		if f.isDir && len(f.children) != 0 {
+		c := 0
+		m.WalkDir(name, func(path string, d fs.DirEntry, err error) error {
+			c++
+			return nil
+		})
+		if f.isDir && c > 1 {
 			return &os.PathError{
 				Op:   "Remove",
 				Path: name,
@@ -170,7 +175,6 @@ type mockFile struct {
 	isDir    bool
 	name     string
 	bytes    []byte
-	children map[string]*mockFile
 	mode     fs.FileMode
 	lastMod  time.Time
 }
@@ -296,7 +300,6 @@ func (m *mockFileSystem) AddDirectory(name string) *mockFileSystem {
 	m.contents[path] = &mockFile{
 		isDir:    true,
 		name:     name,
-		children: map[string]*mockFile{},
 		mode:     0755,
 		lastMod:  time.Now(),
 	}
