@@ -12,6 +12,13 @@ import (
 	"github.com/google/uuid"
 )
 
+var (
+	files map[string]*node
+	root  *node
+)
+
+var ErrFileExists = errors.New("file already exists") // @todo: remove error?
+
 type node struct {
 	parent   *node
 	isFolder bool
@@ -42,14 +49,12 @@ func (n *node) Invalidate() {
 	n.etagValid = false
 }
 
-func (n *node) ETag() (ETag, error) {
+func (n *node) ETag() (e ETag, err error) {
 	if !n.etagValid {
-		err := calculateETag(n)
-		if err != nil {
-			return n.etag, err
-		}
+		err = calculateETag(n)
 	}
-	return n.etag, nil
+	e = n.etag
+	return
 }
 
 func (n *node) Equal(other *node) bool {
@@ -58,13 +63,6 @@ func (n *node) Equal(other *node) bool {
 	}
 	return n.etag.Equal(other.etag)
 }
-
-var (
-	files map[string]*node
-	root  *node
-)
-
-var ErrFileExists = errors.New("file already exists")
 
 func init() {
 	rn := &node{

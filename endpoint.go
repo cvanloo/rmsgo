@@ -13,34 +13,10 @@ import (
 	"github.com/cvanloo/rmsgo.git/isdelve"
 )
 
-func writeError(w http.ResponseWriter, err error) error {
-	status, ok := StatusCodes[err]
-	if !ok {
-		err = ErrServerError
-		status = StatusCodes[ErrServerError]
-	}
-
-	data := map[string]any{
-		"error": err.Error(),
-		// @todo: "message": err.Message()?
-	}
-
-	w.Header().Set("Content-Type", "application/ld+json")
-	w.WriteHeader(status)
-	return json.NewEncoder(w).Encode(data)
-}
-
 var mfs fileSystem = &osFileSystem{}
 
 type Server struct {
 	Rroot, Sroot string
-}
-
-func init() {
-	if isdelve.Enabled {
-		mfs = CreateMockFS()
-		log.Println("Debugger detected, using mock filesystem")
-	}
 }
 
 func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -289,4 +265,28 @@ func (s Server) DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 	hs := w.Header()
 	hs.Set("ETag", etag.String())
 	return nil
+}
+
+func init() {
+	if isdelve.Enabled {
+		mfs = CreateMockFS()
+		log.Println("Debugger detected, using mock filesystem")
+	}
+}
+
+func writeError(w http.ResponseWriter, err error) error {
+	status, ok := StatusCodes[err]
+	if !ok {
+		err = ErrServerError
+		status = StatusCodes[ErrServerError]
+	}
+
+	data := map[string]any{
+		"error": err.Error(),
+		// @todo: "message": err.Message()?
+	}
+
+	w.Header().Set("Content-Type", "application/ld+json")
+	w.WriteHeader(status)
+	return json.NewEncoder(w).Encode(data)
 }
