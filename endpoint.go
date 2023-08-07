@@ -107,33 +107,58 @@ func authenticationMiddleware(next http.Handler) http.Handler {
 
 type ldjson = map[string]any
 
-func (s Server) GetFolder(w http.ResponseWriter, r *http.Request) error {
-	// verify If-Non-Match: (revisions) header (fail with 304 if folder included in revisions)
+const rmsTimeFormat = time.RFC1123
 
-	// empty folders: "items": {}
-	// don't list empty folders in their parents!
-	// a folder is non-empty if in its subtree at least one document is contained
-	documentDesc := ldjson{
-		"ETag":           "DEADBEEFDEADBEEFDEADBEEF",
-		"Content-Type":   "image/jpeg",
-		"Content-Length": 82352,
-		"Last-Modified":  time.Now().Format(time.RFC1123),
+func (s Server) GetFolder(w http.ResponseWriter, r *http.Request) error {
+	rpath := strings.TrimPrefix(r.URL.Path, s.Rroot)
+
+	n, err := Node(rpath)
+	if err != nil {
+		return writeError(w, err)
 	}
-	folderDesc := ldjson{
-		"ETag": "1337ABCD1337ABCD1337ABCD",
+
+	etag, err := n.ETag()
+	if err != nil {
+		return writeError(w, err)
 	}
+
+	if ifMatch := r.Header["If-Non-Match"]; len(ifMatch) > 0 {
+		for _, rev := range ifMatch {
+			rev, err := ParseETag(rev)
+			if err != nil {
+				return writeError(w, err) // @todo: ErrBadRequest
+			}
+			if rev.Equal(etag) {
+				return writeError(w, ErrNotModified)
+			}
+		}
+	}
+
+	items := ldjson{}
+	for _, child := range n.children {
+		desc := ldjson{}
+		etag, err := child.ETag()
+		if err != nil {
+			return writeError(w, err)
+		}
+		desc["ETag"] = etag.String()
+		if !child.isFolder {
+			desc["Content-Type"] = child.mime
+			desc["Content-Length"] = child.length
+			desc["Last-Modified"] = child.lastMod.Format(rmsTimeFormat)
+		}
+		items[child.name] = desc
+	}
+
 	desc := ldjson{
 		"@context": "http://remotestorage.io/spec/folder-description",
-		"items": ldjson{
-			"abc":  documentDesc,
-			"def/": folderDesc,
-		},
+		"items":    items,
 	}
+
 	hs := w.Header()
 	hs.Set("Content-Type", "application/ld+json")
 	hs.Set("Cache-Control", "no-cache")
-	hs.Set("ETag", "????")
-	w.WriteHeader(http.StatusOK)
+	hs.Set("ETag", etag.String())
 	return json.NewEncoder(w).Encode(desc)
 }
 
@@ -145,21 +170,21 @@ func (s Server) GetDocument(w http.ResponseWriter, r *http.Request) error {
 		return writeError(w, err)
 	}
 
+	etag, err := n.ETag()
+	if err != nil {
+		return writeError(w, err)
+	}
+
 	if ifMatch := r.Header["If-Non-Match"]; len(ifMatch) > 0 {
 		for _, rev := range ifMatch {
 			rev, err := ParseETag(rev)
 			if err != nil {
-				return writeError(w, err)
+				return writeError(w, err) // @todo: ErrBadRequest
 			}
-			if rev.Equal(n.etag) {
+			if rev.Equal(etag) {
 				return writeError(w, ErrNotModified)
 			}
 		}
-	}
-
-	etag, err := n.ETag()
-	if err != nil {
-		return writeError(w, err)
 	}
 
 	fd, err := mfs.Open(n.sname)
@@ -193,7 +218,7 @@ func (s Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 	if ifMatch := r.Header.Get("If-Match"); ifMatch != "" {
 		rev, err := ParseETag(ifMatch)
 		if err != nil {
-			return writeError(w, err)
+			return writeError(w, err) // @todo: ErrBadRequest when this fails
 		}
 		etag, err := n.ETag()
 		if err != nil {
@@ -222,6 +247,7 @@ func (s Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return writeError(w, err)
 	}
+
 	etag, err := n.ETag()
 	if err != nil {
 		return writeError(w, err)
@@ -233,19 +259,34 @@ func (s Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s Server) DeleteDocument(w http.ResponseWriter, r *http.Request) error {
-	// verify If-Match header (fail with 412)
+	rpath := strings.TrimPrefix(r.URL.Path, s.Rroot)
 
-	// remove document from storage, conditional on the current version
+	n, err := Node(rpath)
+	if err != nil {
+		return writeError(w, err)
+	}
 
-	// remove document from storage
+	etag, err := n.ETag()
+	if err != nil {
+		return writeError(w, err)
+	}
 
-	// remove document from parent folder
+	if ifMatch := r.Header.Get("If-Match"); ifMatch != "" {
+		rev, err := ParseETag(ifMatch)
+		if err != nil {
+			return writeError(w, err) // @todo: ErrBadRequest when this fails
+		}
+		if !etag.Equal(rev) {
+			return writeError(w, ErrPreconditionFailed) // @todo(#desc_error): version mismatch
+		}
+	}
 
-	// auto-delete all ancestor folders that are now empty
-
-	// update ETags of all ancestor folders
+	n, err = RemoveDocument(s, rpath)
+	if err != nil {
+		return writeError(w, err)
+	}
 
 	hs := w.Header()
-	hs.Set("ETag", "????") // deleted etag
-	return writeError(w, ErrNotImplemented)
+	hs.Set("ETag", etag.String())
+	return nil
 }
