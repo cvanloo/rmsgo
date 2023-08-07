@@ -44,41 +44,41 @@ func init() {
 }
 
 func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	err := s.Serve(w, r)
-	if err != nil {
-		// @todo: allow user to configure a logging function
-		log.Printf("rms-server: %s", err)
-	}
-}
-
-func (s Server) Serve(w http.ResponseWriter, r *http.Request) error {
 	path := r.URL.Path
 	isFolder := false
 	if path[len(path)-1] == '/' {
 		isFolder = true
 	}
 
+	var err error
 	if isFolder {
 		switch r.Method {
 		case http.MethodHead:
 			fallthrough
 		case http.MethodGet:
-			return s.GetFolder(w, r)
+			err = s.GetFolder(w, r)
+		default:
+			err = writeError(w, ErrMethodNotAllowed)
 		}
 	} else {
 		switch r.Method {
 		case http.MethodHead:
 			fallthrough
 		case http.MethodGet:
-			return s.GetDocument(w, r)
+			err = s.GetDocument(w, r)
 		case http.MethodPut:
-			return s.PutDocument(w, r)
+			err = s.PutDocument(w, r)
 		case http.MethodDelete:
-			return s.DeleteDocument(w, r)
+			err = s.DeleteDocument(w, r)
+		default:
+			err = writeError(w, ErrMethodNotAllowed)
 		}
 	}
 
-	return writeError(w, ErrMethodNotAllowed)
+	if err != nil {
+		// @todo: allow user to configure a logging function
+		log.Printf("rms-server: %s", err)
+	}
 }
 
 const userKey = "AUTHENTICATED_USER"
