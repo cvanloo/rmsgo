@@ -9,13 +9,13 @@ import (
 )
 
 func TestCreateDocument(t *testing.T) {
-	mfs = CreateMockFS()
 	createUUID = CreateMockUUIDFunc()
 	getTime = getMockTime
 	server := Server{
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
+	mfs = CreateMockFS().AddDirectory(server.Sroot)
 	Reset()
 
 	const (
@@ -107,13 +107,13 @@ func TestCreateDocument(t *testing.T) {
 }
 
 func TestCreateDocuments(t *testing.T) {
-	mfs = CreateMockFS()
 	createUUID = CreateMockUUIDFunc()
 	getTime = getMockTime
 	server := Server{
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
+	mfs = CreateMockFS().AddDirectory(server.Sroot)
 	Reset()
 
 	sname, fsize, _, err := WriteFile(server, "", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World!")))
@@ -143,13 +143,13 @@ func TestCreateDocuments(t *testing.T) {
 }
 
 func TestUpdateDocument(t *testing.T) {
-	mfs = CreateMockFS()
 	createUUID = CreateMockUUIDFunc()
 	getTime = getMockTime
 	server := Server{
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
+	mfs = CreateMockFS().AddDirectory(server.Sroot)
 	Reset()
 
 	const path = "/FunFacts/Part1.txt"
@@ -172,13 +172,13 @@ func TestUpdateDocument(t *testing.T) {
 }
 
 func TestNode(t *testing.T) {
-	mfs = CreateMockFS()
 	createUUID = CreateMockUUIDFunc()
 	getTime = getMockTime
 	server := Server{
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
+	mfs = CreateMockFS().AddDirectory(server.Sroot)
 	Reset()
 
 	const path = "/FunFacts/Part2.txt"
@@ -199,13 +199,13 @@ func TestNode(t *testing.T) {
 }
 
 func TestRemoveDocument(t *testing.T) {
-	mfs = CreateMockFS()
 	createUUID = CreateMockUUIDFunc()
 	getTime = getMockTime
 	server := Server{
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
+	mfs = CreateMockFS().AddDirectory(server.Sroot)
 	Reset()
 
 	const path = "/FunFacts/Part3.txt"
@@ -237,13 +237,13 @@ func TestRemoveDocument(t *testing.T) {
 }
 
 func TestETagUpdatedWhenDocumentAdded(t *testing.T) {
-	mfs = CreateMockFS()
 	createUUID = CreateMockUUIDFunc()
 	getTime = getMockTime
 	server := Server{
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
+	mfs = CreateMockFS().AddDirectory(server.Sroot)
 	Reset()
 
 	sname, fsize, _, err := WriteFile(server, "", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")))
@@ -284,13 +284,13 @@ func TestETagUpdatedWhenDocumentAdded(t *testing.T) {
 }
 
 func TestETagUpdatedWhenDocumentRemoved(t *testing.T) {
-	mfs = CreateMockFS()
 	createUUID = CreateMockUUIDFunc()
 	getTime = getMockTime
 	server := Server{
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
+	mfs = CreateMockFS().AddDirectory(server.Sroot)
 	Reset()
 
 	sname, fsize, _, err := WriteFile(server, "", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")))
@@ -335,13 +335,13 @@ func TestETagUpdatedWhenDocumentRemoved(t *testing.T) {
 }
 
 func TestETagUpdatedWhenDocumentUpdated(t *testing.T) {
-	mfs = CreateMockFS()
 	createUUID = CreateMockUUIDFunc()
 	getTime = getMockTime
 	server := Server{
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
+	mfs = CreateMockFS().AddDirectory(server.Sroot)
 	Reset()
 
 	sname, fsize, _, err := WriteFile(server, "", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")))
@@ -405,13 +405,13 @@ func TestETagUpdatedWhenDocumentUpdated(t *testing.T) {
 }
 
 func TestETagNotAffected(t *testing.T) {
-	mfs = CreateMockFS()
 	createUUID = CreateMockUUIDFunc()
 	getTime = getMockTime
 	server := Server{
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
+	mfs = CreateMockFS().AddDirectory(server.Sroot)
 	Reset()
 
 	sname, fsize, _, err := WriteFile(server, "", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")))
@@ -480,13 +480,13 @@ func TestETagNotAffected(t *testing.T) {
 }
 
 func ExamplePersist() {
-	mfs = CreateMockFS()
 	createUUID = CreateMockUUIDFunc()
 	getTime = getMockTime
 	server := Server{
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
+	mfs = CreateMockFS().AddDirectory(server.Sroot)
 	Reset()
 
 	panicIf := func(err error) {
@@ -507,7 +507,7 @@ func ExamplePersist() {
 	_, err = AddDocument("/Documents/hello.txt", sname, fsize, "text/plain")
 	panicIf(err)
 
-	fd, err := mfs.Create("marshalled.xml")
+	fd, err := mfs.Create(server.Sroot + "marshalled.xml")
 	panicIf(err)
 
 	err = Persist(fd)

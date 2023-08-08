@@ -1,8 +1,11 @@
 package rmsgo
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"os"
 	"testing"
 )
@@ -152,7 +155,7 @@ func TestStat(t *testing.T) {
 func TestOpenNonExistent(t *testing.T) {
 	m := createMock()
 	_, err := m.Open("/Does/Not/Exist")
-	if err != os.ErrNotExist {
+	if !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("got: `%v', want: `%v'", err, os.ErrNotExist)
 	}
 }
@@ -430,7 +433,7 @@ func TestRemove(t *testing.T) {
 		t.Error(err)
 	}
 	_, err = m.Open(path)
-	if err != os.ErrNotExist {
+	if !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("got: `%v', want: `%s' (expected file to be inexistent)", err, os.ErrNotExist)
 	}
 }
@@ -454,15 +457,55 @@ func TestRemoveAll(t *testing.T) {
 		t.Error(err)
 	}
 	_, err = m.Open("/Documents/fakenius.txt")
-	if err != os.ErrNotExist {
+	if !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("got: `%v', want: `%s' (expected file to be inexistent)", err, os.ErrNotExist)
 	}
 	_, err = m.Open("/Documents/doc.txt")
-	if err != os.ErrNotExist {
+	if !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("got: `%v', want: `%s' (expected file to be inexistent)", err, os.ErrNotExist)
 	}
 	_, err = m.Open("/Documents/")
-	if err != os.ErrNotExist {
+	if !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("got: `%v', want: `%s' (expected file to be inexistent)", err, os.ErrNotExist)
 	}
+}
+
+func ExampleWalkDir() {
+	m := CreateMockFS().
+		AddDirectory("tmp").
+		Into().
+		AddDirectory("t").
+		Into().
+		AddFile("1", "").
+		AddDirectory("2").
+		AddFile("3", "").
+		Into().
+		AddFile("4", "").
+		AddFile("5", "").
+		AddFile("6", "").
+		AddDirectory("7").
+		Into().
+		AddDirectory("8").
+		Into().
+		AddFile("9", "")
+
+	log.Println(m)
+
+	err := m.WalkDir("/tmp/t/", func(path string, d fs.DirEntry, err error) error {
+		fmt.Printf("In `%s', err: `%v'\n", path, err)
+		return nil
+	})
+	fmt.Printf("walkdir ended with err: `%v'\n", err)
+	// Output:
+	// In `/tmp/t/', err: `<nil>'
+	// In `/tmp/t/1', err: `<nil>'
+	// In `/tmp/t/2/', err: `<nil>'
+	// In `/tmp/t/2/4', err: `<nil>'
+	// In `/tmp/t/2/5', err: `<nil>'
+	// In `/tmp/t/2/6', err: `<nil>'
+	// In `/tmp/t/2/7/', err: `<nil>'
+	// In `/tmp/t/2/7/8/', err: `<nil>'
+	// In `/tmp/t/2/7/8/9', err: `<nil>'
+	// In `/tmp/t/3', err: `<nil>'
+	// walkdir ended with err: `<nil>'
 }
