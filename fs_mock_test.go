@@ -199,7 +199,7 @@ func TestFileReadEOF(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nc, err := fd.Seek(0, 2) // seek end
+	nc, err := fd.Seek(0, io.SeekEnd)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +224,7 @@ func TestFileSeek(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nc, err := fd.Seek(5, 0)
+	nc, err := fd.Seek(5, io.SeekStart)
 	if err != nil {
 		t.Error(err)
 	}
@@ -232,7 +232,7 @@ func TestFileSeek(t *testing.T) {
 		t.Errorf("incorrect cursor position; got: `%d', want: `%d'", nc, 5)
 	}
 
-	nc, err = fd.Seek(7, 1)
+	nc, err = fd.Seek(7, io.SeekCurrent)
 	if err != nil {
 		t.Error(err)
 	}
@@ -240,7 +240,7 @@ func TestFileSeek(t *testing.T) {
 		t.Errorf("incorrect cursor position; got: `%d', want: `%d'", nc, 12)
 	}
 
-	nc, err = fd.Seek(4, 2)
+	nc, err = fd.Seek(4, io.SeekEnd)
 	if err != nil {
 		t.Error(err)
 	}
@@ -256,7 +256,7 @@ func TestFileWriteAtSeekEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nc, err := fd.Seek(0, 2) // Seek to end
+	nc, err := fd.Seek(0, io.SeekEnd)
 	if err != nil {
 		t.Error(err)
 	}
@@ -272,7 +272,7 @@ func TestFileWriteAtSeekEnd(t *testing.T) {
 		t.Errorf("incorrect number of bytes written; got: `%d', want: `%d'", nw, 6)
 	}
 
-	nc, err = fd.Seek(0, 0) // Seek to beginning
+	nc, err = fd.Seek(0, io.SeekStart)
 	if err != nil {
 		t.Error(err)
 	}
@@ -301,7 +301,7 @@ func TestFileWriteOverwriteParts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nc, err := fd.Seek(4, 2) // Seek to end-4
+	nc, err := fd.Seek(4, io.SeekEnd)
 	if err != nil {
 		t.Error(err)
 	}
@@ -317,7 +317,7 @@ func TestFileWriteOverwriteParts(t *testing.T) {
 		t.Errorf("incorrect number of bytes written; got: `%d', want: `%d'", nw, 6)
 	}
 
-	nc, err = fd.Seek(0, 0) // Seek to beginning
+	nc, err = fd.Seek(0, io.SeekStart)
 	if err != nil {
 		t.Error(err)
 	}
@@ -346,7 +346,7 @@ func TestFileMultipleWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nc, err := fd.Seek(4, 2) // Seek to end-4
+	nc, err := fd.Seek(4, io.SeekEnd)
 	if err != nil {
 		t.Error(err)
 	}
@@ -371,7 +371,7 @@ func TestFileMultipleWrite(t *testing.T) {
 		t.Errorf("incorrect number of bytes written; got: `%d', want: `%d'", nw, 6)
 	}
 
-	nc, err = fd.Seek(0, 0) // Seek to beginning
+	nc, err = fd.Seek(0, io.SeekStart)
 	if err != nil {
 		t.Error(err)
 	}

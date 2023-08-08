@@ -262,13 +262,13 @@ func (m *mockFileFd) Write(b []byte) (n int, err error) {
 
 func (m *mockFileFd) Seek(offset int64, whence int) (int64, error) {
 	switch whence {
-	case 0:
+	case io.SeekStart:
 		// relative to the origin of the file
 		m.cursor = offset
-	case 1:
+	case io.SeekCurrent:
 		// relative to the current offset
 		m.cursor += offset
-	case 2:
+	case io.SeekEnd:
 		// relative to the end of the file
 		m.cursor = int64(len(m.file.bytes)) - offset
 	}

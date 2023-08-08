@@ -515,13 +515,16 @@ func ExamplePersist() {
 
 	Reset()
 
-	fd.Seek(0, 0)
+	fd.Seek(0, io.SeekStart)
 	bs, err := io.ReadAll(fd)
 	panicIf(err)
 	fmt.Printf("XML follows:\n%s\n", bs)
-	fd.Seek(0, 0)
+
+	fd.Seek(0, io.SeekStart)
 	err = Load(fd)
 	panicIf(err)
+
+	fd.Close()
 
 	fmt.Printf("Storage listing follows:\n%s", root)
 	// Output: XML follows:
