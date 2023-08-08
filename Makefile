@@ -1,6 +1,6 @@
 test:
 ifdef run
-	@go test -tags=delve ./... -run=$(run)
+	@go test -v -tags=delve ./... -run=$(run)
 else
 	@go test -tags=delve ./...
 endif

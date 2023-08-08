@@ -23,9 +23,9 @@ func loggingMiddleware(next http.Handler) http.Handler {
 
 func main() {
 	mux := http.NewServeMux()
-	rms := rmsgo.Server{
-		Rroot: RemoteRoot[:len(RemoteRoot)-1],
-		Sroot: StorageRoot,
+	rms, err := rmsgo.New(RemoteRoot, StorageRoot)
+	if err != nil {
+		log.Fatal(err)
 	}
 	mux.Handle(RemoteRoot, loggingMiddleware(rms))
 	log.Println("starting listener on :8080")

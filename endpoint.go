@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -23,6 +25,16 @@ var mfs fileSystem = &osFileSystem{}
 
 type Server struct {
 	Rroot, Sroot string
+}
+
+func New(remoteRoot, storageRoot string) (Server, error) {
+	rroot := filepath.Clean(remoteRoot)
+	sroot := filepath.Clean(storageRoot) + "/"
+	fi, err := mfs.Stat(sroot)
+	if err != nil || !fi.IsDir() {
+		return Server{rroot, sroot}, fmt.Errorf("storage root does not exist or is not a directory: %w", err)
+	}
+	return Server{rroot, sroot}, nil
 }
 
 func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
