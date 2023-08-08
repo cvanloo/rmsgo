@@ -2,7 +2,6 @@ package rmsgo
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"log"
@@ -112,23 +111,6 @@ func TestTruncate(t *testing.T) {
 	if string(c) != "It" {
 		t.Errorf("file contents don't match; got: `%s', want: `%s'", c, "It")
 	}
-}
-
-func TestWalkDir(t *testing.T) {
-	m := createMock()
-	idx := 0
-	expected := []string{
-		"/Pictures/",
-		"/Pictures/Gopher.jpg",
-		"/Pictures/Kittens.png",
-	}
-	m.WalkDir("/Pictures/", func(path string, d fs.DirEntry, err error) error {
-		if expected[idx] != path {
-			t.Errorf("wrong path; got: `%s', want: `%s'", path, expected[idx])
-		}
-		idx++
-		return nil
-	})
 }
 
 func TestStat(t *testing.T) {
@@ -470,7 +452,7 @@ func TestRemoveAll(t *testing.T) {
 	}
 }
 
-func ExampleWalkDir() {
+func TestWalkDir(t *testing.T) {
 	m := CreateMockFS().
 		AddDirectory("tmp").
 		Into().
@@ -491,21 +473,132 @@ func ExampleWalkDir() {
 
 	log.Println(m)
 
+	expected, visited := []string{
+		"/tmp/t/",
+		"/tmp/t/1",
+		"/tmp/t/2/",
+		"/tmp/t/2/4",
+		"/tmp/t/2/5",
+		"/tmp/t/2/6",
+		"/tmp/t/2/7/",
+		"/tmp/t/2/7/8/",
+		"/tmp/t/2/7/8/9",
+		"/tmp/t/3",
+	}, []string{}
+
 	err := m.WalkDir("/tmp/t/", func(path string, d fs.DirEntry, err error) error {
-		fmt.Printf("In `%s', err: `%v'\n", path, err)
+		visited = append(visited, path)
 		return nil
 	})
-	fmt.Printf("walkdir ended with err: `%v'\n", err)
-	// Output:
-	// In `/tmp/t/', err: `<nil>'
-	// In `/tmp/t/1', err: `<nil>'
-	// In `/tmp/t/2/', err: `<nil>'
-	// In `/tmp/t/2/4', err: `<nil>'
-	// In `/tmp/t/2/5', err: `<nil>'
-	// In `/tmp/t/2/6', err: `<nil>'
-	// In `/tmp/t/2/7/', err: `<nil>'
-	// In `/tmp/t/2/7/8/', err: `<nil>'
-	// In `/tmp/t/2/7/8/9', err: `<nil>'
-	// In `/tmp/t/3', err: `<nil>'
-	// walkdir ended with err: `<nil>'
+	if err != nil {
+		t.Error(err)
+	}
+	if len(expected) != len(visited) {
+		t.Fatalf("incorrect paths visited: visited: `%v', expected: `%v'", visited, expected)
+	}
+	for i := range expected {
+		if expected[i] != visited[i] {
+			t.Errorf("wrong path: got: `%s', want: `%s'", visited[i], expected[i])
+		}
+	}
+}
+
+func TestWalkDirSkipOnDir(t *testing.T) {
+	m := CreateMockFS().
+		AddDirectory("tmp").
+		Into().
+		AddDirectory("t").
+		Into().
+		AddFile("1", "").
+		AddDirectory("2").
+		AddFile("3", "").
+		Into().
+		AddFile("4", "").
+		AddFile("5", "").
+		AddFile("6", "").
+		AddDirectory("7").
+		Into().
+		AddDirectory("8").
+		Into().
+		AddFile("9", "")
+
+	log.Println(m)
+
+	expected, visited := []string{
+		"/tmp/t/",
+		"/tmp/t/1",
+		"/tmp/t/2/",
+		"/tmp/t/3",
+	}, []string{}
+
+	err := m.WalkDir("/tmp/t/", func(path string, d fs.DirEntry, err error) error {
+		visited = append(visited, path)
+		if path == "/tmp/t/2/" {
+			return fs.SkipDir
+		}
+		return nil
+	})
+
+	if err != nil {
+		t.Error(err)
+	}
+	if len(expected) != len(visited) {
+		t.Fatalf("incorrect paths visited: visited: `%v', expected: `%v'", visited, expected)
+	}
+	for i := range expected {
+		if expected[i] != visited[i] {
+			t.Errorf("wrong path: got: `%s', want: `%s'", visited[i], expected[i])
+		}
+	}
+}
+
+func TestWalkDirSkipWithinDir(t *testing.T) {
+	m := CreateMockFS().
+		AddDirectory("tmp").
+		Into().
+		AddDirectory("t").
+		Into().
+		AddFile("1", "").
+		AddDirectory("2").
+		AddFile("3", "").
+		Into().
+		AddFile("4", "").
+		AddFile("5", "").
+		AddFile("6", "").
+		AddDirectory("7").
+		Into().
+		AddDirectory("8").
+		Into().
+		AddFile("9", "")
+
+	log.Println(m)
+
+	expected, visited := []string{
+		"/tmp/t/",
+		"/tmp/t/1",
+		"/tmp/t/2/",
+		"/tmp/t/2/4",
+		"/tmp/t/2/5",
+		"/tmp/t/3",
+	}, []string{}
+
+	err := m.WalkDir("/tmp/t/", func(path string, d fs.DirEntry, err error) error {
+		visited = append(visited, path)
+		if path == "/tmp/t/2/5" {
+			return fs.SkipDir
+		}
+		return nil
+	})
+
+	if err != nil {
+		t.Error(err)
+	}
+	if len(expected) != len(visited) {
+		t.Fatalf("incorrect paths visited: visited: `%v', expected: `%v'", visited, expected)
+	}
+	for i := range expected {
+		if expected[i] != visited[i] {
+			t.Errorf("wrong path: got: `%s', want: `%s'", visited[i], expected[i])
+		}
+	}
 }
