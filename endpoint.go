@@ -259,6 +259,7 @@ func (s Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 
 	hs := w.Header()
 	hs.Set("ETag", etag.String())
+	w.WriteHeader(http.StatusCreated)
 	return nil
 }
 
