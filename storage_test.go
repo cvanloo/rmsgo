@@ -24,7 +24,7 @@ func TestCreateDocument(t *testing.T) {
 		docMime    = "text/markdown"
 	)
 
-	sname, fsize, err := WriteFile(server, docPath, "", bytes.NewReader([]byte(docContent)))
+	sname, fsize, _, err := WriteFile(server, docPath, "", bytes.NewReader([]byte(docContent)))
 	n, err := AddDocument(docPath, sname, fsize, docMime)
 	if err != nil {
 		t.Error(err)
@@ -116,12 +116,12 @@ func TestCreateDocuments(t *testing.T) {
 	}
 	Reset()
 
-	sname, fsize, err := WriteFile(server, "/code/hello.go", "", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World!")))
+	sname, fsize, _, err := WriteFile(server, "/code/hello.go", "", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World!")))
 	_, err = AddDocument("/code/hello.go", sname, fsize, "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
-	sname, fsize, err = WriteFile(server, "/code/error.go", "", bytes.NewReader([]byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")")))
+	sname, fsize, _, err = WriteFile(server, "/code/error.go", "", bytes.NewReader([]byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")")))
 	_, err = AddDocument("/code/error.go", sname, fsize, "text/plain")
 	if err != nil {
 		t.Error(err)
@@ -154,13 +154,13 @@ func TestUpdateDocument(t *testing.T) {
 
 	const path = "/FunFacts/Part1.txt"
 
-	sname, fsize, err := WriteFile(server, path, "", bytes.NewReader([]byte("Elephants can't jump.")))
+	sname, fsize, _, err := WriteFile(server, path, "", bytes.NewReader([]byte("Elephants can't jump.")))
 	n1, err := AddDocument(path, sname, fsize, "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
 
-	sname, fsize, err = WriteFile(server, path, sname, bytes.NewReader([]byte("Honey never spoils.")))
+	sname, fsize, _, err = WriteFile(server, path, sname, bytes.NewReader([]byte("Honey never spoils.")))
 	n2, err := UpdateDocument(path, fsize, "text/plain")
 	if err != nil {
 		t.Error(err)
@@ -183,7 +183,7 @@ func TestNode(t *testing.T) {
 
 	const path = "/FunFacts/Part2.txt"
 
-	sname, fsize, err := WriteFile(server, path, "", bytes.NewReader([]byte("The first person convicted of speeding was going eight mph.")))
+	sname, fsize, _, err := WriteFile(server, path, "", bytes.NewReader([]byte("The first person convicted of speeding was going eight mph.")))
 	n1, err := AddDocument(path, sname, fsize, "text/plain")
 	if err != nil {
 		t.Error(err)
@@ -210,7 +210,7 @@ func TestRemoveDocument(t *testing.T) {
 
 	const path = "/FunFacts/Part3.txt"
 
-	sname, fsize, err := WriteFile(server, path, "", bytes.NewReader([]byte("The severed head of a sea slug can grow a whole new body.")))
+	sname, fsize, _, err := WriteFile(server, path, "", bytes.NewReader([]byte("The severed head of a sea slug can grow a whole new body.")))
 	n1, err := AddDocument(path, sname, fsize, "text/plain")
 	if err != nil {
 		t.Error(err)
@@ -246,7 +246,7 @@ func TestETagUpdatedWhenDocumentAdded(t *testing.T) {
 	}
 	Reset()
 
-	sname, fsize, err := WriteFile(server, "/code/hello.go", "", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")))
+	sname, fsize, _, err := WriteFile(server, "/code/hello.go", "", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")))
 	_, err = AddDocument("/code/hello.go", sname, fsize, "text/plain")
 	if err != nil {
 		t.Error(err)
@@ -263,7 +263,7 @@ func TestETagUpdatedWhenDocumentAdded(t *testing.T) {
 	}
 	t.Logf("etag v1: %x", v1)
 
-	sname, fsize, err = WriteFile(server, "/code/error.go", "", bytes.NewReader([]byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")")))
+	sname, fsize, _, err = WriteFile(server, "/code/error.go", "", bytes.NewReader([]byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")")))
 	_, err = AddDocument("/code/error.go", sname, fsize, "text/plain")
 	if err != nil {
 		t.Error(err)
@@ -293,12 +293,12 @@ func TestETagUpdatedWhenDocumentRemoved(t *testing.T) {
 	}
 	Reset()
 
-	sname, fsize, err := WriteFile(server, "/code/hello.go", "", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")))
+	sname, fsize, _, err := WriteFile(server, "/code/hello.go", "", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")))
 	_, err = AddDocument("/code/hello.go", sname, fsize, "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
-	sname, fsize, err = WriteFile(server, "/code/error.go", "", bytes.NewReader([]byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")")))
+	sname, fsize, _, err = WriteFile(server, "/code/error.go", "", bytes.NewReader([]byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")")))
 	_, err = AddDocument("/code/error.go", sname, fsize, "text/plain")
 	if err != nil {
 		t.Error(err)
@@ -344,12 +344,12 @@ func TestETagUpdatedWhenDocumentUpdated(t *testing.T) {
 	}
 	Reset()
 
-	sname, fsize, err := WriteFile(server, "/code/hello.go", "", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")))
+	sname, fsize, _, err := WriteFile(server, "/code/hello.go", "", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")))
 	_, err = AddDocument("/code/hello.go", sname, fsize, "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
-	sname, fsize, err = WriteFile(server, "/code/error.go", "", bytes.NewReader([]byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")")))
+	sname, fsize, _, err = WriteFile(server, "/code/error.go", "", bytes.NewReader([]byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")")))
 	errorDoc, err := AddDocument("/code/error.go", sname, fsize, "text/plain")
 	if err != nil {
 		t.Error(err)
@@ -372,7 +372,7 @@ func TestETagUpdatedWhenDocumentUpdated(t *testing.T) {
 	}
 	t.Logf("folder etag v1: %x", fv1)
 
-	_, fsize, err = WriteFile(server, "/code/error.go", sname, bytes.NewReader([]byte("var ErrExistentialCrisis = errors.New(\"why?\")")))
+	_, fsize, _, err = WriteFile(server, "/code/error.go", sname, bytes.NewReader([]byte("var ErrExistentialCrisis = errors.New(\"why?\")")))
 	_, err = UpdateDocument("/code/error.go", fsize, "text/plain")
 	if err != nil {
 		t.Error(err)
@@ -414,12 +414,12 @@ func TestETagNotAffected(t *testing.T) {
 	}
 	Reset()
 
-	sname, fsize, err := WriteFile(server, "/code/hello.go", "", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")))
+	sname, fsize, _, err := WriteFile(server, "/code/hello.go", "", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")))
 	_, err = AddDocument("/code/hello.go", sname, fsize, "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
-	sname, fsize, err = WriteFile(server, "/code/error.go", "", bytes.NewReader([]byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")")))
+	sname, fsize, _, err = WriteFile(server, "/code/error.go", "", bytes.NewReader([]byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")")))
 	_, err = AddDocument("/code/error.go", sname, fsize, "text/plain")
 	if err != nil {
 		t.Error(err)
@@ -443,7 +443,7 @@ func TestETagNotAffected(t *testing.T) {
 	t.Logf("root etag v1: %x", rv1)
 
 	// 可愛い is 3 characters together taking up 9 bytes
-	sname, fsize, err = WriteFile(server, "/Pictures/Kittens.png", "", bytes.NewReader([]byte("可愛い")))
+	sname, fsize, _, err = WriteFile(server, "/Pictures/Kittens.png", "", bytes.NewReader([]byte("可愛い")))
 	f, err := AddDocument("/Pictures/Kittens.png", sname, fsize, "image/png")
 	if err != nil {
 		t.Error(err)
@@ -495,13 +495,13 @@ func ExamplePersist() {
 		}
 	}
 
-	sname, fsize, err := WriteFile(server, "/Documents/test.txt", "", bytes.NewReader([]byte("This is a test.")))
+	sname, fsize, _, err := WriteFile(server, "/Documents/test.txt", "", bytes.NewReader([]byte("This is a test.")))
 	panicIf(err)
 
 	_, err = AddDocument("/Documents/test.txt", sname, fsize, "text/plain")
 	panicIf(err)
 
-	sname, fsize, err = WriteFile(server, "/Documents/hello.txt", "", bytes.NewReader([]byte("Hello, World!")))
+	sname, fsize, _, err = WriteFile(server, "/Documents/hello.txt", "", bytes.NewReader([]byte("Hello, World!")))
 	panicIf(err)
 
 	_, err = AddDocument("/Documents/hello.txt", sname, fsize, "text/plain")

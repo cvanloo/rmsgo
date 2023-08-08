@@ -221,22 +221,13 @@ func Migrate(cfg Server, root string) (errs []error) {
 			return nil
 		}
 
-		bs := make([]byte, 0, 128)
-		_, err = fd.Read(bs)
+		sname, fsize, mime, err := WriteFile(cfg, rpath, "", fd)
 		if err != nil {
 			errs = append(errs, err)
 			return nil
 		}
 
-		mime := mimetype.Detect(bs)
-
-		sname, fsize, err := WriteFile(cfg, rpath, "", fd)
-		if err != nil {
-			errs = append(errs, err)
-			return nil
-		}
-
-		AddDocument(rpath, sname, fsize, mime.String())
+		AddDocument(rpath, sname, fsize, mime)
 		return nil
 	})
 	if err != nil {
@@ -245,11 +236,11 @@ func Migrate(cfg Server, root string) (errs []error) {
 	return errs
 }
 
-func WriteFile(cfg Server, rname, sname string, data io.Reader) (nsname string, fsize int64, err error) {
+func WriteFile(cfg Server, rname, sname string, data io.Reader) (nsname string, fsize int64, detectedMime string, err error) {
 	if sname == "" {
 		u, err := createUUID()
 		if err != nil {
-			return "", 0, err
+			return "", 0, "", err
 		}
 		nsname = filepath.Join(cfg.Sroot, u.String())
 	} else {
@@ -258,14 +249,21 @@ func WriteFile(cfg Server, rname, sname string, data io.Reader) (nsname string, 
 
 	fd, err := mfs.Create(nsname) // @todo: set permissions
 	if err != nil {
-		return nsname, 0, err
+		return nsname, 0, "", err
 	}
 
 	fsize, err = io.Copy(fd, data)
 	if err != nil {
-		return nsname, fsize, err
+		return nsname, fsize, "", err
 	}
-	return nsname, fsize, nil
+
+	fd.Seek(0, io.SeekStart)
+	mime, err := mimetype.DetectReader(fd)
+	if err != nil {
+		return nsname, fsize, mime.String(), err
+	}
+
+	return nsname, fsize, mime.String(), nil
 }
 
 func DeleteDocument(sname string) error {

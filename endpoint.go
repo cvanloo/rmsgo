@@ -211,29 +211,29 @@ func (s Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	// @todo: we could also automatically determine the mime type
 	contentType := r.Header.Get("Content-Type")
-	if contentType == "" {
-		return writeError(w, ErrBadRequest) // @todo(#desc_error): provide a content type
-	}
 
 	// @todo: merge Create and Update into one function?
 	if notFound {
-		sname, fsize, err := WriteFile(s, rpath, "", r.Body)
+		sname, fsize, mime, err := WriteFile(s, rpath, "", r.Body)
 		if err != nil {
 			return err
 		}
-
+		if contentType == "" {
+			contentType = mime
+		}
 		n, err = AddDocument(rpath, sname, fsize, contentType)
 		if err != nil {
 			return writeError(w, err)
 		}
 	} else {
-		_, fsize, err := WriteFile(s, rpath, n.Sname, r.Body)
+		_, fsize, mime, err := WriteFile(s, rpath, n.Sname, r.Body)
 		if err != nil {
 			return err
 		}
-
+		if contentType == "" {
+			contentType = mime
+		}
 		n, err = UpdateDocument(rpath, fsize, contentType)
 		if err != nil {
 			return writeError(w, err)
