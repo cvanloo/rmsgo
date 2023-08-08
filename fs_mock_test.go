@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func createMock() *mockFileSystem {
+func mockStorage() *mockFileSystem {
 	m := CreateMockFS()
 	m.
 		AddFile("test.txt", "Hello, World!").
@@ -26,7 +26,7 @@ func createMock() *mockFileSystem {
 }
 
 func TestReadFile(t *testing.T) {
-	m := createMock()
+	m := mockStorage()
 	c, err := m.ReadFile("/test.txt")
 	if err != nil {
 		t.Fatal(err)
@@ -37,7 +37,7 @@ func TestReadFile(t *testing.T) {
 }
 
 func TestWriteExistingFile(t *testing.T) {
-	m := createMock()
+	m := mockStorage()
 	const path string = "/Documents/fakenius.txt"
 	err := m.WriteFile(path, []byte("Giraffe > Greif"), 0644)
 	if err != nil {
@@ -53,7 +53,7 @@ func TestWriteExistingFile(t *testing.T) {
 }
 
 func TestWriteNewFile(t *testing.T) {
-	ms := createMock()
+	ms := mockStorage()
 	const path string = "/Documents/new.md"
 	err := ms.WriteFile(path, []byte("Cats > Dogs"), 0644)
 	if err != nil {
@@ -69,7 +69,7 @@ func TestWriteNewFile(t *testing.T) {
 }
 
 func TestWriteNewFileAndStats(t *testing.T) {
-	ms := createMock()
+	ms := mockStorage()
 	const path string = "/Documents/new.md"
 	err := ms.WriteFile(path, []byte("Cats > Dogs"), 0644)
 	if err != nil {
@@ -98,7 +98,7 @@ func TestWriteNewFileAndStats(t *testing.T) {
 }
 
 func TestTruncate(t *testing.T) {
-	m := createMock()
+	m := mockStorage()
 	const path string = "/Pictures/Gopher.jpg"
 	err := m.Truncate(path, 2)
 	if err != nil {
@@ -114,7 +114,7 @@ func TestTruncate(t *testing.T) {
 }
 
 func TestStat(t *testing.T) {
-	m := createMock()
+	m := mockStorage()
 	s, err := m.Stat("/Pictures/Kittens.png")
 	if err != nil {
 		t.Fatal(err)
@@ -135,7 +135,7 @@ func TestStat(t *testing.T) {
 }
 
 func TestOpenNonExistent(t *testing.T) {
-	m := createMock()
+	m := mockStorage()
 	_, err := m.Open("/Does/Not/Exist")
 	if !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("got: `%v', want: `%v'", err, os.ErrNotExist)
@@ -143,7 +143,7 @@ func TestOpenNonExistent(t *testing.T) {
 }
 
 func TestOpenExistent(t *testing.T) {
-	m := createMock()
+	m := mockStorage()
 	fd, err := m.Open("/Documents/doc.txt")
 	if err != nil {
 		t.Fatal(err)
@@ -158,7 +158,7 @@ func TestOpenExistent(t *testing.T) {
 }
 
 func TestFileRead(t *testing.T) {
-	m := createMock()
+	m := mockStorage()
 	const expectedContent string = "Lorem ipsum dolores sit amet"
 	fd, err := m.Open("/Documents/doc.txt")
 	if err != nil {
@@ -178,7 +178,7 @@ func TestFileRead(t *testing.T) {
 }
 
 func TestFileReadEOF(t *testing.T) {
-	m := createMock()
+	m := mockStorage()
 	fd, err := m.Open("/Documents/doc.txt")
 	if err != nil {
 		t.Fatal(err)
@@ -203,7 +203,7 @@ func TestFileReadEOF(t *testing.T) {
 }
 
 func TestFileSeek(t *testing.T) {
-	m := createMock()
+	m := mockStorage()
 	fd, err := m.Open("/Documents/doc.txt")
 	if err != nil {
 		t.Fatal(err)
@@ -235,7 +235,7 @@ func TestFileSeek(t *testing.T) {
 }
 
 func TestFileWriteAtSeekEnd(t *testing.T) {
-	m := createMock()
+	m := mockStorage()
 	fd, err := m.Open("/Documents/doc.txt")
 	if err != nil {
 		t.Fatal(err)
@@ -280,7 +280,7 @@ func TestFileWriteAtSeekEnd(t *testing.T) {
 }
 
 func TestFileWriteOverwriteParts(t *testing.T) {
-	m := createMock()
+	m := mockStorage()
 	fd, err := m.Open("/Documents/doc.txt")
 	if err != nil {
 		t.Fatal(err)
@@ -325,7 +325,7 @@ func TestFileWriteOverwriteParts(t *testing.T) {
 }
 
 func TestFileMultipleWrite(t *testing.T) {
-	m := createMock()
+	m := mockStorage()
 	fd, err := m.Open("/Documents/doc.txt")
 	if err != nil {
 		t.Fatal(err)
@@ -379,7 +379,7 @@ func TestFileMultipleWrite(t *testing.T) {
 }
 
 func TestFileStat(t *testing.T) {
-	m := createMock()
+	m := mockStorage()
 	fd, err := m.Open("/Pictures/Kittens.png")
 	if err != nil {
 		t.Fatal(err)
@@ -404,7 +404,7 @@ func TestFileStat(t *testing.T) {
 }
 
 func TestRemove(t *testing.T) {
-	m := createMock()
+	m := mockStorage()
 	const path = "/Documents/fakenius.txt"
 	_, err := m.Open(path)
 	if err != nil {
@@ -421,7 +421,7 @@ func TestRemove(t *testing.T) {
 }
 
 func TestRemoveNonEmpty(t *testing.T) {
-	m := createMock()
+	m := mockStorage()
 	err := m.Remove("/Pictures/")
 	if err == nil {
 		t.Error("expected removal of non-empty directory to report error")
@@ -429,7 +429,7 @@ func TestRemoveNonEmpty(t *testing.T) {
 }
 
 func TestRemoveAll(t *testing.T) {
-	m := createMock()
+	m := mockStorage()
 	_, err := m.Open("/Documents/fakenius.txt")
 	if err != nil {
 		t.Fatal(err)

@@ -15,7 +15,7 @@ func TestCreateDocument(t *testing.T) {
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
-	mfs = CreateMockFS().AddDirectory(server.Sroot)
+	mfs = CreateMockFS().EnsureDir(server.Sroot)
 	Reset()
 
 	const (
@@ -113,7 +113,7 @@ func TestCreateDocuments(t *testing.T) {
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
-	mfs = CreateMockFS().AddDirectory(server.Sroot)
+	mfs = CreateMockFS().EnsureDir(server.Sroot)
 	Reset()
 
 	sname, fsize, _, err := WriteFile(server, "", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World!")))
@@ -149,7 +149,7 @@ func TestUpdateDocument(t *testing.T) {
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
-	mfs = CreateMockFS().AddDirectory(server.Sroot)
+	mfs = CreateMockFS().EnsureDir(server.Sroot)
 	Reset()
 
 	const path = "/FunFacts/Part1.txt"
@@ -178,7 +178,7 @@ func TestNode(t *testing.T) {
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
-	mfs = CreateMockFS().AddDirectory(server.Sroot)
+	mfs = CreateMockFS().EnsureDir(server.Sroot)
 	Reset()
 
 	const path = "/FunFacts/Part2.txt"
@@ -205,7 +205,7 @@ func TestRemoveDocument(t *testing.T) {
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
-	mfs = CreateMockFS().AddDirectory(server.Sroot)
+	mfs = CreateMockFS().EnsureDir(server.Sroot)
 	Reset()
 
 	const path = "/FunFacts/Part3.txt"
@@ -243,7 +243,7 @@ func TestETagUpdatedWhenDocumentAdded(t *testing.T) {
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
-	mfs = CreateMockFS().AddDirectory(server.Sroot)
+	mfs = CreateMockFS().EnsureDir(server.Sroot)
 	Reset()
 
 	sname, fsize, _, err := WriteFile(server, "", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")))
@@ -290,7 +290,7 @@ func TestETagUpdatedWhenDocumentRemoved(t *testing.T) {
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
-	mfs = CreateMockFS().AddDirectory(server.Sroot)
+	mfs = CreateMockFS().EnsureDir(server.Sroot)
 	Reset()
 
 	sname, fsize, _, err := WriteFile(server, "", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")))
@@ -341,7 +341,7 @@ func TestETagUpdatedWhenDocumentUpdated(t *testing.T) {
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
-	mfs = CreateMockFS().AddDirectory(server.Sroot)
+	mfs = CreateMockFS().EnsureDir(server.Sroot)
 	Reset()
 
 	sname, fsize, _, err := WriteFile(server, "", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")))
@@ -411,7 +411,7 @@ func TestETagNotAffected(t *testing.T) {
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
-	mfs = CreateMockFS().AddDirectory(server.Sroot)
+	mfs = CreateMockFS().EnsureDir(server.Sroot)
 	Reset()
 
 	sname, fsize, _, err := WriteFile(server, "", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")))
@@ -486,7 +486,7 @@ func ExamplePersist() {
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
 	}
-	mfs = CreateMockFS().AddDirectory(server.Sroot)
+	mfs = CreateMockFS().EnsureDir(server.Sroot)
 	Reset()
 
 	panicIf := func(err error) {

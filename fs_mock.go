@@ -361,7 +361,43 @@ func CreateMockFS() (fs *mockFileSystem) {
 	return
 }
 
+func (m *mockFileSystem) EnsureDir(name string) *mockFileSystem {
+	var parts []string
+	for _, s := range strings.Split(name, string(os.PathSeparator)) {
+		if s != "" {
+			parts = append(parts, s)
+		}
+	}
+
+	p := m.root
+
+	for i := range parts {
+		pname := "/" + strings.Join(parts[:i+1], string(os.PathSeparator)) + "/"
+		pn, ok := m.contents[pname]
+		if !ok {
+			pn = &mockFile{
+				isDir:    true,
+				path:     pname,
+				name:     parts[i] + "/",
+				mode:     0755,
+				lastMod:  getTime(),
+				parent:   p,
+				children: map[string]*mockFile{},
+			}
+			p.children[pname] = pn
+			m.contents[pname] = pn
+		}
+		p = pn
+	}
+	// p now points to the inner-most directory
+	m.lastAdded = p
+	return m
+}
+
 func (m *mockFileSystem) AddFile(name, data string) *mockFileSystem {
+	if strings.Contains(name, "/") {
+		panic("file name must not contain the Unix path separator ('/')")
+	}
 	path := filepath.Clean(m.parent.path + name)
 	f := &mockFile{
 		isDir:   false,
@@ -378,6 +414,9 @@ func (m *mockFileSystem) AddFile(name, data string) *mockFileSystem {
 }
 
 func (m *mockFileSystem) AddDirectory(name string) *mockFileSystem {
+	if strings.Contains(name[:len(name)-1], "/") {
+		panic("directory name must only contain the Unix path separator ('/') as a suffix.")
+	}
 	// Clean removes the last /, so we need to add it again
 	path := filepath.Clean(m.parent.path+name) + "/"
 	d := &mockFile{
