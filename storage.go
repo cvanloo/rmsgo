@@ -37,6 +37,7 @@ var (
 	ErrFileExists = errors.New("file already exists") // @todo: remove error?
 )
 
+// @todo: create separate DTO for (de)serialization
 type Node struct {
 	parent   *Node
 	IsFolder bool `xml:"IsFolder,attr"`
@@ -85,15 +86,15 @@ func (n *Node) Equal(other *Node) bool {
 func (n *Node) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
 	type XMLNode struct {
 		Node
-		ParentRName string `xml:"ParentRName,omitempty"`
+		ParentRName string `xml:"ParentRName"`
 	}
 	if n == root {
 		return nil
 	}
-	if n.parent != nil {
-		return e.EncodeElement(XMLNode{*n, n.parent.Rname}, start)
+	if n.parent == nil {
+		return fmt.Errorf("node %s is missing its parent", n.Rname)
 	}
-	return e.EncodeElement(XMLNode{*n, ""}, start)
+	return e.EncodeElement(XMLNode{*n, n.parent.Rname}, start)
 }
 
 func (n *Node) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
@@ -123,15 +124,14 @@ func (n *Node) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 	n.LastMod = tmp.LastMod
 	n.children = make(map[string]*Node)
 
-	// root does not have a parent
-	if tmp.ParentRName != "" && n.Name != "/" {
-		// N.b. this assumes that parents are always parsed before their
-		// children! [#parent_first]
-		// This function also modifies the global files.
-		p := files[tmp.ParentRName]
-		p.children[n.Rname] = n
-		n.parent = p
+	// N.b. this assumes that parents are always parsed before their
+	// children! [#parent_first]
+	p, ok := files[tmp.ParentRName]
+	if !ok {
+		return fmt.Errorf("node %s is missing its parent (%s), maybe it hasn't been parsed yet?", n.Rname, tmp.ParentRName)
 	}
+	p.children[n.Rname] = n
+	n.parent = p
 	files[n.Rname] = n
 	return nil
 }
@@ -147,27 +147,6 @@ func Reset() {
 	files = make(map[string]*Node)
 	files["/"] = rn
 	root = rn
-}
-
-func Load(persistFile file) error {
-	bs, err := io.ReadAll(persistFile)
-	if err != nil {
-		return err
-	}
-
-	var persist struct {
-		Nodes []*Node
-	}
-	err = xml.Unmarshal(bs, &persist)
-	if err != nil {
-		return err
-	}
-
-	root = files["/"]
-
-	log.Printf("Storage listing follows:\n%s\n", root)
-
-	return nil
 }
 
 func Persist(persistFile file) (err error) {
@@ -194,10 +173,32 @@ func Persist(persistFile file) (err error) {
 	if err != nil {
 		return err
 	}
-	_, err = io.Copy(persistFile, bytes.NewReader(bs))
+	_, err = persistFile.Write(bs)
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+func Load(persistFile file) error {
+	if root == nil {
+		return fmt.Errorf("storage root not initialized, try calling Reset() before Load()")
+	}
+
+	bs, err := io.ReadAll(persistFile)
+	if err != nil {
+		return err
+	}
+
+	var persist struct {
+		Nodes []*Node
+	}
+	err = xml.Unmarshal(bs, &persist)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("Storage listing follows:\n%s\n", root)
 	return nil
 }
 
@@ -207,6 +208,9 @@ func Migrate(cfg Server, root string) (errs []error) {
 	err := mfs.WalkDir(root, func(spath string, d fs.DirEntry, err error) error {
 		if err != nil {
 			errs = append(errs, err)
+			if d.IsDir() {
+				return fs.SkipDir
+			}
 			return nil
 		}
 
