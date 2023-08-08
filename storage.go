@@ -225,7 +225,7 @@ func Migrate(cfg Server, root string) (errs []error) {
 			return nil
 		}
 
-		sname, fsize, mime, err := WriteFile(cfg, rpath, "", fd)
+		sname, fsize, mime, err := WriteFile(cfg, "", fd)
 		if err != nil {
 			errs = append(errs, err)
 			return nil
@@ -240,7 +240,7 @@ func Migrate(cfg Server, root string) (errs []error) {
 	return errs
 }
 
-func WriteFile(cfg Server, rname, sname string, data io.Reader) (nsname string, fsize int64, detectedMime string, err error) {
+func WriteFile(cfg Server, sname string, data io.Reader) (nsname string, fsize int64, detectedMime string, err error) {
 	if sname == "" {
 		u, err := createUUID()
 		if err != nil {

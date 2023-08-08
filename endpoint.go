@@ -215,7 +215,7 @@ func (s Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 
 	// @todo: merge Create and Update into one function?
 	if notFound {
-		sname, fsize, mime, err := WriteFile(s, rpath, "", r.Body)
+		sname, fsize, mime, err := WriteFile(s, "", r.Body)
 		if err != nil {
 			return err
 		}
@@ -227,7 +227,7 @@ func (s Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 			return writeError(w, err)
 		}
 	} else {
-		_, fsize, mime, err := WriteFile(s, rpath, n.Sname, r.Body)
+		_, fsize, mime, err := WriteFile(s, n.Sname, r.Body)
 		if err != nil {
 			return err
 		}
