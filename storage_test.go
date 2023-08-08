@@ -6,11 +6,12 @@ import (
 	"io"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestCreateDocument(t *testing.T) {
 	mfs = CreateMockFS()
+	createUUID = CreateMockUUIDFunc()
+	getTime = getMockTime
 	server := Server{
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
@@ -107,6 +108,8 @@ func TestCreateDocument(t *testing.T) {
 
 func TestCreateDocuments(t *testing.T) {
 	mfs = CreateMockFS()
+	createUUID = CreateMockUUIDFunc()
+	getTime = getMockTime
 	server := Server{
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
@@ -141,6 +144,8 @@ func TestCreateDocuments(t *testing.T) {
 
 func TestUpdateDocument(t *testing.T) {
 	mfs = CreateMockFS()
+	createUUID = CreateMockUUIDFunc()
+	getTime = getMockTime
 	server := Server{
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
@@ -168,6 +173,8 @@ func TestUpdateDocument(t *testing.T) {
 
 func TestNode(t *testing.T) {
 	mfs = CreateMockFS()
+	createUUID = CreateMockUUIDFunc()
+	getTime = getMockTime
 	server := Server{
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
@@ -193,6 +200,8 @@ func TestNode(t *testing.T) {
 
 func TestRemoveDocument(t *testing.T) {
 	mfs = CreateMockFS()
+	createUUID = CreateMockUUIDFunc()
+	getTime = getMockTime
 	server := Server{
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
@@ -229,6 +238,8 @@ func TestRemoveDocument(t *testing.T) {
 
 func TestETagUpdatedWhenDocumentAdded(t *testing.T) {
 	mfs = CreateMockFS()
+	createUUID = CreateMockUUIDFunc()
+	getTime = getMockTime
 	server := Server{
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
@@ -274,6 +285,8 @@ func TestETagUpdatedWhenDocumentAdded(t *testing.T) {
 
 func TestETagUpdatedWhenDocumentRemoved(t *testing.T) {
 	mfs = CreateMockFS()
+	createUUID = CreateMockUUIDFunc()
+	getTime = getMockTime
 	server := Server{
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
@@ -323,6 +336,8 @@ func TestETagUpdatedWhenDocumentRemoved(t *testing.T) {
 
 func TestETagUpdatedWhenDocumentUpdated(t *testing.T) {
 	mfs = CreateMockFS()
+	createUUID = CreateMockUUIDFunc()
+	getTime = getMockTime
 	server := Server{
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
@@ -391,6 +406,8 @@ func TestETagUpdatedWhenDocumentUpdated(t *testing.T) {
 
 func TestETagNotAffected(t *testing.T) {
 	mfs = CreateMockFS()
+	createUUID = CreateMockUUIDFunc()
+	getTime = getMockTime
 	server := Server{
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
@@ -464,13 +481,11 @@ func TestETagNotAffected(t *testing.T) {
 
 func ExamplePersist() {
 	mfs = CreateMockFS()
+	createUUID = CreateMockUUIDFunc()
+	getTime = getMockTime
 	server := Server{
 		Rroot: "/storage/",
 		Sroot: "/tmp/rms/storage/",
-	}
-	createUUID = createMockUUID
-	getTime = func() (t time.Time) {
-		return
 	}
 	Reset()
 

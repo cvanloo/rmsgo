@@ -13,6 +13,12 @@ import (
 	"github.com/cvanloo/rmsgo.git/isdelve"
 )
 
+func init() {
+	if isdelve.Enabled {
+		mfs = CreateMockFS()
+	}
+}
+
 var mfs fileSystem = &osFileSystem{}
 
 type Server struct {
@@ -275,13 +281,6 @@ func (s Server) DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 	hs := w.Header()
 	hs.Set("ETag", etag.String())
 	return nil
-}
-
-func init() {
-	if isdelve.Enabled {
-		mfs = CreateMockFS()
-		log.Println("Debugger detected, using mock filesystem")
-	}
 }
 
 func writeError(w http.ResponseWriter, err error) error {

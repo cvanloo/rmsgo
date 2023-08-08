@@ -6,10 +6,11 @@ import (
 	"github.com/google/uuid"
 )
 
-var last int
-
-func createMockUUID() (uuid.UUID, error) {
-	last++
-	lastX := fmt.Sprintf("%x", last)
-	return uuid.UUID([]byte(lastX)[:16]), nil
+func CreateMockUUIDFunc() func() (uuid.UUID, error) {
+	last := 0
+	return func() (uuid.UUID, error) {
+		last++
+		lastX := fmt.Sprintf("%x", last)
+		return uuid.UUID([]byte(lastX)[:16]), nil
+	}
 }

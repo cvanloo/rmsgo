@@ -1,7 +1,6 @@
 package rmsgo
 
 import (
-	"bytes"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -20,15 +19,23 @@ import (
 	"golang.org/x/exp/maps"
 )
 
+func init() {
+	Reset()
+	if isdelve.Enabled {
+		createUUID = CreateMockUUIDFunc()
+		getTime = getMockTime
+	}
+}
+
 var (
 	files map[string]*Node
 	root  *Node
 
 	createUUID = uuid.NewRandom
 	getTime    = time.Now
-)
 
-var ErrFileExists = errors.New("file already exists") // @todo: remove error?
+	ErrFileExists = errors.New("file already exists") // @todo: remove error?
+)
 
 type Node struct {
 	parent   *Node
@@ -127,10 +134,6 @@ func (n *Node) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 	}
 	files[n.Rname] = n
 	return nil
-}
-
-func init() {
-	Reset()
 }
 
 func Reset() {
