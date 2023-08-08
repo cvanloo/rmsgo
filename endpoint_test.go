@@ -5,9 +5,14 @@ import (
 	"testing"
 )
 
-func TestGetFolder(t *testing.T) {
-	fs := CreateMockFS()
-	fs.
+func mockServer() (*mockFileSystem, Server) {
+	server := Server{
+		Rroot: "/storage/",
+		Sroot: "/tmp/rms/storage/",
+	}
+
+	mfs := CreateMockFS().CreateDirectories(server.Sroot)
+	mfs.
 		AddFile("test.txt", "Hello, World!").
 		AddDirectory("Pictures").
 		Into().
@@ -17,11 +22,21 @@ func TestGetFolder(t *testing.T) {
 		AddDirectory("Documents").
 		Into().
 		AddFile("doc.txt", "Lorem ipsum dolores sit amet").
-		AddFile("taxes.txt", "I ain't paying 'em!")
+		AddFile("fakenius.txt", "Ich fand es schon immer verdächtig, dass die Sonne jeden Morgen im Osten aufgeht!")
+
+	createUUID = CreateMockUUIDFunc()
+	getTime = getMockTime
+
+	Reset()
+
+	return mfs, server
+}
+
+func TestGetFolder(t *testing.T) {
+	fs, server := mockServer()
+	_ = server
 
 	fmt.Printf("%v\n", fs)
-
-	mfs = fs
 }
 
 func TestHeadFolder(t *testing.T) {

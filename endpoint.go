@@ -17,7 +17,7 @@ import (
 
 func init() {
 	if isdelve.Enabled {
-		mfs = CreateMockFS().EnsureDir("/tmp/rms/storage/")
+		mfs = CreateMockFS().CreateDirectories("/tmp/rms/storage/")
 	}
 }
 

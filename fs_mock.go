@@ -361,7 +361,7 @@ func CreateMockFS() (fs *mockFileSystem) {
 	return
 }
 
-func (m *mockFileSystem) EnsureDir(name string) *mockFileSystem {
+func (m *mockFileSystem) CreateDirectories(name string) *mockFileSystem {
 	var parts []string
 	for _, s := range strings.Split(name, string(os.PathSeparator)) {
 		if s != "" {
