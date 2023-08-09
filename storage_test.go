@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	. "github.com/cvanloo/rmsgo.git/mock"
 	"golang.org/x/exp/maps"
 )
 
@@ -469,7 +470,7 @@ func TestPersist(t *testing.T) {
 		t.Error(err)
 	}
 
-	fd, err := mfs.Create(server.sroot + "/marshalled.xml")
+	fd, err := FS.Create(server.sroot + "/marshalled.xml")
 	if err != nil {
 		t.Error(err)
 	}
@@ -513,7 +514,7 @@ func TestLoad(t *testing.T) {
 		t.Error(err)
 	}
 
-	fd, err := mfs.Create(server.sroot + "/marshalled.xml")
+	fd, err := FS.Create(server.sroot + "/marshalled.xml")
 	if err != nil {
 		t.Error(err)
 	}
@@ -631,11 +632,9 @@ func TestMigrate(t *testing.T) {
 		rroot = "/storage/"
 		sroot = "/tmp/rms/storage/"
 	)
-	createUUID = CreateMockUUIDFunc()
-	getTime = getMockTime
 	server, _ := New(rroot, sroot)
-	mfs = CreateMockFS().
-		CreateDirectories(server.sroot).
+	fs := Mock()
+	fs.CreateDirectories(server.sroot).
 		AddDirectory("somewhere").Into().
 		AddDirectory("Documents").Into().
 		AddFile("hello.txt", "Hello, World!").
@@ -738,7 +737,7 @@ func ExamplePersist() {
 	_, err = AddDocument("/Documents/hello.txt", sname, fsize, "text/plain")
 	panicIf(err)
 
-	fd, err := mfs.Create(server.sroot + "/marshalled.xml")
+	fd, err := FS.Create(server.sroot + "/marshalled.xml")
 	panicIf(err)
 	defer fd.Close() // ignore close err!
 

@@ -1,4 +1,4 @@
-package rmsgo
+package mock
 
 import (
 	"fmt"
@@ -13,9 +13,9 @@ import (
 	"golang.org/x/exp/maps"
 )
 
-type fileSystem interface {
-	Create(path string) (file, error)
-	Open(path string) (file, error)
+type FileSystem interface {
+	Create(path string) (File, error)
+	Open(path string) (File, error)
 	Stat(path string) (os.FileInfo, error)
 	WalkDir(root string, fn fs.WalkDirFunc) error
 	Truncate(path string, size int64) error
@@ -25,7 +25,7 @@ type fileSystem interface {
 	RemoveAll(path string) error
 }
 
-type file interface {
+type File interface {
 	Close() error
 	Name() string
 	Stat() (os.FileInfo, error)
@@ -34,54 +34,54 @@ type file interface {
 	Seek(offset int64, whence int) (ret int64, err error) // go doc os.File.Seek
 }
 
-type osFileSystem struct{}
+type RealFileSystem struct{}
 
-var _ fileSystem = (*osFileSystem)(nil)
+var _ FileSystem = (*RealFileSystem)(nil)
 
-func (*osFileSystem) Create(path string) (file, error) {
+func (*RealFileSystem) Create(path string) (File, error) {
 	return os.Create(path)
 }
 
-func (*osFileSystem) Open(path string) (file, error) {
+func (*RealFileSystem) Open(path string) (File, error) {
 	return os.Open(path)
 }
 
-func (*osFileSystem) Stat(path string) (fs.FileInfo, error) {
+func (*RealFileSystem) Stat(path string) (fs.FileInfo, error) {
 	return os.Stat(path)
 }
 
-func (*osFileSystem) WalkDir(root string, fn fs.WalkDirFunc) error {
+func (*RealFileSystem) WalkDir(root string, fn fs.WalkDirFunc) error {
 	return filepath.WalkDir(root, fn)
 }
 
-func (*osFileSystem) Truncate(path string, size int64) error {
+func (*RealFileSystem) Truncate(path string, size int64) error {
 	return os.Truncate(path, size)
 }
 
-func (*osFileSystem) ReadFile(path string) ([]byte, error) {
+func (*RealFileSystem) ReadFile(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
-func (*osFileSystem) WriteFile(path string, data []byte, perm os.FileMode) error {
+func (*RealFileSystem) WriteFile(path string, data []byte, perm os.FileMode) error {
 	return os.WriteFile(path, data, perm)
 }
 
-func (*osFileSystem) Remove(path string) error {
+func (*RealFileSystem) Remove(path string) error {
 	return os.Remove(path)
 }
 
-func (*osFileSystem) RemoveAll(path string) error {
+func (*RealFileSystem) RemoveAll(path string) error {
 	return os.RemoveAll(path)
 }
 
-type mockFileSystem struct {
-	lastAdded, parent, root *mockFile
-	contents                map[string]*mockFile
+type FakeFileSystem struct {
+	lastAdded, parent, root *file
+	contents                map[string]*file
 }
 
-var _ fileSystem = (*mockFileSystem)(nil)
+var _ FileSystem = (*FakeFileSystem)(nil)
 
-func (m *mockFileSystem) Create(path string) (file, error) {
+func (m *FakeFileSystem) Create(path string) (File, error) {
 	if f, ok := m.contents[path]; ok {
 		f.bytes = nil
 		f.lastMod = time.Now()
@@ -95,13 +95,13 @@ func (m *mockFileSystem) Create(path string) (file, error) {
 	}
 
 	parts := strings.Split(path, "/")
-	f := &mockFile{
+	f := &file{
 		isDir:   false,
 		path:    path,
 		name:    parts[len(parts)-1],
 		bytes:   nil,
 		mode:    0666,
-		lastMod: getTime(),
+		lastMod: Time(),
 		parent:  p,
 	}
 	p.children[path] = f
@@ -109,21 +109,21 @@ func (m *mockFileSystem) Create(path string) (file, error) {
 	return f.Fd(), nil
 }
 
-func (m *mockFileSystem) Open(path string) (file, error) {
+func (m *FakeFileSystem) Open(path string) (File, error) {
 	if f, ok := m.contents[path]; ok {
 		return f.Fd(), nil
 	}
 	return nil, fmt.Errorf("%s: %w", path, os.ErrNotExist)
 }
 
-func (m *mockFileSystem) Stat(path string) (fs.FileInfo, error) {
+func (m *FakeFileSystem) Stat(path string) (fs.FileInfo, error) {
 	if f, ok := m.contents[path]; ok {
 		return f.Fd(), nil
 	}
 	return nil, fmt.Errorf("%s: %w", path, os.ErrNotExist)
 }
 
-func readDir(d *mockFile) []*mockFile {
+func readDir(d *file) []*file {
 	children := maps.Values(d.children)
 	sort.Slice(children, func(i, j int) bool {
 		return children[i].path < children[j].path
@@ -131,7 +131,7 @@ func readDir(d *mockFile) []*mockFile {
 	return children
 }
 
-func walkDir(d *mockFile, fn fs.WalkDirFunc) error {
+func walkDir(d *file, fn fs.WalkDirFunc) error {
 	err := fn(d.path, d.Fd(), nil)
 	if err == fs.SkipDir {
 		return nil // successfully skipped directory
@@ -157,7 +157,7 @@ func walkDir(d *mockFile, fn fs.WalkDirFunc) error {
 	return nil
 }
 
-func (m *mockFileSystem) WalkDir(root string, fn fs.WalkDirFunc) (err error) {
+func (m *FakeFileSystem) WalkDir(root string, fn fs.WalkDirFunc) (err error) {
 	r, ok := m.contents[root]
 	if !ok {
 		err = fmt.Errorf("%s: %w", root, os.ErrNotExist)
@@ -175,7 +175,7 @@ func (m *mockFileSystem) WalkDir(root string, fn fs.WalkDirFunc) (err error) {
 	return err
 }
 
-func (m *mockFileSystem) Truncate(path string, size int64) error {
+func (m *FakeFileSystem) Truncate(path string, size int64) error {
 	if f, ok := m.contents[path]; ok {
 		f.bytes = f.bytes[:size]
 		return nil
@@ -183,14 +183,14 @@ func (m *mockFileSystem) Truncate(path string, size int64) error {
 	return fmt.Errorf("%s: %w", path, os.ErrNotExist)
 }
 
-func (m *mockFileSystem) ReadFile(path string) ([]byte, error) {
+func (m *FakeFileSystem) ReadFile(path string) ([]byte, error) {
 	if f, ok := m.contents[path]; ok {
 		return f.bytes, nil
 	}
 	return nil, fmt.Errorf("%s: %w", path, os.ErrNotExist)
 }
 
-func (m *mockFileSystem) WriteFile(path string, data []byte, perm os.FileMode) error {
+func (m *FakeFileSystem) WriteFile(path string, data []byte, perm os.FileMode) error {
 	if f, ok := m.contents[path]; ok {
 		f.bytes = data
 		return nil
@@ -202,13 +202,13 @@ func (m *mockFileSystem) WriteFile(path string, data []byte, perm os.FileMode) e
 	}
 
 	parts := strings.Split(path, "/")
-	f := &mockFile{
+	f := &file{
 		isDir:   false,
 		path:    path,
 		name:    parts[len(parts)-1],
 		bytes:   data,
 		mode:    perm,
-		lastMod: getTime(),
+		lastMod: Time(),
 		parent:  p,
 	}
 	p.children[path] = f
@@ -216,7 +216,7 @@ func (m *mockFileSystem) WriteFile(path string, data []byte, perm os.FileMode) e
 	return nil
 }
 
-func (m *mockFileSystem) Remove(path string) error {
+func (m *FakeFileSystem) Remove(path string) error {
 	if f, ok := m.contents[path]; ok {
 		if f.isDir && len(f.children) > 0 {
 			return &os.PathError{
@@ -230,7 +230,7 @@ func (m *mockFileSystem) Remove(path string) error {
 	return nil
 }
 
-func (m *mockFileSystem) RemoveAll(path string) error {
+func (m *FakeFileSystem) RemoveAll(path string) error {
 	if f, ok := m.contents[path]; ok {
 		delete(m.contents, path)
 		if f.isDir {
@@ -242,27 +242,27 @@ func (m *mockFileSystem) RemoveAll(path string) error {
 	return nil
 }
 
-type mockFile struct {
+type file struct {
 	isDir      bool
 	path, name string
 	bytes      []byte
 	mode       fs.FileMode
 	lastMod    time.Time
 
-	parent   *mockFile
-	children map[string]*mockFile
+	parent   *file
+	children map[string]*file
 }
 
-func (m *mockFile) Fd() *mockFileFd {
+func (m *file) Fd() *mockFileFd {
 	return &mockFileFd{m, 0}
 }
 
 type mockFileFd struct {
-	file   *mockFile
+	file   *file
 	cursor int64
 }
 
-var _ file = (*mockFileFd)(nil)
+var _ File = (*mockFileFd)(nil)
 var _ fs.DirEntry = (*mockFileFd)(nil)
 var _ fs.FileInfo = (*mockFileFd)(nil)
 
@@ -343,28 +343,28 @@ func (m *mockFileFd) Sys() any {
 	return m.file
 }
 
-func CreateMockFS() (fs *mockFileSystem) {
-	r := &mockFile{
+func MockFS() (fs *FakeFileSystem) {
+	r := &file{
 		isDir:    true,
 		path:     "/",
 		name:     "/",
 		mode:     0755,
-		lastMod:  getTime(),
+		lastMod:  Time(),
 		parent:   nil,
-		children: map[string]*mockFile{},
+		children: map[string]*file{},
 	}
-	fs = &mockFileSystem{
+	fs = &FakeFileSystem{
 		lastAdded: r,
 		parent:    r,
 		root:      r,
-		contents: map[string]*mockFile{
+		contents: map[string]*file{
 			"/": r,
 		},
 	}
 	return
 }
 
-func (m *mockFileSystem) CreateDirectories(name string) *mockFileSystem {
+func (m *FakeFileSystem) CreateDirectories(name string) *FakeFileSystem {
 	var parts []string
 	for _, s := range strings.Split(name, string(os.PathSeparator)) {
 		if s != "" {
@@ -378,14 +378,14 @@ func (m *mockFileSystem) CreateDirectories(name string) *mockFileSystem {
 		pname := "/" + strings.Join(parts[:i+1], string(os.PathSeparator)) + "/"
 		pn, ok := m.contents[pname]
 		if !ok {
-			pn = &mockFile{
+			pn = &file{
 				isDir:    true,
 				path:     pname,
 				name:     parts[i] + "/",
 				mode:     0755,
-				lastMod:  getTime(),
+				lastMod:  Time(),
 				parent:   p,
-				children: map[string]*mockFile{},
+				children: map[string]*file{},
 			}
 			p.children[pname] = pn
 			m.contents[pname] = pn
@@ -403,18 +403,18 @@ func (m *mockFileSystem) CreateDirectories(name string) *mockFileSystem {
 // @todo: make sure all the functions and methods have similar behaviour to the
 // real ones.
 
-func (m *mockFileSystem) AddFile(name, data string) *mockFileSystem {
+func (m *FakeFileSystem) AddFile(name, data string) *FakeFileSystem {
 	if strings.Contains(name, "/") {
 		panic("file name must not contain the Unix path separator ('/')")
 	}
 	path := filepath.Clean(m.parent.path + name)
-	f := &mockFile{
+	f := &file{
 		isDir:   false,
 		path:    path,
 		name:    name,
 		bytes:   []byte(data),
 		mode:    0644,
-		lastMod: getTime(),
+		lastMod: Time(),
 		parent:  m.parent,
 	}
 	m.contents[path] = f
@@ -422,20 +422,20 @@ func (m *mockFileSystem) AddFile(name, data string) *mockFileSystem {
 	return m
 }
 
-func (m *mockFileSystem) AddDirectory(name string) *mockFileSystem {
+func (m *FakeFileSystem) AddDirectory(name string) *FakeFileSystem {
 	if strings.Contains(name[:len(name)-1], "/") {
 		panic("directory name must only contain the Unix path separator ('/') as a suffix.")
 	}
 	// Clean removes the last /, so we need to add it again
 	path := filepath.Clean(m.parent.path+name) + "/"
-	d := &mockFile{
+	d := &file{
 		isDir:    true,
 		path:     path,
 		name:     name,
 		mode:     0755,
-		lastMod:  getTime(),
+		lastMod:  Time(),
 		parent:   m.parent,
-		children: map[string]*mockFile{},
+		children: map[string]*file{},
 	}
 	m.lastAdded = d
 	m.contents[path] = d
@@ -443,18 +443,18 @@ func (m *mockFileSystem) AddDirectory(name string) *mockFileSystem {
 	return m
 }
 
-func (m *mockFileSystem) Into() *mockFileSystem {
+func (m *FakeFileSystem) Into() *FakeFileSystem {
 	m.parent = m.lastAdded
 	return m
 }
 
-func (m *mockFileSystem) Leave() *mockFileSystem {
+func (m *FakeFileSystem) Leave() *FakeFileSystem {
 	m.parent = m.parent.parent
 	return m
 }
 
-func (m *mockFileSystem) String() (pp string) {
-	ns := []*mockFile{m.root}
+func (m *FakeFileSystem) String() (pp string) {
+	ns := []*file{m.root}
 	for len(ns) > 0 {
 		n := ns[0]
 		ns = ns[1:]

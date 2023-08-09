@@ -11,6 +11,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+
+	. "github.com/cvanloo/rmsgo.git/mock"
 )
 
 //fs, server := mockServer()
@@ -45,17 +47,16 @@ import (
 // @todo: Creating a server (-config) should also Reset()?
 // @todo: how exactly should a server be configured and setup?
 
-func mockServer() (*mockFileSystem, Server) {
+func mockServer() (*FakeFileSystem, Server) {
 	const (
 		rroot = "/storage/"
 		sroot = "/tmp/rms/storage/"
 	)
-	createUUID = CreateMockUUIDFunc()
-	getTime = getMockTime
 	server, _ := New(rroot, sroot)
-	mfs = CreateMockFS().CreateDirectories(server.sroot)
+	fs := Mock()
+	fs.CreateDirectories(server.sroot)
 	Reset()
-	return mfs.(*mockFileSystem), server
+	return fs, server
 }
 
 func ExampleServer_GetFolder() {

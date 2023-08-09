@@ -14,25 +14,23 @@ import (
 	"time"
 
 	"github.com/cvanloo/rmsgo.git/isdelve"
+	. "github.com/cvanloo/rmsgo.git/mock"
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/google/uuid"
 	"golang.org/x/exp/maps"
 )
 
 func init() {
-	Reset()
-	if isdelve.Enabled {
-		createUUID = CreateMockUUIDFunc()
-		getTime = getMockTime
+	if !isdelve.Enabled {
+		UUID = uuid.NewRandom
+		Time = time.Now
 	}
+	Reset()
 }
 
 var (
 	files map[string]*Node
 	root  *Node
-
-	createUUID = uuid.NewRandom
-	getTime    = time.Now
 
 	ErrFileExists = errors.New("file already exists") // @todo: remove error?
 )
@@ -149,7 +147,7 @@ func Reset() {
 	root = rn
 }
 
-func Persist(persistFile file) (err error) {
+func Persist(persistFile File) (err error) {
 	files := maps.Values(files)
 	// Ensure that parents are always serialized before their children, so that
 	// they will also be read in first. [#parent_first]
@@ -180,7 +178,7 @@ func Persist(persistFile file) (err error) {
 	return nil
 }
 
-func Load(persistFile file) error {
+func Load(persistFile File) error {
 	if root == nil {
 		return fmt.Errorf("storage root not initialized, try calling Reset() before Load()")
 	}
@@ -206,7 +204,7 @@ func Load(persistFile file) error {
 // into the remoteStorage root (cfg.Sroot).
 func Migrate(cfg Server, root string) (errs []error) {
 	//root = filepath.Clean(root)
-	err := mfs.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	err := FS.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			errs = append(errs, fmt.Errorf("error encountered, skipping directory: %v", err))
 			if d.IsDir() {
@@ -219,7 +217,7 @@ func Migrate(cfg Server, root string) (errs []error) {
 			return nil
 		}
 
-		fd, err := mfs.Open(path)
+		fd, err := FS.Open(path)
 		if err != nil {
 			errs = append(errs, err)
 			return nil
@@ -243,7 +241,7 @@ func Migrate(cfg Server, root string) (errs []error) {
 
 func WriteFile(cfg Server, sname string, data io.Reader) (nsname string, fsize int64, detectedMime string, err error) {
 	if sname == "" {
-		u, err := createUUID()
+		u, err := UUID()
 		if err != nil {
 			return "", 0, "", err
 		}
@@ -252,7 +250,7 @@ func WriteFile(cfg Server, sname string, data io.Reader) (nsname string, fsize i
 		nsname = sname
 	}
 
-	fd, err := mfs.Create(nsname) // @todo: set permissions
+	fd, err := FS.Create(nsname) // @todo: set permissions
 	if err != nil {
 		return nsname, 0, "", err
 	}
@@ -272,7 +270,7 @@ func WriteFile(cfg Server, sname string, data io.Reader) (nsname string, fsize i
 }
 
 func DeleteDocument(sname string) error {
-	return mfs.Remove(sname)
+	return FS.Remove(sname)
 }
 
 func AddDocument(rname, sname string, fsize int64, mime string) (*Node, error) {
@@ -313,7 +311,7 @@ func AddDocument(rname, sname string, fsize int64, mime string) (*Node, error) {
 	// p now points to the file's immediate parent [#1]
 
 	name := filepath.Base(rname)
-	tnow := getTime()
+	tnow := Time()
 
 	f := &Node{
 		parent:   p, // [#1] assign parent
@@ -345,7 +343,7 @@ func UpdateDocument(rname string, fsize int64, mime string) (*Node, error) {
 
 	assert(!f.IsFolder, "UpdateDocument must not be called on a folder")
 
-	tnow := getTime()
+	tnow := Time()
 	f.Mime = mime
 	f.Length = int64(fsize)
 	f.LastMod = &tnow
@@ -381,7 +379,7 @@ func RemoveDocument(rname string) (*Node, error) {
 		p = p.parent
 	}
 
-	err := mfs.Remove(f.Sname)
+	err := FS.Remove(f.Sname)
 	return f, err
 }
 

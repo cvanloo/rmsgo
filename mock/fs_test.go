@@ -1,4 +1,4 @@
-package rmsgo
+package mock
 
 import (
 	"errors"
@@ -9,8 +9,8 @@ import (
 	"testing"
 )
 
-func mockStorage() *mockFileSystem {
-	m := CreateMockFS()
+func mockStorage() *FakeFileSystem {
+	m := MockFS()
 	m.
 		AddFile("test.txt", "Hello, World!").
 		AddDirectory("Pictures").
@@ -453,7 +453,7 @@ func TestRemoveAll(t *testing.T) {
 }
 
 func TestWalkDir(t *testing.T) {
-	m := CreateMockFS().
+	m := MockFS().
 		AddDirectory("tmp").
 		Into().
 		AddDirectory("t").
@@ -504,7 +504,7 @@ func TestWalkDir(t *testing.T) {
 }
 
 func TestWalkDirSkipOnDir(t *testing.T) {
-	m := CreateMockFS().
+	m := MockFS().
 		AddDirectory("tmp").
 		Into().
 		AddDirectory("t").
@@ -553,7 +553,7 @@ func TestWalkDirSkipOnDir(t *testing.T) {
 }
 
 func TestWalkDirSkipWithinDir(t *testing.T) {
-	m := CreateMockFS().
+	m := MockFS().
 		AddDirectory("tmp").
 		Into().
 		AddDirectory("t").

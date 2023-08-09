@@ -8,6 +8,7 @@ import (
 	"os"
 	"sort"
 
+	. "github.com/cvanloo/rmsgo.git/mock"
 	"golang.org/x/exp/maps"
 )
 
@@ -68,7 +69,7 @@ func calculateETag(n *Node) error {
 			io.WriteString(hash, cn.Mime)
 			io.WriteString(hash, cn.LastMod.Format(rmsTimeFormat))
 
-			fd, err := mfs.Open(cn.Sname)
+			fd, err := FS.Open(cn.Sname)
 			if err != nil {
 				return err
 			}

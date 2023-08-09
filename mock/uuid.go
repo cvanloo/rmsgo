@@ -1,4 +1,4 @@
-package rmsgo
+package mock
 
 import (
 	"fmt"
@@ -6,7 +6,9 @@ import (
 	"github.com/google/uuid"
 )
 
-func CreateMockUUIDFunc() func() (uuid.UUID, error) {
+// UUIDFunc returns a new function that will create deterministic but still
+// unique IDs.
+func UUIDFunc() func() (uuid.UUID, error) {
 	last := 0
 	return func() (uuid.UUID, error) {
 		last++

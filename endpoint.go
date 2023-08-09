@@ -13,15 +13,14 @@ import (
 	"time"
 
 	"github.com/cvanloo/rmsgo.git/isdelve"
+	. "github.com/cvanloo/rmsgo.git/mock"
 )
 
 func init() {
-	if isdelve.Enabled {
-		mfs = CreateMockFS().CreateDirectories("/tmp/rms/storage/")
+	if !isdelve.Enabled {
+		FS = &RealFileSystem{}
 	}
 }
-
-var mfs fileSystem = &osFileSystem{}
 
 // Server configuration for the remoteStorage endpoint.
 // Server implements http.Handler and can therefore be passed directly to a
@@ -37,7 +36,7 @@ type Server struct {
 func New(remoteRoot, storageRoot string) (Server, error) {
 	rroot := filepath.Clean(remoteRoot)
 	sroot := filepath.Clean(storageRoot)
-	fi, err := mfs.Stat(sroot)
+	fi, err := FS.Stat(sroot)
 	if err != nil || !fi.IsDir() {
 		return Server{rroot, sroot}, fmt.Errorf("storage root does not exist or is not a directory: %w", err)
 	}
@@ -203,7 +202,7 @@ func (s Server) GetDocument(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	fd, err := mfs.Open(n.Sname)
+	fd, err := FS.Open(n.Sname)
 	if err != nil {
 		return writeError(w, err)
 	}
