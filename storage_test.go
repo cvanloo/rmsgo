@@ -50,23 +50,23 @@ func TestCreateDocument(t *testing.T) {
 	}{
 		{
 			name:  "Documents/",
-			rname: "/Documents/",
+			rname: "/Documents",
 		},
 		{
 			name:  "Homework/",
-			rname: "/Documents/Homework/",
+			rname: "/Documents/Homework",
 		},
 		{
 			name:  "Assignments/",
-			rname: "/Documents/Homework/Assignments/",
+			rname: "/Documents/Homework/Assignments",
 		},
 		{
 			name:  "2023/",
-			rname: "/Documents/Homework/Assignments/2023/",
+			rname: "/Documents/Homework/Assignments/2023",
 		},
 		{
 			name:  "04/",
-			rname: "/Documents/Homework/Assignments/2023/04/",
+			rname: "/Documents/Homework/Assignments/2023/04",
 		},
 	}
 
@@ -425,7 +425,7 @@ func TestETagNotAffected(t *testing.T) {
 const persistText = `<Root>
 	<Nodes IsFolder="true">
 		<Name>Documents/</Name>
-		<Rname>/Documents/</Rname>
+		<Rname>/Documents</Rname>
 		<Mime>inode/directory</Mime>
 		<ParentRName>/</ParentRName>
 	</Nodes>
@@ -436,7 +436,7 @@ const persistText = `<Root>
 		<Mime>text/plain</Mime>
 		<Length>13</Length>
 		<LastMod>0001-01-01T00:00:00Z</LastMod>
-		<ParentRName>/Documents/</ParentRName>
+		<ParentRName>/Documents</ParentRName>
 	</Nodes>
 	<Nodes IsFolder="false">
 		<Name>test.txt</Name>
@@ -445,7 +445,7 @@ const persistText = `<Root>
 		<Mime>text/plain</Mime>
 		<Length>15</Length>
 		<LastMod>0001-01-01T00:00:00Z</LastMod>
-		<ParentRName>/Documents/</ParentRName>
+		<ParentRName>/Documents</ParentRName>
 	</Nodes>
 </Root>`
 
@@ -567,7 +567,7 @@ func TestLoad(t *testing.T) {
 	}{
 		{
 			name:      "Documents/",
-			rname:     "/Documents/",
+			rname:     "/Documents",
 			mime:      "inode/directory",
 			nchildren: 2,
 			isDir:     true,
@@ -658,7 +658,7 @@ func TestMigrate(t *testing.T) {
 	}{
 		{
 			name:      "Documents/",
-			rname:     "/Documents/",
+			rname:     "/Documents",
 			mime:      "inode/directory",
 			nchildren: 2,
 			isDir:     true,
@@ -760,7 +760,7 @@ func ExamplePersist() {
 	// <Root>
 	// 	<Nodes IsFolder="true">
 	// 		<Name>Documents/</Name>
-	// 		<Rname>/Documents/</Rname>
+	// 		<Rname>/Documents</Rname>
 	// 		<Mime>inode/directory</Mime>
 	// 		<ParentRName>/</ParentRName>
 	// 	</Nodes>
@@ -771,7 +771,7 @@ func ExamplePersist() {
 	// 		<Mime>text/plain</Mime>
 	// 		<Length>13</Length>
 	// 		<LastMod>0001-01-01T00:00:00Z</LastMod>
-	// 		<ParentRName>/Documents/</ParentRName>
+	// 		<ParentRName>/Documents</ParentRName>
 	// 	</Nodes>
 	// 	<Nodes IsFolder="false">
 	// 		<Name>test.txt</Name>
@@ -780,12 +780,12 @@ func ExamplePersist() {
 	// 		<Mime>text/plain</Mime>
 	// 		<Length>15</Length>
 	// 		<LastMod>0001-01-01T00:00:00Z</LastMod>
-	// 		<ParentRName>/Documents/</ParentRName>
+	// 		<ParentRName>/Documents</ParentRName>
 	// 	</Nodes>
 	// </Root>
 	// Storage listing follows:
 	// {F} / [/] [6462373162316434]
-	//   {F} Documents/ [/Documents/] [3466353235626333]
+	//   {F} Documents/ [/Documents] [3466353235626333]
 	//     {D} hello.txt (text/plain, 13) [/Documents/hello.txt -> /tmp/rms/storage/32000000-0000-0000-0000-000000000000] [6561373234373438]
 	//     {D} test.txt (text/plain, 15) [/Documents/test.txt -> /tmp/rms/storage/31000000-0000-0000-0000-000000000000] [6530353836306537]
 }

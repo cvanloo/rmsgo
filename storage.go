@@ -274,25 +274,23 @@ func DeleteDocument(sname string) error {
 }
 
 func AddDocument(rname, sname string, fsize int64, mime string) (*Node, error) {
+	rname = filepath.Clean(rname) // @todo(#correct_place): is this the correct place for this?
+	assert(rname[len(rname)-1] != '/', "AddDocument must only be used to create files")
+
 	if f, ok := files[rname]; ok {
-		// @fixme: this (should) also apply when a folder with that name+/ exists!
+		// @fixme: better error reporting, also if there already is a directory
+		// with the same name
 		return f, ErrFileExists
 	}
 
-	assert(rname[len(rname)-1] != '/', "AddDocument must only be used to create files")
-
-	pname := filepath.Dir(rname)
-	var parts []string
-	for _, s := range strings.Split(pname, string(os.PathSeparator)) {
-		if s != "" {
-			parts = append(parts, s)
-		}
-	}
-
-	p := root
+	var (
+		pname = filepath.Dir(rname)
+		parts = strings.Split(pname, string(os.PathSeparator))[1:] // exclude empty ""
+		p     = root
+	)
 
 	for i := range parts {
-		pname := "/" + strings.Join(parts[:i+1], string(os.PathSeparator)) + "/"
+		pname := "/" + strings.Join(parts[:i+1], string(os.PathSeparator))
 		pn, ok := files[pname]
 		if !ok {
 			pn = &Node{
@@ -336,6 +334,7 @@ func AddDocument(rname, sname string, fsize int64, mime string) (*Node, error) {
 }
 
 func UpdateDocument(rname string, fsize int64, mime string) (*Node, error) {
+	rname = filepath.Clean(rname) // @todo(#correct_place)
 	f, ok := files[rname]
 	if !ok {
 		return nil, ErrNotFound
@@ -358,6 +357,7 @@ func UpdateDocument(rname string, fsize int64, mime string) (*Node, error) {
 }
 
 func RemoveDocument(rname string) (*Node, error) {
+	rname = filepath.Clean(rname) // @todo(#correct_place)
 	f, ok := files[rname]
 	if !ok {
 		return nil, ErrNotFound
@@ -384,6 +384,7 @@ func RemoveDocument(rname string) (*Node, error) {
 }
 
 func Retrieve(rname string) (*Node, error) {
+	rname = filepath.Clean(rname) // @todo(#correct_place)
 	if f, ok := files[rname]; ok {
 		return f, nil
 	}

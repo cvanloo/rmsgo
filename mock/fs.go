@@ -14,6 +14,8 @@ import (
 	"golang.org/x/exp/maps"
 )
 
+// The respective syscall.* errors listed here: https://unix.stackexchange.com/a/326811
+
 type FileSystem interface {
 	Create(path string) (File, error)
 	Open(path string) (File, error)
@@ -466,7 +468,7 @@ func MockFS() (fs *FakeFileSystem) {
 
 func (m *FakeFileSystem) CreateDirectories(path string) *FakeFileSystem {
 	path = filepath.Clean(path)
-	parts := strings.Split(path, "/")[1:] // exclude empty string ""
+	parts := strings.Split(path, "/")[1:] // exclude empty ""
 
 	p := m.root
 
