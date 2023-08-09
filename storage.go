@@ -246,7 +246,7 @@ func WriteFile(cfg Server, sname string, data io.Reader) (nsname string, fsize i
 		if err != nil {
 			return "", 0, "", err
 		}
-		nsname = filepath.Join(cfg.Sroot, u.String())
+		nsname = filepath.Join(cfg.sroot, u.String())
 	} else {
 		nsname = sname
 	}

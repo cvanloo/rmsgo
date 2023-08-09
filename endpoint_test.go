@@ -35,29 +35,45 @@ import (
 //}
 //_ = body
 
+// @todo: should the server be a struct?
+//   it doesn't make sense to have multiple servers
+//   it's more a config than a server,
+//   but it allows to use it as an http.Handler (ServeHTTP)
+// @todo: Test Migrate/Load/Persist
+// @todo: Creating a server (-config) should also Reset()?
+// @todo: how exactly should a server be configured and setup?
+
 func mockServer() (*mockFileSystem, Server) {
-	var (
+	const (
 		rroot = "/storage/"
 		sroot = "/tmp/rms/storage/"
 	)
-	server, _ := New(rroot, sroot)
-	mfs := CreateMockFS().CreateDirectories(server.Sroot)
 	createUUID = CreateMockUUIDFunc()
 	getTime = getMockTime
+	server, _ := New(rroot, sroot)
+	mfs = CreateMockFS().CreateDirectories(server.sroot)
 	Reset()
-	return mfs, server
+	return mfs.(*mockFileSystem), server
 }
 
 func ExampleServer_GetFolder() {
 	_, server := mockServer()
+	// Use: server, err := rmsgo.New(remoteRoot, storageRoot)
+
+	// @todo: correct error handling, but we first have to implement good errors
 
 	ts := httptest.NewServer(server)
 	defer ts.Close()
 
+	remoteRoot := ts.URL + server.Rroot()
+
 	// GET the currently empty root folder
-	r, err := http.Get(ts.URL + "/storage/")
+	r, err := http.Get(remoteRoot + "/")
 	if err != nil {
 		log.Fatal(err)
+	}
+	if r.StatusCode != http.StatusOK {
+		log.Fatalf("%s %s: %s", r.Request.Method, r.Request.URL, r.Status)
 	}
 
 	bs, err := io.ReadAll(r.Body)
@@ -65,33 +81,39 @@ func ExampleServer_GetFolder() {
 		log.Fatal(err)
 	}
 
+	fmt.Printf("Root ETag: %s\n", r.Header.Get("ETag"))
 	fmt.Print(string(bs))
+	// Root ETag: 03d871638b18f0b459bf8fd12a58f1d8
+	// {
+	//   "@context": "http://remotestorage.io/spec/folder-description",
+	//   "items": {}
+	// }
 
 	// PUT a document
-	req, err := http.NewRequest(http.MethodPut, ts.URL+"/storage/Documents/First.txt", bytes.NewReader([]byte("My first document.")))
-	req.Header.Set("Content-Type", "funny/format")
+	req, err := http.NewRequest(http.MethodPut, remoteRoot+"/Documents/First.txt", bytes.NewReader([]byte("My first document.")))
 	if err != nil {
 		log.Fatal(err)
 	}
+	req.Header.Set("Content-Type", "funny/format")
 
 	r, err = http.DefaultClient.Do(req)
 	if err != nil {
 		log.Fatal(err)
 	}
 	if r.StatusCode != http.StatusCreated {
-		log.Fatal("creating document failed")
+		log.Fatalf("%s %s: %s", r.Request.Method, r.Request.URL, r.Status)
 	}
 
-	etag := r.Header.Get("ETag")
-	if etag == "" {
-		log.Fatal("etag missing")
-	}
-	fmt.Printf("Created ETag: %s\n", etag)
+	fmt.Printf("Created ETag: %s\n", r.Header.Get("ETag"))
+	// Created ETag: f0d0f717619b09cc081bb0c11d9b9c6b
 
 	// GET the now non-empty root folder
-	r, err = http.Get(ts.URL + "/storage/")
+	r, err = http.Get(remoteRoot + "/")
 	if err != nil {
 		log.Fatal(err)
+	}
+	if r.StatusCode != http.StatusOK {
+		log.Fatalf("%s %s: %s", r.Request.Method, r.Request.URL, r.Status)
 	}
 
 	bs, err = io.ReadAll(r.Body)
@@ -99,12 +121,25 @@ func ExampleServer_GetFolder() {
 		log.Fatal(err)
 	}
 
+	fmt.Printf("Root ETag: %s\n", r.Header.Get("ETag"))
 	fmt.Print(string(bs))
+	// Root ETag: ef528a27b48c1b187ef7116f7306358b
+	// {
+	//   "@context": "http://remotestorage.io/spec/folder-description",
+	//   "items": {
+	//     "Documents/": {
+	//       "ETag": "cc4c6d3bbf39189be874992479b60e2a"
+	//     }
+	//   }
+	// }
 
 	// GET the document's folder
-	r, err = http.Get(ts.URL + "/storage/Documents/")
+	r, err = http.Get(remoteRoot + "/Documents/")
 	if err != nil {
 		log.Fatal(err)
+	}
+	if r.StatusCode != http.StatusOK {
+		log.Fatalf("%s %s: %s", r.Request.Method, r.Request.URL, r.Status)
 	}
 
 	bs, err = io.ReadAll(r.Body)
@@ -112,12 +147,28 @@ func ExampleServer_GetFolder() {
 		log.Fatal(err)
 	}
 
+	fmt.Printf("Documents/ ETag: %s\n", r.Header.Get("ETag"))
 	fmt.Print(string(bs))
+	// Documents/ ETag: cc4c6d3bbf39189be874992479b60e2a
+	// {
+	//   "@context": "http://remotestorage.io/spec/folder-description",
+	//   "items": {
+	//     "First.txt": {
+	//       "Content-Length": 18,
+	//       "Content-Type": "funny/format",
+	//       "ETag": "f0d0f717619b09cc081bb0c11d9b9c6b",
+	//       "Last-Modified": "Mon, 01 Jan 0001 00:00:00 UTC"
+	//     }
+	//   }
+	// }
 
 	// Output:
+	// Root ETag: 03d871638b18f0b459bf8fd12a58f1d8
 	// {"@context":"http://remotestorage.io/spec/folder-description","items":{}}
 	// Created ETag: f0d0f717619b09cc081bb0c11d9b9c6b
+	// Root ETag: ef528a27b48c1b187ef7116f7306358b
 	// {"@context":"http://remotestorage.io/spec/folder-description","items":{"Documents/":{"ETag":"cc4c6d3bbf39189be874992479b60e2a"}}}
+	// Documents/ ETag: cc4c6d3bbf39189be874992479b60e2a
 	// {"@context":"http://remotestorage.io/spec/folder-description","items":{"First.txt":{"Content-Length":18,"Content-Type":"funny/format","ETag":"f0d0f717619b09cc081bb0c11d9b9c6b","Last-Modified":"Mon, 01 Jan 0001 00:00:00 UTC"}}}
 }
 

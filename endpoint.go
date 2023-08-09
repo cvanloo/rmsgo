@@ -23,18 +23,40 @@ func init() {
 
 var mfs fileSystem = &osFileSystem{}
 
+// Server configuration for the remoteStorage endpoint.
+// Server implements http.Handler and can therefore be passed directly to a
+// http.ServeMux.Handle or http.ListenAndServe(TLS)
 type Server struct {
-	Rroot, Sroot string
+	rroot, sroot string
 }
 
+// New constructs a remoteStorage server configuration.
+// remoteRoot is the root folder of the storage tree (used in the URL),
+// storageRoot is a folder on the server's file system where remoteStorage
+// documents are written to and read from.
 func New(remoteRoot, storageRoot string) (Server, error) {
 	rroot := filepath.Clean(remoteRoot)
-	sroot := filepath.Clean(storageRoot) + "/"
+	sroot := filepath.Clean(storageRoot)
 	fi, err := mfs.Stat(sroot)
 	if err != nil || !fi.IsDir() {
 		return Server{rroot, sroot}, fmt.Errorf("storage root does not exist or is not a directory: %w", err)
 	}
 	return Server{rroot, sroot}, nil
+}
+
+// Rroot specifies the URL path at which remoteStorage is rooted.
+// E.g. if Rroot is "/storage" then a document "/Picture/Kittens.png" can
+// be accessed using the URL "example.com/storage/Picture/Kittens.png".
+// Rroot does not have a trailing slash.
+func (s Server) Rroot() string {
+	return s.rroot
+}
+
+// Sroot is a path specifying the location on the server's file system
+// where all of remoteStorage's files are stored.
+// Sroot does not have a trailing slash.
+func (s Server) Sroot() string {
+	return s.sroot
 }
 
 func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -104,7 +126,7 @@ type ldjson = map[string]any
 const rmsTimeFormat = time.RFC1123
 
 func (s Server) GetFolder(w http.ResponseWriter, r *http.Request) error {
-	rpath := strings.TrimPrefix(r.URL.Path, s.Rroot)
+	rpath := strings.TrimPrefix(r.URL.Path, s.rroot)
 
 	n, err := Retrieve(rpath)
 	if err != nil {
@@ -157,7 +179,7 @@ func (s Server) GetFolder(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s Server) GetDocument(w http.ResponseWriter, r *http.Request) error {
-	rpath := strings.TrimPrefix(r.URL.Path, s.Rroot)
+	rpath := strings.TrimPrefix(r.URL.Path, s.rroot)
 
 	n, err := Retrieve(rpath)
 	if err != nil {
@@ -195,7 +217,7 @@ func (s Server) GetDocument(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
-	rpath := strings.TrimPrefix(r.URL.Path, s.Rroot)
+	rpath := strings.TrimPrefix(r.URL.Path, s.rroot)
 
 	n, err := Retrieve(rpath)
 	notFound := errors.Is(err, ErrNotFound)
@@ -264,7 +286,7 @@ func (s Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s Server) DeleteDocument(w http.ResponseWriter, r *http.Request) error {
-	rpath := strings.TrimPrefix(r.URL.Path, s.Rroot)
+	rpath := strings.TrimPrefix(r.URL.Path, s.rroot)
 
 	n, err := Retrieve(rpath)
 	if err != nil {
