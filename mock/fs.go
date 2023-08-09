@@ -75,8 +75,8 @@ func (*RealFileSystem) RemoveAll(path string) error {
 }
 
 type FakeFileSystem struct {
-	lastAdded, parent, root *file
-	contents                map[string]*file
+	lastAdded, parent, root *FakeFile
+	contents                map[string]*FakeFile
 }
 
 var _ FileSystem = (*FakeFileSystem)(nil)
@@ -95,7 +95,7 @@ func (m *FakeFileSystem) Create(path string) (File, error) {
 	}
 
 	parts := strings.Split(path, "/")
-	f := &file{
+	f := &FakeFile{
 		isDir:   false,
 		path:    path,
 		name:    parts[len(parts)-1],
@@ -123,7 +123,7 @@ func (m *FakeFileSystem) Stat(path string) (fs.FileInfo, error) {
 	return nil, fmt.Errorf("%s: %w", path, os.ErrNotExist)
 }
 
-func readDir(d *file) []*file {
+func readDir(d *FakeFile) []*FakeFile {
 	children := maps.Values(d.children)
 	sort.Slice(children, func(i, j int) bool {
 		return children[i].path < children[j].path
@@ -131,7 +131,7 @@ func readDir(d *file) []*file {
 	return children
 }
 
-func walkDir(d *file, fn fs.WalkDirFunc) error {
+func walkDir(d *FakeFile, fn fs.WalkDirFunc) error {
 	err := fn(d.path, d.Fd(), nil)
 	if err == fs.SkipDir {
 		return nil // successfully skipped directory
@@ -202,7 +202,7 @@ func (m *FakeFileSystem) WriteFile(path string, data []byte, perm os.FileMode) e
 	}
 
 	parts := strings.Split(path, "/")
-	f := &file{
+	f := &FakeFile{
 		isDir:   false,
 		path:    path,
 		name:    parts[len(parts)-1],
@@ -242,45 +242,45 @@ func (m *FakeFileSystem) RemoveAll(path string) error {
 	return nil
 }
 
-type file struct {
+type FakeFile struct {
 	isDir      bool
 	path, name string
 	bytes      []byte
 	mode       fs.FileMode
 	lastMod    time.Time
 
-	parent   *file
-	children map[string]*file
+	parent   *FakeFile
+	children map[string]*FakeFile
 }
 
-func (m *file) Fd() *mockFileFd {
-	return &mockFileFd{m, 0}
+func (m *FakeFile) Fd() *FakeFileDescriptor {
+	return &FakeFileDescriptor{m, 0}
 }
 
-type mockFileFd struct {
-	file   *file
+type FakeFileDescriptor struct {
+	file   *FakeFile
 	cursor int64
 }
 
-var _ File = (*mockFileFd)(nil)
-var _ fs.DirEntry = (*mockFileFd)(nil)
-var _ fs.FileInfo = (*mockFileFd)(nil)
+var _ File = (*FakeFileDescriptor)(nil)
+var _ fs.DirEntry = (*FakeFileDescriptor)(nil)
+var _ fs.FileInfo = (*FakeFileDescriptor)(nil)
 
-func (*mockFileFd) Close() error {
+func (*FakeFileDescriptor) Close() error {
 	// nop
 	return nil
 }
 
-func (m *mockFileFd) Name() string {
+func (m *FakeFileDescriptor) Name() string {
 	return m.file.name
 }
 
-func (m *mockFileFd) Stat() (fs.FileInfo, error) {
+func (m *FakeFileDescriptor) Stat() (fs.FileInfo, error) {
 	// m implements fs.FileInfo
 	return m, nil
 }
 
-func (m *mockFileFd) Read(b []byte) (n int, err error) {
+func (m *FakeFileDescriptor) Read(b []byte) (n int, err error) {
 	if m.cursor == int64(len(m.file.bytes)) {
 		return 0, io.EOF
 	}
@@ -289,7 +289,7 @@ func (m *mockFileFd) Read(b []byte) (n int, err error) {
 	return
 }
 
-func (m *mockFileFd) Write(b []byte) (n int, err error) {
+func (m *FakeFileDescriptor) Write(b []byte) (n int, err error) {
 	nl := len(b) + len(m.file.bytes[:m.cursor])
 	nbs := make([]byte, nl)
 	copy(nbs, m.file.bytes[:m.cursor])
@@ -299,7 +299,7 @@ func (m *mockFileFd) Write(b []byte) (n int, err error) {
 	return n, nil
 }
 
-func (m *mockFileFd) Seek(offset int64, whence int) (int64, error) {
+func (m *FakeFileDescriptor) Seek(offset int64, whence int) (int64, error) {
 	switch whence {
 	case io.SeekStart:
 		// relative to the origin of the file
@@ -314,50 +314,50 @@ func (m *mockFileFd) Seek(offset int64, whence int) (int64, error) {
 	return m.cursor, nil
 }
 
-func (m *mockFileFd) Info() (fs.FileInfo, error) {
+func (m *FakeFileDescriptor) Info() (fs.FileInfo, error) {
 	// m implements fs.FileInfo
 	return m, nil
 }
 
-func (m *mockFileFd) IsDir() bool {
+func (m *FakeFileDescriptor) IsDir() bool {
 	return m.file.isDir
 }
 
-func (m *mockFileFd) Type() fs.FileMode {
+func (m *FakeFileDescriptor) Type() fs.FileMode {
 	return m.file.mode
 }
 
-func (m *mockFileFd) ModTime() time.Time {
+func (m *FakeFileDescriptor) ModTime() time.Time {
 	return m.file.lastMod
 }
 
-func (m *mockFileFd) Mode() fs.FileMode {
+func (m *FakeFileDescriptor) Mode() fs.FileMode {
 	return m.file.mode
 }
 
-func (m *mockFileFd) Size() int64 {
+func (m *FakeFileDescriptor) Size() int64 {
 	return int64(len(m.file.bytes))
 }
 
-func (m *mockFileFd) Sys() any {
+func (m *FakeFileDescriptor) Sys() any {
 	return m.file
 }
 
 func MockFS() (fs *FakeFileSystem) {
-	r := &file{
+	r := &FakeFile{
 		isDir:    true,
 		path:     "/",
 		name:     "/",
 		mode:     0755,
 		lastMod:  Time(),
 		parent:   nil,
-		children: map[string]*file{},
+		children: map[string]*FakeFile{},
 	}
 	fs = &FakeFileSystem{
 		lastAdded: r,
 		parent:    r,
 		root:      r,
-		contents: map[string]*file{
+		contents: map[string]*FakeFile{
 			"/": r,
 		},
 	}
@@ -378,14 +378,14 @@ func (m *FakeFileSystem) CreateDirectories(name string) *FakeFileSystem {
 		pname := "/" + strings.Join(parts[:i+1], string(os.PathSeparator)) + "/"
 		pn, ok := m.contents[pname]
 		if !ok {
-			pn = &file{
+			pn = &FakeFile{
 				isDir:    true,
 				path:     pname,
 				name:     parts[i] + "/",
 				mode:     0755,
 				lastMod:  Time(),
 				parent:   p,
-				children: map[string]*file{},
+				children: map[string]*FakeFile{},
 			}
 			p.children[pname] = pn
 			m.contents[pname] = pn
@@ -408,7 +408,7 @@ func (m *FakeFileSystem) AddFile(name, data string) *FakeFileSystem {
 		panic("file name must not contain the Unix path separator ('/')")
 	}
 	path := filepath.Clean(m.parent.path + name)
-	f := &file{
+	f := &FakeFile{
 		isDir:   false,
 		path:    path,
 		name:    name,
@@ -428,14 +428,14 @@ func (m *FakeFileSystem) AddDirectory(name string) *FakeFileSystem {
 	}
 	// Clean removes the last /, so we need to add it again
 	path := filepath.Clean(m.parent.path+name) + "/"
-	d := &file{
+	d := &FakeFile{
 		isDir:    true,
 		path:     path,
 		name:     name,
 		mode:     0755,
 		lastMod:  Time(),
 		parent:   m.parent,
-		children: map[string]*file{},
+		children: map[string]*FakeFile{},
 	}
 	m.lastAdded = d
 	m.contents[path] = d
@@ -454,7 +454,7 @@ func (m *FakeFileSystem) Leave() *FakeFileSystem {
 }
 
 func (m *FakeFileSystem) String() (pp string) {
-	ns := []*file{m.root}
+	ns := []*FakeFile{m.root}
 	for len(ns) > 0 {
 		n := ns[0]
 		ns = ns[1:]
