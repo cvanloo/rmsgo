@@ -205,21 +205,21 @@ func Load(persistFile file) error {
 // Migrate traverses the root directory and copies any files contained therein
 // into the remoteStorage root (cfg.Sroot).
 func Migrate(cfg Server, root string) (errs []error) {
-	err := mfs.WalkDir(root, func(spath string, d fs.DirEntry, err error) error {
+	//root = filepath.Clean(root)
+	err := mfs.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			errs = append(errs, err)
+			errs = append(errs, fmt.Errorf("error encountered, skipping directory: %v", err))
 			if d.IsDir() {
 				return fs.SkipDir
 			}
 			return nil
 		}
 
-		rpath := strings.TrimPrefix(root, spath)
 		if d.IsDir() {
 			return nil
 		}
 
-		fd, err := mfs.Open(spath)
+		fd, err := mfs.Open(path)
 		if err != nil {
 			errs = append(errs, err)
 			return nil
@@ -231,7 +231,8 @@ func Migrate(cfg Server, root string) (errs []error) {
 			return nil
 		}
 
-		AddDocument(rpath, sname, fsize, mime)
+		rname := strings.TrimPrefix(path, root[:len(root)-1])
+		AddDocument(rname, sname, fsize, mime)
 		return nil
 	})
 	if err != nil {
@@ -279,7 +280,7 @@ func AddDocument(rname, sname string, fsize int64, mime string) (*Node, error) {
 		return f, ErrFileExists
 	}
 
-	assert(rname[len(rname)-1] != '/', "CreateDocument must only be used to create files")
+	assert(rname[len(rname)-1] != '/', "AddDocument must only be used to create files")
 
 	pname := filepath.Dir(rname)
 	var parts []string
@@ -387,7 +388,7 @@ func Retrieve(rname string) (*Node, error) {
 	if f, ok := files[rname]; ok {
 		return f, nil
 	}
-	return nil, ErrNotFound
+	return nil, ErrNotFound // @todo: wrap with rname (WHAT resource was not found?)
 }
 
 func (n Node) String() string {

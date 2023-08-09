@@ -6,6 +6,8 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"golang.org/x/exp/maps"
 )
 
 func TestCreateDocument(t *testing.T) {
@@ -91,8 +93,11 @@ func TestCreateDocument(t *testing.T) {
 		if len(n.children) != 1 {
 			t.Errorf("%s has `%d' children, want: 1", n.Name, len(n.children))
 		}
+		if v := maps.Values(p.children)[0]; v != n {
+			t.Errorf("parent `%s' has wrong child; got: `%s', want: `%s'", p.Name, v.Name, n.Name)
+		}
 		if n.parent != p {
-			t.Errorf("wrong parent; got: `%p', want: `%p'", n.parent, p)
+			t.Errorf("wrong parent for `%s'; got: `%s', want: `%s'", n.Name, n.parent.Name, p.Name)
 		}
 		p = n
 	}
@@ -150,7 +155,7 @@ func TestUpdateDocument(t *testing.T) {
 	}
 }
 
-func TestNode(t *testing.T) {
+func TestRetrieve(t *testing.T) {
 	_, server := mockServer()
 
 	const path = "/FunFacts/Part2.txt"
@@ -416,6 +421,302 @@ func TestETagNotAffected(t *testing.T) {
 	}
 }
 
+const persistText = `<Root>
+	<Nodes IsFolder="true">
+		<Name>Documents/</Name>
+		<Rname>/Documents/</Rname>
+		<Mime>inode/directory</Mime>
+		<ParentRName>/</ParentRName>
+	</Nodes>
+	<Nodes IsFolder="false">
+		<Name>hello.txt</Name>
+		<Rname>/Documents/hello.txt</Rname>
+		<Sname>/tmp/rms/storage/32000000-0000-0000-0000-000000000000</Sname>
+		<Mime>text/plain</Mime>
+		<Length>13</Length>
+		<LastMod>0001-01-01T00:00:00Z</LastMod>
+		<ParentRName>/Documents/</ParentRName>
+	</Nodes>
+	<Nodes IsFolder="false">
+		<Name>test.txt</Name>
+		<Rname>/Documents/test.txt</Rname>
+		<Sname>/tmp/rms/storage/31000000-0000-0000-0000-000000000000</Sname>
+		<Mime>text/plain</Mime>
+		<Length>15</Length>
+		<LastMod>0001-01-01T00:00:00Z</LastMod>
+		<ParentRName>/Documents/</ParentRName>
+	</Nodes>
+</Root>`
+
+func TestPersist(t *testing.T) {
+	_, server := mockServer()
+
+	sname, fsize, _, err := WriteFile(server, "", bytes.NewReader([]byte("This is a test.")))
+	if err != nil {
+		t.Error(err)
+	}
+	_, err = AddDocument("/Documents/test.txt", sname, fsize, "text/plain")
+	if err != nil {
+		t.Error(err)
+	}
+
+	sname, fsize, _, err = WriteFile(server, "", bytes.NewReader([]byte("Hello, World!")))
+	if err != nil {
+		t.Error(err)
+	}
+	_, err = AddDocument("/Documents/hello.txt", sname, fsize, "text/plain")
+	if err != nil {
+		t.Error(err)
+	}
+
+	fd, err := mfs.Create(server.sroot + "/marshalled.xml")
+	if err != nil {
+		t.Error(err)
+	}
+	defer fd.Close()
+
+	err = Persist(fd)
+	if err != nil {
+		t.Error(err)
+	}
+
+	Reset()
+
+	fd.Seek(0, io.SeekStart)
+	bs, err := io.ReadAll(fd)
+	if err != nil {
+		t.Error(err)
+	}
+	if persistText != string(bs) {
+		t.Errorf("incorrect XML generated:\ngot:\n%s\n----\nwant:\n%s\n----", bs, persistText)
+	}
+}
+
+func TestLoad(t *testing.T) {
+	_, server := mockServer()
+
+	sname, fsize, _, err := WriteFile(server, "", bytes.NewReader([]byte("This is a test.")))
+	if err != nil {
+		t.Error(err)
+	}
+	_, err = AddDocument("/Documents/test.txt", sname, fsize, "text/plain")
+	if err != nil {
+		t.Error(err)
+	}
+
+	sname, fsize, _, err = WriteFile(server, "", bytes.NewReader([]byte("Hello, World!")))
+	if err != nil {
+		t.Error(err)
+	}
+	_, err = AddDocument("/Documents/hello.txt", sname, fsize, "text/plain")
+	if err != nil {
+		t.Error(err)
+	}
+
+	fd, err := mfs.Create(server.sroot + "/marshalled.xml")
+	if err != nil {
+		t.Error(err)
+	}
+	defer fd.Close() // ignore close err!
+
+	err = Persist(fd)
+	if err != nil {
+		t.Error(err)
+	}
+
+	Reset()
+
+	fd.Seek(0, io.SeekStart)
+	bs, err := io.ReadAll(fd)
+	if err != nil {
+		t.Error(err)
+	}
+	if persistText != string(bs) {
+		t.Errorf("incorrect XML generated:\ngot:\n%s\n----\nwant:\n%s\n----", bs, persistText)
+	}
+
+	fd.Seek(0, io.SeekStart)
+	err = Load(fd)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(files) != 4 {
+		t.Errorf("wrong number of nodes; got: %d, want: 4", len(files))
+	}
+
+	// Ensure root is set correctly.
+	r, err := Retrieve("/")
+	if err != nil {
+		t.Error(err)
+	}
+	if r != root {
+		t.Errorf("root not set correctly; got: `%p', want: `%p'", r, root)
+	}
+	if len(r.children) != 1 {
+		t.Errorf("root has %d children, want: 1", len(r.children))
+	}
+
+	// Children must be listed immediately after their parents for parent/child
+	// check to work correctly. [#child_after]
+	checks := []struct {
+		name, rname string
+		mime        string
+		nchildren   int
+		isDir       bool
+	}{
+		{
+			name:      "Documents/",
+			rname:     "/Documents/",
+			mime:      "inode/directory",
+			nchildren: 2,
+			isDir:     true,
+		},
+		{
+			name:  "test.txt",
+			rname: "/Documents/test.txt",
+			mime:  "text/plain",
+		},
+		{
+			name:  "hello.txt",
+			rname: "/Documents/hello.txt",
+			mime:  "text/plain",
+		},
+	}
+
+	t.Logf("Root Listing:\n%s", root)
+
+	p := root
+	for _, c := range checks {
+		n, err := Retrieve(c.rname)
+		if err != nil {
+			t.Error(err)
+		}
+
+		if n.Name != c.name {
+			t.Errorf("got: `%s', want: `%s'", n.Name, c.name)
+		}
+		if n.Rname != c.rname {
+			t.Errorf("got: `%s', want: `%s'", n.Rname, c.rname)
+		}
+		if n.Mime != c.mime {
+			t.Errorf("got: `%s', want: `%s'", n.Mime, c.mime)
+		}
+		if n.IsFolder != c.isDir {
+			t.Errorf("got: isFolder == %t, want: isFolder == %t", n.IsFolder, c.isDir)
+		}
+		if len(n.children) != c.nchildren {
+			t.Errorf("%s has %d children, want: %d", n.Name, len(n.children), c.nchildren)
+		}
+		hasAsChild := false
+		for _, v := range p.children {
+			if v == n {
+				hasAsChild = true
+				break
+			}
+		}
+		if !hasAsChild {
+			t.Errorf("parent `%s' is missing `%s' as a child", p.Name, n.Name)
+		}
+		if n.parent != p {
+			t.Errorf("wrong parent for `%s'; got: `%s', want: `%s'", n.Name, n.parent.Name, p.Name)
+		}
+		if c.isDir {
+			p = n // [#child_after]
+		}
+	}
+}
+
+func TestMigrate(t *testing.T) {
+	const (
+		rroot = "/storage/"
+		sroot = "/tmp/rms/storage/"
+	)
+	createUUID = CreateMockUUIDFunc()
+	getTime = getMockTime
+	server, _ := New(rroot, sroot)
+	mfs = CreateMockFS().
+		CreateDirectories(server.sroot).
+		AddDirectory("somewhere").Into().
+		AddDirectory("Documents").Into().
+		AddFile("hello.txt", "Hello, World!").
+		AddFile("test.txt", "Whole life's a test.")
+
+	Reset()
+	errs := Migrate(server, "/somewhere/")
+	for _, err := range errs {
+		t.Error(err)
+	}
+
+	t.Log(root)
+
+	// Children must be listed immediately after their parents for parent/child
+	// check to work correctly. [#child_after]
+	checks := []struct {
+		name, rname string
+		mime        string
+		nchildren   int
+		isDir       bool
+	}{
+		{
+			name:      "Documents/",
+			rname:     "/Documents/",
+			mime:      "inode/directory",
+			nchildren: 2,
+			isDir:     true,
+		},
+		{
+			name:  "test.txt",
+			rname: "/Documents/test.txt",
+			mime:  "text/plain; charset=utf-8",
+		},
+		{
+			name:  "hello.txt",
+			rname: "/Documents/hello.txt",
+			mime:  "text/plain; charset=utf-8",
+		},
+	}
+
+	p := root
+	for _, c := range checks {
+		n, err := Retrieve(c.rname)
+		if err != nil {
+			t.Error(err)
+		}
+
+		if n.Name != c.name {
+			t.Errorf("got: `%s', want: `%s'", n.Name, c.name)
+		}
+		if n.Rname != c.rname {
+			t.Errorf("got: `%s', want: `%s'", n.Rname, c.rname)
+		}
+		if n.Mime != c.mime {
+			t.Errorf("got: `%s', want: `%s'", n.Mime, c.mime)
+		}
+		if n.IsFolder != c.isDir {
+			t.Errorf("got: isFolder == %t, want: isFolder == %t", n.IsFolder, c.isDir)
+		}
+		if len(n.children) != c.nchildren {
+			t.Errorf("%s has %d children, want: %d", n.Name, len(n.children), c.nchildren)
+		}
+		hasAsChild := false
+		for _, v := range p.children {
+			if v == n {
+				hasAsChild = true
+				break
+			}
+		}
+		if !hasAsChild {
+			t.Errorf("parent `%s' is missing `%s' as a child", p.Name, n.Name)
+		}
+		if n.parent != p {
+			t.Errorf("wrong parent for `%s'; got: `%s', want: `%s'", n.Name, n.parent.Name, p.Name)
+		}
+		if c.isDir {
+			p = n // [#child_after]
+		}
+	}
+}
+
 func ExamplePersist() {
 	_, server := mockServer()
 
@@ -439,6 +740,7 @@ func ExamplePersist() {
 
 	fd, err := mfs.Create(server.sroot + "/marshalled.xml")
 	panicIf(err)
+	defer fd.Close() // ignore close err!
 
 	err = Persist(fd)
 	panicIf(err)
@@ -453,8 +755,6 @@ func ExamplePersist() {
 	fd.Seek(0, io.SeekStart)
 	err = Load(fd)
 	panicIf(err)
-
-	fd.Close()
 
 	fmt.Printf("Storage listing follows:\n%s", root)
 	// Output: XML follows:
