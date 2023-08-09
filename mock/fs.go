@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/exp/maps"
@@ -81,50 +82,82 @@ type FakeFileSystem struct {
 
 var _ FileSystem = (*FakeFileSystem)(nil)
 
+const umask = 0022
+
 func (m *FakeFileSystem) Create(path string) (File, error) {
-	if f, ok := m.contents[path]; ok {
-		f.bytes = nil
-		f.lastMod = time.Now()
-		return f.Fd(), nil
+	path = filepath.Clean(path)
+
+	if path[len(path)-1] == '/' {
+		return nil, &os.PathError{
+			Op:   "open",
+			Path: path,
+			Err:  syscall.EISDIR,
+		}
 	}
 
-	parentPath := filepath.Dir(path) + "/"
+	if f, ok := m.contents[path]; ok {
+		if f.isDir {
+			return nil, &os.PathError{
+				Op:   "open",
+				Path: path,
+				Err:  syscall.EISDIR,
+			}
+		}
+		f.bytes = nil
+		f.lastMod = Time()
+		return f.FD(), nil
+	}
+
+	parentPath := filepath.Dir(path)
 	p, ok := m.contents[parentPath]
 	if !ok {
-		return nil, fmt.Errorf("%s: %w", path, os.ErrNotExist)
+		return nil, &os.PathError{
+			Op:   "open",
+			Path: path,
+			Err:  syscall.ENOENT,
+		}
 	}
 
-	parts := strings.Split(path, "/")
 	f := &FakeFile{
 		isDir:   false,
 		path:    path,
-		name:    parts[len(parts)-1],
-		bytes:   nil,
-		mode:    0666,
+		name:    filepath.Base(path),
+		mode:    0666 - umask,
 		lastMod: Time(),
 		parent:  p,
 	}
 	p.children[path] = f
 	m.contents[path] = f
-	return f.Fd(), nil
+	return f.FD(), nil
 }
 
 func (m *FakeFileSystem) Open(path string) (File, error) {
+	path = filepath.Clean(path)
 	if f, ok := m.contents[path]; ok {
-		return f.Fd(), nil
+		return f.FD(), nil
 	}
-	return nil, fmt.Errorf("%s: %w", path, os.ErrNotExist)
+	return nil, &os.PathError{
+		Op:   "open",
+		Path: path,
+		Err:  syscall.ENOENT,
+	}
 }
 
 func (m *FakeFileSystem) Stat(path string) (fs.FileInfo, error) {
+	path = filepath.Clean(path)
 	if f, ok := m.contents[path]; ok {
-		return f.Fd(), nil
+		return f.FD(), nil
 	}
-	return nil, fmt.Errorf("%s: %w", path, os.ErrNotExist)
+	return nil, &os.PathError{
+		Op:   "stat",
+		Path: path,
+		Err:  syscall.ENOENT,
+	}
 }
 
 func readDir(d *FakeFile) []*FakeFile {
 	children := maps.Values(d.children)
+	// files are visited in lexicographical order
 	sort.Slice(children, func(i, j int) bool {
 		return children[i].path < children[j].path
 	})
@@ -132,7 +165,7 @@ func readDir(d *FakeFile) []*FakeFile {
 }
 
 func walkDir(d *FakeFile, fn fs.WalkDirFunc) error {
-	err := fn(d.path, d.Fd(), nil)
+	err := fn(d.path, d.FD(), nil)
 	if err == fs.SkipDir {
 		return nil // successfully skipped directory
 	}
@@ -143,9 +176,11 @@ func walkDir(d *FakeFile, fn fs.WalkDirFunc) error {
 	dirEntries := readDir(d)
 	for _, d := range dirEntries {
 		if d.isDir {
+			// we decend into directories first, before we continue on in the
+			// current directory
 			err = walkDir(d, fn)
 		} else {
-			err = fn(d.path, d.Fd(), nil)
+			err = fn(d.path, d.FD(), nil)
 		}
 		if err != nil {
 			if err == fs.SkipDir {
@@ -158,13 +193,19 @@ func walkDir(d *FakeFile, fn fs.WalkDirFunc) error {
 }
 
 func (m *FakeFileSystem) WalkDir(root string, fn fs.WalkDirFunc) (err error) {
+	// @fixme: the path passed to fn should always have root as prefix
+	root = filepath.Clean(root)
 	r, ok := m.contents[root]
 	if !ok {
-		err = fmt.Errorf("%s: %w", root, os.ErrNotExist)
+		err = &os.PathError{
+			Op:   "lstat",
+			Path: root,
+			Err:  syscall.ENOENT,
+		}
 	}
 
 	if err != nil {
-		err = fn(root, r.Fd(), err)
+		err = fn(root, r.FD(), err)
 	} else {
 		err = walkDir(r, fn)
 	}
@@ -177,35 +218,69 @@ func (m *FakeFileSystem) WalkDir(root string, fn fs.WalkDirFunc) (err error) {
 
 func (m *FakeFileSystem) Truncate(path string, size int64) error {
 	if f, ok := m.contents[path]; ok {
+		if f.isDir {
+			return &os.PathError{
+				Op:   "truncate",
+				Path: path,
+				Err:  syscall.EISDIR,
+			}
+		}
 		f.bytes = f.bytes[:size]
 		return nil
 	}
-	return fmt.Errorf("%s: %w", path, os.ErrNotExist)
+	return &os.PathError{
+		Op:   "truncate",
+		Path: path,
+		Err:  syscall.ENOENT,
+	}
 }
 
 func (m *FakeFileSystem) ReadFile(path string) ([]byte, error) {
+	path = filepath.Clean(path)
 	if f, ok := m.contents[path]; ok {
+		if f.isDir {
+			return nil, &os.PathError{
+				Op:   "read",
+				Path: path,
+				Err:  syscall.EISDIR,
+			}
+		}
 		return f.bytes, nil
 	}
-	return nil, fmt.Errorf("%s: %w", path, os.ErrNotExist)
+	return nil, &os.PathError{
+		Op:   "open",
+		Path: path,
+		Err:  syscall.ENOENT,
+	}
 }
 
 func (m *FakeFileSystem) WriteFile(path string, data []byte, perm os.FileMode) error {
+	path = filepath.Clean(path)
 	if f, ok := m.contents[path]; ok {
+		if f.isDir {
+			return &os.PathError{
+				Op:   "open",
+				Path: path,
+				Err:  syscall.EISDIR,
+			}
+		}
 		f.bytes = data
 		return nil
 	}
-	parentPath := filepath.Dir(path) + "/"
+	parentPath := filepath.Dir(path)
 	p, ok := m.contents[parentPath]
 	if !ok {
-		return fmt.Errorf("%s: %w", path, os.ErrNotExist)
+		return &os.PathError{
+			Op:   "open",
+			Path: path,
+			Err:  syscall.ENOENT,
+		}
 	}
 
-	parts := strings.Split(path, "/")
 	f := &FakeFile{
 		isDir:   false,
 		path:    path,
-		name:    parts[len(parts)-1],
+		name:    filepath.Base(path),
 		bytes:   data,
 		mode:    perm,
 		lastMod: Time(),
@@ -217,20 +292,27 @@ func (m *FakeFileSystem) WriteFile(path string, data []byte, perm os.FileMode) e
 }
 
 func (m *FakeFileSystem) Remove(path string) error {
+	path = filepath.Clean(path)
 	if f, ok := m.contents[path]; ok {
 		if f.isDir && len(f.children) > 0 {
 			return &os.PathError{
-				Op:   "Remove",
+				Op:   "remove",
 				Path: path,
-				Err:  fmt.Errorf("cannot delete non-empty directory"),
+				Err:  syscall.ENOTEMPTY,
 			}
 		}
 		delete(m.contents, path)
+		return nil
 	}
-	return nil
+	return &os.PathError{
+		Op:   "remove",
+		Path: path,
+		Err:  syscall.ENOENT,
+	}
 }
 
 func (m *FakeFileSystem) RemoveAll(path string) error {
+	path = filepath.Clean(path)
 	if f, ok := m.contents[path]; ok {
 		delete(m.contents, path)
 		if f.isDir {
@@ -253,7 +335,7 @@ type FakeFile struct {
 	children map[string]*FakeFile
 }
 
-func (m *FakeFile) Fd() *FakeFileDescriptor {
+func (m *FakeFile) FD() *FakeFileDescriptor {
 	return &FakeFileDescriptor{m, 0}
 }
 
@@ -266,9 +348,9 @@ var _ File = (*FakeFileDescriptor)(nil)
 var _ fs.DirEntry = (*FakeFileDescriptor)(nil)
 var _ fs.FileInfo = (*FakeFileDescriptor)(nil)
 
-func (*FakeFileDescriptor) Close() error {
-	// nop
-	return nil
+func (m *FakeFileDescriptor) Close() error {
+	// m.file = nil // make sure that a closed fd can't be used anymore ???
+	return nil // nop
 }
 
 func (m *FakeFileDescriptor) Name() string {
@@ -281,6 +363,13 @@ func (m *FakeFileDescriptor) Stat() (fs.FileInfo, error) {
 }
 
 func (m *FakeFileDescriptor) Read(b []byte) (n int, err error) {
+	if m.file.isDir {
+		return 0, &os.PathError{
+			Op:   "read",
+			Path: m.file.path,
+			Err:  syscall.EISDIR,
+		}
+	}
 	if m.cursor == int64(len(m.file.bytes)) {
 		return 0, io.EOF
 	}
@@ -290,6 +379,17 @@ func (m *FakeFileDescriptor) Read(b []byte) (n int, err error) {
 }
 
 func (m *FakeFileDescriptor) Write(b []byte) (n int, err error) {
+	// @todo: write a test with multiple subsequent writes, make sure the data
+	// is correctly written (nothing overlapping)
+	// @todo: write a test where something in the middle of the file is
+	// overwritten, beginning and end must stay the same.
+	if m.file.isDir {
+		return 0, &os.PathError{
+			Op:   "write",
+			Path: m.file.path,
+			Err:  syscall.EBADF,
+		}
+	}
 	nl := len(b) + len(m.file.bytes[:m.cursor])
 	nbs := make([]byte, nl)
 	copy(nbs, m.file.bytes[:m.cursor])
@@ -348,7 +448,7 @@ func MockFS() (fs *FakeFileSystem) {
 		isDir:    true,
 		path:     "/",
 		name:     "/",
-		mode:     0755,
+		mode:     0777 - umask,
 		lastMod:  Time(),
 		parent:   nil,
 		children: map[string]*FakeFile{},
@@ -364,25 +464,21 @@ func MockFS() (fs *FakeFileSystem) {
 	return
 }
 
-func (m *FakeFileSystem) CreateDirectories(name string) *FakeFileSystem {
-	var parts []string
-	for _, s := range strings.Split(name, string(os.PathSeparator)) {
-		if s != "" {
-			parts = append(parts, s)
-		}
-	}
+func (m *FakeFileSystem) CreateDirectories(path string) *FakeFileSystem {
+	path = filepath.Clean(path)
+	parts := strings.Split(path, "/")[1:] // exclude empty string ""
 
 	p := m.root
 
 	for i := range parts {
-		pname := "/" + strings.Join(parts[:i+1], string(os.PathSeparator)) + "/"
+		pname := "/" + strings.Join(parts[:i+1], "/")
 		pn, ok := m.contents[pname]
 		if !ok {
 			pn = &FakeFile{
 				isDir:    true,
 				path:     pname,
 				name:     parts[i] + "/",
-				mode:     0755,
+				mode:     0777 - umask,
 				lastMod:  Time(),
 				parent:   p,
 				children: map[string]*FakeFile{},
@@ -398,22 +494,19 @@ func (m *FakeFileSystem) CreateDirectories(name string) *FakeFileSystem {
 }
 
 // @todo: Use Options pattern?
-// @todo: dir and dir/ should be the same, if a file abc exists, no dir abc may
-// exist in the same path, neither if a dir abc exists, no file abc may exist.
-// @todo: make sure all the functions and methods have similar behaviour to the
-// real ones.
+// @todo: make sure to use os.PathSeparator everywhere!!! (or fix filepath.Clean to only use /)
 
 func (m *FakeFileSystem) AddFile(name, data string) *FakeFileSystem {
 	if strings.Contains(name, "/") {
 		panic("file name must not contain the Unix path separator ('/')")
 	}
-	path := filepath.Clean(m.parent.path + name)
+	path := filepath.Join(m.parent.path, name)
 	f := &FakeFile{
 		isDir:   false,
 		path:    path,
 		name:    name,
 		bytes:   []byte(data),
-		mode:    0644,
+		mode:    0666 - umask,
 		lastMod: Time(),
 		parent:  m.parent,
 	}
@@ -423,16 +516,18 @@ func (m *FakeFileSystem) AddFile(name, data string) *FakeFileSystem {
 }
 
 func (m *FakeFileSystem) AddDirectory(name string) *FakeFileSystem {
-	if strings.Contains(name[:len(name)-1], "/") {
+	if name[len(name)-1] == '/' {
+		name = name[:len(name)-1]
+	}
+	if strings.Contains(name, "/") {
 		panic("directory name must only contain the Unix path separator ('/') as a suffix.")
 	}
-	// Clean removes the last /, so we need to add it again
-	path := filepath.Clean(m.parent.path+name) + "/"
+	path := filepath.Join(m.parent.path, name)
 	d := &FakeFile{
 		isDir:    true,
 		path:     path,
-		name:     name,
-		mode:     0755,
+		name:     name + "/",
+		mode:     0777 - umask,
 		lastMod:  Time(),
 		parent:   m.parent,
 		children: map[string]*FakeFile{},

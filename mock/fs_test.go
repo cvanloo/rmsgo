@@ -4,7 +4,6 @@ import (
 	"errors"
 	"io"
 	"io/fs"
-	"log"
 	"os"
 	"testing"
 )
@@ -471,17 +470,15 @@ func TestWalkDir(t *testing.T) {
 		Into().
 		AddFile("9", "")
 
-	log.Println(m)
-
 	expected, visited := []string{
-		"/tmp/t/",
+		"/tmp/t",
 		"/tmp/t/1",
-		"/tmp/t/2/",
+		"/tmp/t/2",
 		"/tmp/t/2/4",
 		"/tmp/t/2/5",
 		"/tmp/t/2/6",
-		"/tmp/t/2/7/",
-		"/tmp/t/2/7/8/",
+		"/tmp/t/2/7",
+		"/tmp/t/2/7/8",
 		"/tmp/t/2/7/8/9",
 		"/tmp/t/3",
 	}, []string{}
@@ -522,18 +519,16 @@ func TestWalkDirSkipOnDir(t *testing.T) {
 		Into().
 		AddFile("9", "")
 
-	log.Println(m)
-
 	expected, visited := []string{
-		"/tmp/t/",
+		"/tmp/t",
 		"/tmp/t/1",
-		"/tmp/t/2/",
+		"/tmp/t/2",
 		"/tmp/t/3",
 	}, []string{}
 
 	err := m.WalkDir("/tmp/t/", func(path string, d fs.DirEntry, err error) error {
 		visited = append(visited, path)
-		if path == "/tmp/t/2/" {
+		if path == "/tmp/t/2" {
 			return fs.SkipDir
 		}
 		return nil
@@ -571,12 +566,10 @@ func TestWalkDirSkipWithinDir(t *testing.T) {
 		Into().
 		AddFile("9", "")
 
-	log.Println(m)
-
 	expected, visited := []string{
-		"/tmp/t/",
+		"/tmp/t",
 		"/tmp/t/1",
-		"/tmp/t/2/",
+		"/tmp/t/2",
 		"/tmp/t/2/4",
 		"/tmp/t/2/5",
 		"/tmp/t/3",

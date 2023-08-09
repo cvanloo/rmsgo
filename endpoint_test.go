@@ -43,8 +43,6 @@ import (
 //   it doesn't make sense to have multiple servers
 //   it's more a config than a server,
 //   but it allows to use it as an http.Handler (ServeHTTP)
-// @todo: Test Migrate/Load/Persist
-// @todo: Creating a server (-config) should also Reset()?
 // @todo: how exactly should a server be configured and setup?
 
 func mockServer() (*FakeFileSystem, Server) {
