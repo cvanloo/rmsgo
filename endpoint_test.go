@@ -3,11 +3,13 @@ package rmsgo
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 )
 
@@ -172,9 +174,83 @@ func ExampleServer_GetFolder() {
 	// {"@context":"http://remotestorage.io/spec/folder-description","items":{"First.txt":{"Content-Length":18,"Content-Type":"funny/format","ETag":"f0d0f717619b09cc081bb0c11d9b9c6b","Last-Modified":"Mon, 01 Jan 0001 00:00:00 UTC"}}}
 }
 
-func TestGetFolder(t *testing.T) {
+// @todo: PUT chunked transfer coding?
+// @todo: http1.1, offer switch to http2
+
+// @todo: TestPutDocument
+//  - check that parents are silently created as necessary
+//  - check that all parent folders have their version updated
+//  - Don't provide content type (auto-detect)
+//  - put to already existing document
+//  - put to folder (must fail) 4XX
+//  - conditional (If-Match) with success
+//  - conditional (If-Match) with failure 412
+//  - conditional (If-Non-Match: *) with success (document does not exist)
+//  - conditional (If-Non-Match: *) with failure 412 (document already exists)
+//  - 409 when any parent folder name clashes with existing document, or
+//    document clashes with existing folder
+
+func TestPutDocument(t *testing.T) {
 	fs, server := mockServer()
-	_ = fs
+
+	ts := httptest.NewServer(server)
+	defer ts.Close()
+
+	remoteRoot := ts.URL + server.rroot
+
+	const content = "My first document."
+
+	req, err := http.NewRequest(http.MethodPut, remoteRoot+"/Documents/First.txt", bytes.NewReader([]byte(content)))
+	req.Header.Set("Content-Type", "funny/format")
+	if err != nil {
+		t.Error(err)
+	}
+
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusCreated {
+		t.Errorf("got: %d, want: %d", r.StatusCode, http.StatusCreated)
+	}
+	if e := r.Header.Get("ETag"); e != "f0d0f717619b09cc081bb0c11d9b9c6b" {
+		t.Errorf("got: `%s', want: `f0d0f717619b09cc081bb0c11d9b9c6b'", e)
+	}
+
+	n, err := Retrieve("/Documents/First.txt")
+	if err != nil {
+		t.Error(err)
+	}
+	if n.Mime != "funny/format" {
+		t.Errorf("got: `%s', want: funny/format", n.Mime)
+	}
+	if must(n.Version()).String() != "f0d0f717619b09cc081bb0c11d9b9c6b" {
+		t.Errorf("got: `%s', want: `f0d0f717619b09cc081bb0c11d9b9c6b'", n.ETag)
+	}
+	if n.Name != "First.txt" {
+		t.Errorf("got: `%s', want: `First.txt'", n.Name)
+	}
+	if n.Rname != "/Documents/First.txt" {
+		t.Errorf("got: `%s', want: `/Documents/First.txt'", n.Rname)
+	}
+	if n.Length != int64(len(content)) {
+		t.Errorf("got: `%d', want: `%d'", n.Length, len(content))
+	}
+	if n.IsFolder {
+		t.Error("a document should never be a folder")
+	}
+
+	bs, err := fs.ReadFile(n.Sname)
+	if err != nil {
+		t.Error(err)
+	}
+	if string(bs) != content {
+		t.Errorf("got: `%s', want: `%s'", bs, content)
+	}
+}
+
+func TestGetFolder(t *testing.T) {
+	_, server := mockServer()
 
 	ts := httptest.NewServer(server)
 	defer ts.Close()
@@ -195,6 +271,10 @@ func TestGetFolder(t *testing.T) {
 	r, err = http.Get(ts.URL + "/storage/")
 	if err != nil {
 		t.Error(err)
+	}
+
+	if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
+		t.Errorf("got: `%s', want: `no-cache'", cc)
 	}
 
 	bs, err := io.ReadAll(r.Body)
@@ -241,16 +321,205 @@ func TestGetFolder(t *testing.T) {
 }
 
 func TestHeadFolder(t *testing.T) {
+	_, server := mockServer()
+
+	ts := httptest.NewServer(server)
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodPut, ts.URL+"/storage/Documents/First.txt", bytes.NewReader([]byte("My first document.")))
+	if err != nil {
+		t.Error(err)
+	}
+
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusCreated {
+		t.Errorf("got: %d, want: %d", r.StatusCode, http.StatusCreated)
+	}
+
+	r, err = http.Head(ts.URL + "/storage/")
+	if err != nil {
+		t.Error(err)
+	}
+
+	bs, err := io.ReadAll(r.Body)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(bs) != 0 {
+		t.Error("the response to a head request should have an empty body")
+	}
+
+	if etag := r.Header.Get("ETag"); etag != "6495a5d8eb9f9c5343a03540b6e3dfaa" {
+		t.Errorf("got: `%s', want: 6495a5d8eb9f9c5343a03540b6e3dfaa", etag)
+	}
+
+	if l := r.Header.Get("Content-Length"); l != "130" {
+		t.Errorf("got: `%s', want: 130", l)
+	}
 }
 
 func TestGetDocument(t *testing.T) {
+	_, server := mockServer()
+
+	ts := httptest.NewServer(server)
+	defer ts.Close()
+
+	const content = "My first document."
+
+	req, err := http.NewRequest(http.MethodPut, ts.URL+"/storage/Documents/First.txt", bytes.NewReader([]byte(content)))
+	req.Header.Set("Content-Type", "funny/format")
+	if err != nil {
+		t.Error(err)
+	}
+
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusCreated {
+		t.Errorf("got: %d, want: %d", r.StatusCode, http.StatusCreated)
+	}
+
+	r, err = http.Get(ts.URL + "/storage/Documents/First.txt")
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusOK {
+		t.Errorf("got: %d, want: %d", r.StatusCode, http.StatusOK)
+	}
+	if l := r.Header.Get("Content-Length"); l != fmt.Sprintf("%d", len(content)) {
+		t.Errorf("got: %s, want: %d", l, len(content))
+	}
+	if e := r.Header.Get("ETag"); e != "f0d0f717619b09cc081bb0c11d9b9c6b" {
+		t.Errorf("got: `%s, want: f0d0f717619b09cc081bb0c11d9b9c6b", e)
+	}
+	if ct := r.Header.Get("Content-Type"); ct != "funny/format" {
+		t.Errorf("got: `%s', want: funny/format", ct)
+	}
+	if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
+		t.Errorf("got: `%s', want: `no-cache'", cc)
+	}
+
+	bs, err := io.ReadAll(r.Body)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(bs) != len(content) {
+		t.Errorf("mismatched content length; got: %d, want: %d", len(bs), len(content))
+	}
+	if string(bs) != content {
+		t.Errorf("got: `%s', want: `%s'", bs, content)
+	}
 }
 
 func TestHeadDocument(t *testing.T) {
-}
+	_, server := mockServer()
 
-func TestPutDocument(t *testing.T) {
+	ts := httptest.NewServer(server)
+	defer ts.Close()
+
+	const content = "My first document."
+
+	req, err := http.NewRequest(http.MethodPut, ts.URL+"/storage/Documents/First.txt", bytes.NewReader([]byte(content)))
+	req.Header.Set("Content-Type", "funny/format")
+	if err != nil {
+		t.Error(err)
+	}
+
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusCreated {
+		t.Errorf("got: %d, want: %d", r.StatusCode, http.StatusCreated)
+	}
+
+	r, err = http.Head(ts.URL + "/storage/Documents/First.txt")
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusOK {
+		t.Errorf("got: %d, want: %d", r.StatusCode, http.StatusOK)
+	}
+	if l := r.Header.Get("Content-Length"); l != fmt.Sprintf("%d", len(content)) {
+		t.Errorf("got: %s, want: %d", l, len(content))
+	}
+	if e := r.Header.Get("ETag"); e != "f0d0f717619b09cc081bb0c11d9b9c6b" {
+		t.Errorf("got: `%s, want: f0d0f717619b09cc081bb0c11d9b9c6b", e)
+	}
+	if ct := r.Header.Get("Content-Type"); ct != "funny/format" {
+		t.Errorf("got: `%s', want: funny/format", ct)
+	}
+
+	bs, err := io.ReadAll(r.Body)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(bs) != 0 {
+		t.Errorf("the response to a head request should have an empty body; got: `%s'", bs)
+	}
 }
 
 func TestDeleteDocument(t *testing.T) {
+	fs, server := mockServer()
+
+	ts := httptest.NewServer(server)
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodPut, ts.URL+"/storage/Documents/First.txt", bytes.NewReader([]byte("My first document.")))
+	if err != nil {
+		t.Error(err)
+	}
+
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusCreated {
+		t.Errorf("got: %d, want: %d", r.StatusCode, http.StatusCreated)
+	}
+	firstETag := r.Header.Get("ETag")
+	if firstETag != "cccbdca11c50776583965bf7631964d6" {
+		t.Errorf("got: `%s', want: `cccbdca11c50776583965bf7631964d6'", firstETag)
+	}
+
+	n, err := Retrieve("/Documents/First.txt")
+	if err != nil {
+		t.Error(err)
+	}
+
+	_, err = fs.Stat(n.Sname)
+	if err != nil {
+		t.Error(err)
+	}
+
+	req, err = http.NewRequest(http.MethodDelete, ts.URL+"/storage/Documents/First.txt", nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	r, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if r.StatusCode != http.StatusOK {
+		t.Errorf("got: `%d', want: `%d'", r.StatusCode, http.StatusOK)
+	}
+	if e := r.Header.Get("ETag"); e != firstETag {
+		t.Errorf("got: `%s', want: `%s'", e, firstETag)
+	}
+
+	_, err = fs.Stat(n.Sname)
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("got: `%v', want: `%v'", err, os.ErrNotExist)
+	}
+
+	_, err = Retrieve("/Documents/")
+	if err != ErrNotFound {
+		t.Errorf("got: `%v', want: `%v'", err, ErrNotFound)
+	}
 }

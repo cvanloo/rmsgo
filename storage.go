@@ -277,6 +277,7 @@ func DeleteDocument(sname string) error {
 
 func AddDocument(rname, sname string, fsize int64, mime string) (*Node, error) {
 	if f, ok := files[rname]; ok {
+		// @fixme: this (should) also apply when a folder with that name+/ exists!
 		return f, ErrFileExists
 	}
 

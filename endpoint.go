@@ -212,7 +212,7 @@ func (s Server) GetDocument(w http.ResponseWriter, r *http.Request) error {
 	hs.Set("Cache-Control", "no-cache")
 	hs.Set("ETag", etag.String())
 	hs.Set("Content-Type", n.Mime)
-	_, err = io.Copy(w, fd)
+	_, err = io.Copy(w, fd) // @perf: is this efficient for HEAD requests?
 	return err
 }
 

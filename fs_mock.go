@@ -397,6 +397,12 @@ func (m *mockFileSystem) CreateDirectories(name string) *mockFileSystem {
 	return m
 }
 
+// @todo: Use Options pattern?
+// @todo: dir and dir/ should be the same, if a file abc exists, no dir abc may
+// exist in the same path, neither if a dir abc exists, no file abc may exist.
+// @todo: make sure all the functions and methods have similar behaviour to the
+// real ones.
+
 func (m *mockFileSystem) AddFile(name, data string) *mockFileSystem {
 	if strings.Contains(name, "/") {
 		panic("file name must not contain the Unix path separator ('/')")
