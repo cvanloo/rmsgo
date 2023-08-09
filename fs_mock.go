@@ -104,6 +104,7 @@ func (m *mockFileSystem) Create(path string) (file, error) {
 		lastMod: getTime(),
 		parent:  p,
 	}
+	p.children[path] = f
 	m.contents[path] = f
 	return f.Fd(), nil
 }
@@ -201,7 +202,7 @@ func (m *mockFileSystem) WriteFile(path string, data []byte, perm os.FileMode) e
 	}
 
 	parts := strings.Split(path, "/")
-	m.contents[path] = &mockFile{
+	f := &mockFile{
 		isDir:   false,
 		path:    path,
 		name:    parts[len(parts)-1],
@@ -210,6 +211,8 @@ func (m *mockFileSystem) WriteFile(path string, data []byte, perm os.FileMode) e
 		lastMod: getTime(),
 		parent:  p,
 	}
+	p.children[path] = f
+	m.contents[path] = f
 	return nil
 }
 
