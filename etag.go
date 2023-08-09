@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"sort"
-	"time"
 
 	"golang.org/x/exp/maps"
 )
@@ -67,7 +66,7 @@ func calculateETag(n *Node) error {
 		} else {
 			io.WriteString(hash, cn.Name)
 			io.WriteString(hash, cn.Mime)
-			io.WriteString(hash, cn.LastMod.Format(time.RFC1123))
+			io.WriteString(hash, cn.LastMod.Format(rmsTimeFormat))
 
 			fd, err := mfs.Open(cn.Sname)
 			if err != nil {
