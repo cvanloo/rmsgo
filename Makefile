@@ -1,12 +1,11 @@
+.PHONY: test debug debug_test coverage coverage_html clean
+
 test:
 ifdef run
 	@go test -v -tags=delve ./... -run=$(run)
 else
 	@go test -tags=delve ./...
 endif
-
-debug:
-	@dlv debug cmd/rms_server.go --build-flags="-tags=delve"
 
 debug_test:
 ifdef run
@@ -15,12 +14,17 @@ else
 	@dlv test . --build-flags="-tags=delve"
 endif
 
-coverage:
-	@go test -tags=delve -coverprofile=coverage
-	@go tool cover -func=coverage
+debug:
+	@dlv debug cmd/rms_server.go --build-flags="-tags=delve"
 
-coverage_html: coverage
-	@go tool cover -html=coverage
+coverage: coverage.out
+	@go tool cover -func=coverage.out
+
+coverage_html: coverage.out
+	@go tool cover -html=coverage.out
 
 clean:
-	rm coverage
+	-rm coverage.out
+
+coverage.out:
+	@go test -tags=delve -coverprofile=coverage.out
