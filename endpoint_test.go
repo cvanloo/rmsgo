@@ -50,7 +50,9 @@ func mockServer() (*FakeFileSystem, Server) {
 		rroot = "/storage/"
 		sroot = "/tmp/rms/storage/"
 	)
-	server, _ := New(rroot, sroot)
+	server, _ := New(rroot, sroot, func(err error) {
+		log.Fatal(err)
+	})
 	fs := Mock()
 	fs.CreateDirectories(server.sroot)
 	Reset()
@@ -518,7 +520,7 @@ func TestDeleteDocument(t *testing.T) {
 	}
 
 	_, err = Retrieve("/Documents/")
-	if err != ErrNotFound {
-		t.Errorf("got: `%v', want: `%v'", err, ErrNotFound)
+	if err != ErrNotExist {
+		t.Errorf("got: `%v', want: `%v'", err, ErrNotExist)
 	}
 }

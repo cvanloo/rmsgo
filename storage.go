@@ -2,7 +2,6 @@ package rmsgo
 
 import (
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -31,8 +30,6 @@ func init() {
 var (
 	files map[string]*Node
 	root  *Node
-
-	ErrFileExists = errors.New("file already exists") // @todo: remove error?
 )
 
 // @todo: create separate DTO for (de)serialization
@@ -230,7 +227,7 @@ func Migrate(cfg Server, root string) (errs []error) {
 		}
 
 		rname := strings.TrimPrefix(path, root[:len(root)-1])
-		AddDocument(rname, sname, fsize, mime)
+		AddDocument(rname, sname, fsize, mime) // @todo: error handling
 		return nil
 	})
 	if err != nil {
@@ -240,6 +237,7 @@ func Migrate(cfg Server, root string) (errs []error) {
 }
 
 func WriteFile(cfg Server, sname string, data io.Reader) (nsname string, fsize int64, detectedMime string, err error) {
+	// @todo: always pass sname in by parameter
 	if sname == "" {
 		u, err := UUID()
 		if err != nil {
@@ -260,7 +258,12 @@ func WriteFile(cfg Server, sname string, data io.Reader) (nsname string, fsize i
 		return nsname, fsize, "", err
 	}
 
-	fd.Seek(0, io.SeekStart)
+	_, err = fd.Seek(0, io.SeekStart)
+	if err != nil {
+		return nsname, fsize, "", err
+	}
+
+	// @todo: don't do this in here
 	mime, err := mimetype.DetectReader(fd)
 	if err != nil {
 		return nsname, fsize, mime.String(), err
@@ -274,13 +277,19 @@ func DeleteDocument(sname string) error {
 }
 
 func AddDocument(rname, sname string, fsize int64, mime string) (*Node, error) {
-	rname = filepath.Clean(rname) // @todo(#correct_place): is this the correct place for this?
-	assert(rname[len(rname)-1] != '/', "AddDocument must only be used to create files")
+	rname = filepath.Clean(rname)
 
-	if f, ok := files[rname]; ok {
-		// @fixme: better error reporting, also if there already is a directory
-		// with the same name
-		return f, ErrFileExists
+	{
+		assert(rname[len(rname)-1] != '/', "AddDocument must only be used to create files")
+		//_, ok := files[rname]
+		//assert(!ok, "AddDocument must only be used to create files that don't exist yet")
+	}
+
+	if _, ok := files[rname]; ok {
+		return nil, ConflictError{
+			Path:         rname,
+			ConflictPath: rname,
+		}
 	}
 
 	var (
@@ -289,10 +298,17 @@ func AddDocument(rname, sname string, fsize int64, mime string) (*Node, error) {
 		p     = root
 	)
 
-	for i := range parts {
+	for i := range parts { // traverse through the hierarchy, starting at the top most ancestor (excluding root)
 		pname := "/" + strings.Join(parts[:i+1], string(os.PathSeparator))
 		pn, ok := files[pname]
-		if !ok {
+		if ok { // a document name clashes with one of the ancestor folders
+			if !pn.IsFolder {
+				return nil, ConflictError{
+					Path:         rname,
+					ConflictPath: pname,
+				}
+			}
+		} else { // from here on downwards ancestors don't exist, we have to create them
 			pn = &Node{
 				parent:   p,
 				IsFolder: true,
@@ -306,7 +322,7 @@ func AddDocument(rname, sname string, fsize int64, mime string) (*Node, error) {
 		}
 		p = pn
 	}
-	// p now points to the file's immediate parent [#1]
+	// p now points to the document's immediate parent [#1]
 
 	name := filepath.Base(rname)
 	tnow := Time()
@@ -333,39 +349,25 @@ func AddDocument(rname, sname string, fsize int64, mime string) (*Node, error) {
 	return f, nil
 }
 
-func UpdateDocument(rname string, fsize int64, mime string) (*Node, error) {
-	rname = filepath.Clean(rname) // @todo(#correct_place)
-	f, ok := files[rname]
-	if !ok {
-		return nil, ErrNotFound
-	}
-
-	assert(!f.IsFolder, "UpdateDocument must not be called on a folder")
+func UpdateDocument(n *Node, mime string, fsize int64) {
+	assert(!n.IsFolder, "UpdateDocument must not be called on a folder")
 
 	tnow := Time()
-	f.Mime = mime
-	f.Length = int64(fsize)
-	f.LastMod = &tnow
+	n.Mime = mime
+	n.Length = int64(fsize)
+	n.LastMod = &tnow
 
-	n := f
-	for n != nil {
-		n.Invalidate()
-		n = n.parent
+	c := n
+	for c != nil {
+		c.Invalidate()
+		c = c.parent
 	}
-
-	return f, nil
 }
 
-func RemoveDocument(rname string) (*Node, error) {
-	rname = filepath.Clean(rname) // @todo(#correct_place)
-	f, ok := files[rname]
-	if !ok {
-		return nil, ErrNotFound
-	}
+func RemoveDocument(n *Node) {
+	assert(!n.IsFolder, "RemoveDocument must not be called on a folder")
 
-	assert(!f.IsFolder, "RemoveDocument must not be called on a folder")
-
-	p := f
+	p := n
 	for len(p.children) == 0 && p != root {
 		pp := p.parent
 		delete(pp.children, p.Rname)
@@ -378,17 +380,15 @@ func RemoveDocument(rname string) (*Node, error) {
 		p.Invalidate()
 		p = p.parent
 	}
-
-	err := FS.Remove(f.Sname)
-	return f, err
 }
 
 func Retrieve(rname string) (*Node, error) {
-	rname = filepath.Clean(rname) // @todo(#correct_place)
-	if f, ok := files[rname]; ok {
-		return f, nil
+	rname = filepath.Clean(rname)
+	f, ok := files[rname]
+	if !ok {
+		return nil, ErrNotExist
 	}
-	return nil, ErrNotFound // @todo: wrap with rname (WHAT resource was not found?)
+	return f, nil
 }
 
 func (n Node) String() string {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"strings"
 	"testing"
 
@@ -140,20 +141,21 @@ func TestUpdateDocument(t *testing.T) {
 	const path = "/FunFacts/Part1.txt"
 
 	sname, fsize, _, err := WriteFile(server, "", bytes.NewReader([]byte("Elephants can't jump.")))
-	n1, err := AddDocument(path, sname, fsize, "text/plain")
+	n, err := AddDocument(path, sname, fsize, "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
 
 	sname, fsize, _, err = WriteFile(server, sname, bytes.NewReader([]byte("Honey never spoils.")))
-	n2, err := UpdateDocument(path, fsize, "text/plain")
-	if err != nil {
-		t.Error(err)
-	}
+	UpdateDocument(n, "image/png", fsize)
 
-	if n1 != n2 {
-		t.Error("expected nodes to be the same")
+	if n.Mime != "image/png" {
+		t.Errorf("got: `%s', want: `image/png'", n.Mime)
 	}
+	if n.Length != fsize {
+		t.Errorf("got: %d, want: %d", n.Length, fsize)
+	}
+	// n.LastMod
 }
 
 func TestRetrieve(t *testing.T) {
@@ -181,6 +183,7 @@ func TestRemoveDocument(t *testing.T) {
 
 	const path = "/FunFacts/Part3.txt"
 
+	// @todo(#fs): unnecessary to test FS here
 	sname, fsize, _, err := WriteFile(server, "", bytes.NewReader([]byte("The severed head of a sea slug can grow a whole new body.")))
 	n1, err := AddDocument(path, sname, fsize, "text/plain")
 	if err != nil {
@@ -192,18 +195,19 @@ func TestRemoveDocument(t *testing.T) {
 		t.Error(err)
 	}
 
-	n3, err := RemoveDocument(path)
+	if n1 != n2 {
+		t.Error("expected nodes to be the same")
+	}
+
+	RemoveDocument(n2)
+	FS.Remove(n2.Sname) // @todo(#fs)
 	if err != nil {
 		t.Error(err)
 	}
 
-	if n1 != n2 || n2 != n3 {
-		t.Error("expected nodes to be the same")
-	}
-
 	_, err = Retrieve(path)
-	if err != ErrNotFound {
-		t.Errorf("got: `%v', want: `%v'", err, ErrNotFound)
+	if err != ErrNotExist {
+		t.Errorf("got: `%v', want: `%v'", err, ErrNotExist)
 	}
 }
 
@@ -248,10 +252,11 @@ func TestETagUpdatedWhenDocumentAdded(t *testing.T) {
 }
 
 func TestETagUpdatedWhenDocumentRemoved(t *testing.T) {
+	// @todo(#fs) for the whole func
 	_, server := mockServer()
 
 	sname, fsize, _, err := WriteFile(server, "", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")))
-	_, err = AddDocument("/code/hello.go", sname, fsize, "text/plain")
+	helloDoc, err := AddDocument("/code/hello.go", sname, fsize, "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
@@ -272,7 +277,8 @@ func TestETagUpdatedWhenDocumentRemoved(t *testing.T) {
 	}
 	t.Logf("etag v1: %x", v1)
 
-	_, err = RemoveDocument("/code/hello.go")
+	RemoveDocument(helloDoc)
+	err = FS.Remove(helloDoc.Sname)
 	if err != nil {
 		t.Error(err)
 	}
@@ -292,6 +298,7 @@ func TestETagUpdatedWhenDocumentRemoved(t *testing.T) {
 }
 
 func TestETagUpdatedWhenDocumentUpdated(t *testing.T) {
+	// @todo(#fs)
 	_, server := mockServer()
 
 	sname, fsize, _, err := WriteFile(server, "", bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")))
@@ -323,10 +330,10 @@ func TestETagUpdatedWhenDocumentUpdated(t *testing.T) {
 	t.Logf("folder etag v1: %x", fv1)
 
 	_, fsize, _, err = WriteFile(server, sname, bytes.NewReader([]byte("var ErrExistentialCrisis = errors.New(\"why?\")")))
-	_, err = UpdateDocument("/code/error.go", fsize, "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
+	UpdateDocument(errorDoc, "text/plain", fsize)
 
 	if errorDoc.etagValid != false {
 		t.Error("expected document version to have been invalidated")
@@ -632,7 +639,9 @@ func TestMigrate(t *testing.T) {
 		rroot = "/storage/"
 		sroot = "/tmp/rms/storage/"
 	)
-	server, _ := New(rroot, sroot)
+	server, _ := New(rroot, sroot, func(err error) {
+		log.Fatal(err)
+	})
 	fs := Mock()
 	fs.CreateDirectories(server.sroot).
 		AddDirectory("somewhere").Into().

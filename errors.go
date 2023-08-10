@@ -1,6 +1,10 @@
 package rmsgo
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+	"net/http"
+)
 
 // Sentinel error values
 var (
@@ -39,3 +43,49 @@ var StatusCodes = map[error]int{
 	ErrInsufficientStorage: 507,
 	ErrBadRequest:          400,
 }
+
+// HttpError is an error handled by the remoteStorage server itself.
+// Errors of other types or that don't wrap an HttpError are looked at as
+// internal server errors and passed to the library user for handling.
+// If no entry for Cause can be found in StatusCodes, Cause is also passed to
+// the library user for further handling.
+type HttpError struct {
+	// Msg is a human readable error message.
+	Msg string
+	// Desc provides additional information to the error.
+	Desc string
+	// A URL where further details or help for the solution can be found.
+	URL string
+	// Additonal Data related to the error.
+	Data ldjson
+	// Underlying error that caused the exception.
+	// Cause is used to look up a response status code in StatusCodes.
+	// If not contained in StatusCodes, ErrServerError is used instead, and the
+	// Cause is passed to the library user for further handling.
+	Cause error
+}
+
+func (e HttpError) Error() string {
+	status, ok := StatusCodes[e.Cause]
+	if !ok {
+		status = StatusCodes[ErrServerError]
+	}
+	return fmt.Sprintf("%d %s: %s", status, http.StatusText(status), e.Msg)
+}
+
+func (e HttpError) Unwrap() error {
+	return e.Cause
+}
+
+// @todo: make storage its own package?
+
+type ConflictError struct {
+	Path         string
+	ConflictPath string
+}
+
+func (e ConflictError) Error() string {
+	return fmt.Sprintf("%s: conflicts with already existing path: %s", e.Path, e.ConflictPath)
+}
+
+var ErrNotExist = errors.New("no such document or folder")

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"sort"
 
@@ -12,9 +13,21 @@ import (
 	"golang.org/x/exp/maps"
 )
 
+// ETag is a short and unique identifier assigned to a specific version of a
+// remoteStorage resource.
 type ETag []byte
 
+// String creates a string from an Etag e.
+// To go the opposite way an obtain an ETag from a string, use ParseETag.
+func (e ETag) String() string {
+	return hex.EncodeToString(e)
+}
+
+// ParseETag decodes an ETag previously encoded by (ETag).String()
 func ParseETag(s string) (ETag, error) {
+	if len(s) != md5.Size {
+		return nil, fmt.Errorf("not a valid etag")
+	}
 	return hex.DecodeString(s)
 }
 
@@ -32,17 +45,13 @@ func (e ETag) Equal(other ETag) bool {
 	return true
 }
 
-func (e ETag) String() string {
-	return hex.EncodeToString(e)
-}
-
 var hostname string
 
 func init() {
 	var err error
 	hostname, err = os.Hostname()
 	if err != nil {
-		panic(fmt.Errorf("rmsgo: failed to read hostname: %v", err))
+		log.Fatalf("failed to read hostname: %v", err)
 	}
 }
 
@@ -58,8 +67,8 @@ func calculateETag(n *Node) error {
 		if cn.IsFolder {
 			io.WriteString(hash, cn.Name)
 			children := maps.Values(cn.children)
-			// Ensure that etag is deterministic by always hashing the chilren
-			// in the same order.
+			// Ensure that etag is deterministic by always hashing children in
+			// the same order.
 			sort.Slice(children, func(i, j int) bool {
 				return children[i].Rname < children[j].Rname
 			})
@@ -74,7 +83,13 @@ func calculateETag(n *Node) error {
 				return err
 			}
 
-			io.Copy(hash, fd)
+			n, err := io.Copy(hash, fd)
+			if err != nil {
+				return err
+			}
+			if cn.Length != int64(n) {
+				return fmt.Errorf("etag: expected to read %d bytes, got: %d", cn.Length, n)
+			}
 
 			err = fd.Close()
 			if err != nil {
