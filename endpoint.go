@@ -306,7 +306,7 @@ func (s Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 		if !etag.Equal(rev) {
 			return writeError(w, HttpError{
 				Msg:  "version mismatch",
-				Desc: "The version provided in the If-Match header does not match the documents current version.",
+				Desc: "The version provided in the If-Match header does not match the document's current version.",
 				Data: ldjson{
 					"rname":    rpath,
 					"if_match": cond,
@@ -317,27 +317,58 @@ func (s Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	contentType := r.Header.Get("Content-Type")
+	mime := r.Header.Get("Content-Type")
 
 	// @todo: merge Create and Update into one function?
 	if found {
-		_, fsize, mime, err := WriteFile(s, n.Sname, r.Body)
+		fd, err := FS.Create(n.Sname)
 		if err != nil {
 			return writeError(w, err) // internal server error
 		}
-		if contentType == "" {
-			contentType = mime // @todo(#mime): save doing this work in WriteFile if a contentType was provided?
+
+		fsize, err := io.Copy(fd, r.Body)
+		if err != nil {
+			return writeError(w, err) // internal server error
 		}
-		UpdateDocument(n, contentType, fsize)
+
+		if mime == "" {
+			mime, err = DetectMime(fd)
+			if err != nil {
+				return writeError(w, err) // internal server error
+			}
+		}
+
+		UpdateDocument(n, mime, fsize)
+
+		err = fd.Close()
+		if err != nil {
+			return writeError(w, err) // internal server error
+		}
 	} else {
-		sname, fsize, mime, err := WriteFile(s, "", r.Body)
+		u, err := UUID()
 		if err != nil {
 			return writeError(w, err) // internal server error
 		}
-		if contentType == "" {
-			contentType = mime // @todo(#mime)
+		sname := filepath.Join(s.sroot, u.String())
+
+		fd, err := FS.Create(sname)
+		if err != nil {
+			return writeError(w, err) // internal server error
 		}
-		n, err = AddDocument(rpath, sname, fsize, contentType)
+
+		fsize, err := io.Copy(fd, r.Body)
+		if err != nil {
+			return writeError(w, err) // internal server error
+		}
+
+		if mime == "" {
+			mime, err = DetectMime(fd)
+			if err != nil {
+				return writeError(w, err) // internal server error
+			}
+		}
+
+		n, err = AddDocument(rpath, sname, fsize, mime)
 		var conflictErr *ConflictError
 		if err != nil && errors.As(err, &conflictErr) {
 			return writeError(w, HttpError{
@@ -351,6 +382,11 @@ func (s Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 			})
 		}
 		assert(err == nil, "ConflictError is the only kind of error returned by AddDocument")
+
+		err = fd.Close()
+		if err != nil {
+			return writeError(w, err) // internal server error
+		}
 	}
 
 	etag, err := n.Version()
@@ -401,7 +437,7 @@ func (s Server) DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 		if !etag.Equal(rev) {
 			return writeError(w, HttpError{
 				Msg:  "version mismatch",
-				Desc: "The version provided in the If-Match header does not match the documents current version.",
+				Desc: "The version provided in the If-Match header does not match the document's current version.",
 				Data: ldjson{
 					"rname":    rpath,
 					"if_match": cond,

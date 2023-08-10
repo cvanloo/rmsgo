@@ -144,7 +144,7 @@ func Reset() {
 	root = rn
 }
 
-func Persist(persistFile File) (err error) {
+func Persist(persistFile io.Writer) (err error) {
 	files := maps.Values(files)
 	// Ensure that parents are always serialized before their children, so that
 	// they will also be read in first. [#parent_first]
@@ -175,7 +175,7 @@ func Persist(persistFile File) (err error) {
 	return nil
 }
 
-func Load(persistFile File) error {
+func Load(persistFile io.Reader) error {
 	if root == nil {
 		return fmt.Errorf("storage root not initialized, try calling Reset() before Load()")
 	}
@@ -200,14 +200,9 @@ func Load(persistFile File) error {
 // Migrate traverses the root directory and copies any files contained therein
 // into the remoteStorage root (cfg.Sroot).
 func Migrate(cfg Server, root string) (errs []error) {
-	//root = filepath.Clean(root)
 	err := FS.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			errs = append(errs, fmt.Errorf("error encountered, skipping directory: %v", err))
-			if d.IsDir() {
-				return fs.SkipDir
-			}
-			return nil
+			return err
 		}
 
 		if d.IsDir() {
@@ -219,15 +214,50 @@ func Migrate(cfg Server, root string) (errs []error) {
 			errs = append(errs, err)
 			return nil
 		}
+		defer func() {
+			err := fd.Close()
+			if err != nil {
+				errs = append(errs, err)
+			}
+		}()
 
-		sname, fsize, mime, err := WriteFile(cfg, "", fd)
+		u, err := UUID()
+		if err != nil {
+			errs = append(errs, err)
+			return nil
+		}
+		sname := filepath.Join(cfg.sroot, u.String())
+
+		rmsFD, err := FS.Create(sname)
+		if err != nil {
+			errs = append(errs, err)
+			return nil
+		}
+		defer func() {
+			err := rmsFD.Close()
+			if err != nil {
+				errs = append(errs, err)
+			}
+		}()
+
+		fsize, err := io.Copy(rmsFD, fd)
+		if err != nil {
+			errs = append(errs, err)
+			return nil
+		}
+
+		mime, err := DetectMime(rmsFD)
 		if err != nil {
 			errs = append(errs, err)
 			return nil
 		}
 
 		rname := strings.TrimPrefix(path, root[:len(root)-1])
-		AddDocument(rname, sname, fsize, mime) // @todo: error handling
+		_, err = AddDocument(rname, sname, fsize, mime)
+		if err != nil {
+			errs = append(errs, err)
+			return nil
+		}
 		return nil
 	})
 	if err != nil {
@@ -236,40 +266,23 @@ func Migrate(cfg Server, root string) (errs []error) {
 	return errs
 }
 
-func WriteFile(cfg Server, sname string, data io.Reader) (nsname string, fsize int64, detectedMime string, err error) {
-	// @todo: always pass sname in by parameter
-	if sname == "" {
-		u, err := UUID()
-		if err != nil {
-			return "", 0, "", err
-		}
-		nsname = filepath.Join(cfg.sroot, u.String())
-	} else {
-		nsname = sname
+func DetectMime(fd File) (mime string, err error) {
+	_, err = fd.Seek(0, io.SeekStart)
+	if err != nil {
+		return "", err
 	}
 
-	fd, err := FS.Create(nsname) // @todo: set permissions
+	m, err := mimetype.DetectReader(fd)
 	if err != nil {
-		return nsname, 0, "", err
-	}
-
-	fsize, err = io.Copy(fd, data)
-	if err != nil {
-		return nsname, fsize, "", err
+		return m.String(), err
 	}
 
 	_, err = fd.Seek(0, io.SeekStart)
 	if err != nil {
-		return nsname, fsize, "", err
+		return "", err
 	}
 
-	// @todo: don't do this in here
-	mime, err := mimetype.DetectReader(fd)
-	if err != nil {
-		return nsname, fsize, mime.String(), err
-	}
-
-	return nsname, fsize, mime.String(), nil
+	return m.String(), nil
 }
 
 func DeleteDocument(sname string) error {
