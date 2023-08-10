@@ -28,138 +28,113 @@ func init() {
 }
 
 var (
-	files map[string]*Node
-	root  *Node
+	files map[string]*node
+	root  *node
 )
 
-// @todo: create separate DTO for (de)serialization
-type Node struct {
-	parent   *Node
-	IsFolder bool `xml:"IsFolder,attr"`
+type node struct {
+	parent   *node
+	isFolder bool
 
 	// "Kittens.png"
-	Name string
+	name string
 
 	// "/Pictures/Kittens.png"
-	Rname string
+	rname string
 
 	// "/var/rms/storage/(uuid)"
-	Sname string `xml:"Sname,omitempty"`
+	sname string
 
-	ETag      ETag `xml:"ETag,omitempty"`
+	etag      ETag
 	etagValid bool
 
-	Mime     string
-	Length   int64      `xml:"Length,omitempty"`
-	LastMod  *time.Time `xml:"LastMod,omitempty"`
-	children map[string]*Node
+	mime     string
+	length   int64
+	lastMod  *time.Time
+	children map[string]*node
 }
 
-func (n *Node) Valid() bool {
+func (n *node) Valid() bool {
 	return n.etagValid
 }
 
-func (n *Node) Invalidate() {
+func (n *node) Invalidate() {
 	n.etagValid = false
 }
 
-func (n *Node) Version() (e ETag, err error) {
+func (n *node) Version() (e ETag, err error) {
 	if !n.etagValid {
 		err = calculateETag(n)
 	}
-	e = n.ETag
+	e = n.etag
 	return
 }
 
-func (n *Node) Equal(other *Node) bool {
+func (n *node) Equal(other *node) bool {
 	if !(n.etagValid && other.etagValid) {
 		return false
 	}
-	return n.ETag.Equal(other.ETag)
-}
-
-func (n *Node) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
-	type XMLNode struct {
-		Node
-		ParentRName string `xml:"ParentRName"`
-	}
-	if n == root {
-		return nil
-	}
-	if n.parent == nil {
-		return fmt.Errorf("node %s is missing its parent", n.Rname)
-	}
-	return e.EncodeElement(XMLNode{*n, n.parent.Rname}, start)
-}
-
-func (n *Node) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
-	var tmp struct {
-		IsFolder    bool `xml:"IsFolder,attr"`
-		Name        string
-		Rname       string
-		Sname       string `xml:"Sname,omitempty"`
-		ETag        ETag   `xml:"ETag,omitempty"`
-		Mime        string
-		Length      int64      `xml:"Length,omitempty"`
-		LastMod     *time.Time `xml:"LastMod,omitempty"`
-		ParentRName string
-	}
-	err := d.DecodeElement(&tmp, &start)
-	if err != nil {
-		return err
-	}
-
-	n.IsFolder = tmp.IsFolder
-	n.Name = tmp.Name
-	n.Rname = tmp.Rname
-	n.Sname = tmp.Sname
-	n.ETag = tmp.ETag
-	n.Mime = tmp.Mime
-	n.Length = tmp.Length
-	n.LastMod = tmp.LastMod
-	n.children = make(map[string]*Node)
-
-	// N.b. this assumes that parents are always parsed before their
-	// children! [#parent_first]
-	p, ok := files[tmp.ParentRName]
-	if !ok {
-		return fmt.Errorf("node %s is missing its parent (%s), maybe it hasn't been parsed yet?", n.Rname, tmp.ParentRName)
-	}
-	p.children[n.Rname] = n
-	n.parent = p
-	files[n.Rname] = n
-	return nil
+	return n.etag.Equal(other.etag)
 }
 
 func Reset() {
-	rn := &Node{
-		IsFolder: true,
-		Name:     "/",
-		Rname:    "/",
-		Mime:     "inode/directory",
-		children: map[string]*Node{},
+	rn := &node{
+		isFolder: true,
+		name:     "/",
+		rname:    "/",
+		mime:     "inode/directory",
+		children: map[string]*node{},
 	}
-	files = make(map[string]*Node)
+	files = make(map[string]*node)
 	files["/"] = rn
 	root = rn
 }
 
+type NodeDTO struct {
+	IsFolder    bool `xml:"IsFolder,attr"`
+	Name        string
+	Rname       string
+	Sname       string `xml:"Sname,omitempty"`
+	ETag        ETag   `xml:"ETag,omitempty"` // @todo: why isn't this marshalled?
+	Mime        string
+	Length      int64      `xml:"Length,omitempty"`
+	LastMod     *time.Time `xml:"LastMod,omitempty"`
+	ParentRName string
+}
+
 func Persist(persistFile io.Writer) (err error) {
-	files := maps.Values(files)
+	fileDTOs := []*NodeDTO{}
+	for _, n := range files {
+		if n != root {
+			dto := &NodeDTO{
+				IsFolder:    n.isFolder,
+				Name:        n.name,
+				Rname:       n.rname,
+				Sname:       n.sname,
+				ETag:        n.etag,
+				Mime:        n.mime,
+				Length:      n.length,
+				LastMod:     n.lastMod,
+				ParentRName: n.parent.rname,
+			}
+			fileDTOs = append(fileDTOs, dto)
+		}
+	}
+
 	// Ensure that parents are always serialized before their children, so that
 	// they will also be read in first. [#parent_first]
-	sort.Slice(files, func(i, j int) bool {
+	sort.Slice(fileDTOs, func(i, j int) bool {
 		// Alphabetically, a shorter word is sorted before a longer.
 		// The parent's path will always be shorter than the child's path.
-		return files[i].Rname < files[j].Rname
+		return fileDTOs[i].Rname < fileDTOs[j].Rname
 	})
+
 	type Root struct {
-		Nodes []*Node
+		Nodes []*NodeDTO
 	}
-	var (
-		bs      []byte
-		persist = Root{files}
-	)
+	persist := Root{fileDTOs}
+
+	var bs []byte
 	if isdelve.Enabled {
 		bs, err = xml.MarshalIndent(persist, "", "\t")
 	} else {
@@ -186,11 +161,34 @@ func Load(persistFile io.Reader) error {
 	}
 
 	var persist struct {
-		Nodes []*Node
+		Nodes []*NodeDTO
 	}
 	err = xml.Unmarshal(bs, &persist)
 	if err != nil {
 		return err
+	}
+
+	for _, n := range persist.Nodes {
+		model := &node{}
+		model.isFolder = n.IsFolder
+		model.name = n.Name
+		model.rname = n.Rname
+		model.sname = n.Sname
+		model.etag = n.ETag
+		model.mime = n.Mime
+		model.length = n.Length
+		model.lastMod = n.LastMod
+		model.children = make(map[string]*node)
+
+		// N.b. this assumes that parents are always parsed before their
+		// children! [#parent_first]
+		p, ok := files[n.ParentRName]
+		if !ok {
+			return fmt.Errorf("node %s is missing its parent (%s), maybe it hasn't been parsed yet?", model.rname, n.ParentRName)
+		}
+		model.parent = p
+		p.children[model.rname] = model
+		files[model.rname] = model
 	}
 
 	log.Printf("Storage listing follows:\n%s\n", root)
@@ -285,7 +283,7 @@ func DetectMime(fd File) (mime string, err error) {
 	return m.String(), nil
 }
 
-func AddDocument(rname, sname string, fsize int64, mime string) (*Node, error) {
+func AddDocument(rname, sname string, fsize int64, mime string) (*node, error) {
 	rname = filepath.Clean(rname)
 
 	{
@@ -311,20 +309,20 @@ func AddDocument(rname, sname string, fsize int64, mime string) (*Node, error) {
 		pname := "/" + strings.Join(parts[:i+1], string(os.PathSeparator))
 		pn, ok := files[pname]
 		if ok { // a document name clashes with one of the ancestor folders
-			if !pn.IsFolder {
+			if !pn.isFolder {
 				return nil, ConflictError{
 					Path:         rname,
 					ConflictPath: pname,
 				}
 			}
 		} else { // from here on downwards ancestors don't exist, we have to create them
-			pn = &Node{
+			pn = &node{
 				parent:   p,
-				IsFolder: true,
-				Name:     parts[i] + "/", // folder names must end in a slash
-				Rname:    pname,
-				Mime:     "inode/directory",
-				children: map[string]*Node{},
+				isFolder: true,
+				name:     parts[i] + "/", // folder names must end in a slash
+				rname:    pname,
+				mime:     "inode/directory",
+				children: map[string]*node{},
 			}
 			p.children[pname] = pn
 			files[pname] = pn
@@ -336,15 +334,15 @@ func AddDocument(rname, sname string, fsize int64, mime string) (*Node, error) {
 	name := filepath.Base(rname)
 	tnow := Time()
 
-	f := &Node{
+	f := &node{
 		parent:   p, // [#1] assign parent
-		IsFolder: false,
-		Name:     name,
-		Rname:    rname,
-		Sname:    sname,
-		Mime:     mime,
-		Length:   fsize,
-		LastMod:  &tnow,
+		isFolder: false,
+		name:     name,
+		rname:    rname,
+		sname:    sname,
+		mime:     mime,
+		length:   fsize,
+		lastMod:  &tnow,
 	}
 	p.children[rname] = f
 	files[rname] = f
@@ -358,13 +356,13 @@ func AddDocument(rname, sname string, fsize int64, mime string) (*Node, error) {
 	return f, nil
 }
 
-func UpdateDocument(n *Node, mime string, fsize int64) {
-	assert(!n.IsFolder, "UpdateDocument must not be called on a folder")
+func UpdateDocument(n *node, mime string, fsize int64) {
+	assert(!n.isFolder, "UpdateDocument must not be called on a folder")
 
 	tnow := Time()
-	n.Mime = mime
-	n.Length = int64(fsize)
-	n.LastMod = &tnow
+	n.mime = mime
+	n.length = int64(fsize)
+	n.lastMod = &tnow
 
 	c := n
 	for c != nil {
@@ -373,14 +371,14 @@ func UpdateDocument(n *Node, mime string, fsize int64) {
 	}
 }
 
-func RemoveDocument(n *Node) {
-	assert(!n.IsFolder, "RemoveDocument must not be called on a folder")
+func RemoveDocument(n *node) {
+	assert(!n.isFolder, "RemoveDocument must not be called on a folder")
 
 	p := n
 	for len(p.children) == 0 && p != root {
 		pp := p.parent
-		delete(pp.children, p.Rname)
-		delete(files, p.Rname)
+		delete(pp.children, p.rname)
+		delete(files, p.rname)
 		p = pp
 	}
 	// p now points to the parent deepest down the ancestry that is not empty
@@ -391,7 +389,7 @@ func RemoveDocument(n *Node) {
 	}
 }
 
-func Retrieve(rname string) (*Node, error) {
+func Retrieve(rname string) (*node, error) {
 	rname = filepath.Clean(rname)
 	f, ok := files[rname]
 	if !ok {
@@ -400,27 +398,27 @@ func Retrieve(rname string) (*Node, error) {
 	return f, nil
 }
 
-func (n Node) String() string {
+func (n node) String() string {
 	return n.StringIdent(0)
 }
 
-func (n Node) StringIdent(ident int) (s string) {
+func (n node) StringIdent(ident int) (s string) {
 	for i := 0; i < ident; i++ {
 		s += "  "
 	}
-	if n.IsFolder {
-		s += fmt.Sprintf("{F} %s [%s] [%x]\n", n.Name, n.Rname, mustVal(n.Version())[:4])
+	if n.isFolder {
+		s += fmt.Sprintf("{F} %s [%s] [%x]\n", n.name, n.rname, mustVal(n.Version())[:4])
 		children := maps.Values(n.children)
 		// Ensure that output is deterministic by always printing in the same
 		// order. (Exmaple functions need this to verify their output.)
 		sort.Slice(children, func(i, j int) bool {
-			return children[i].Rname < children[j].Rname
+			return children[i].rname < children[j].rname
 		})
 		for _, c := range children {
 			s += c.StringIdent(ident + 1)
 		}
 	} else {
-		s += fmt.Sprintf("{D} %s (%s, %d) [%s -> %s] [%x]\n", n.Name, n.Mime, n.Length, n.Rname, n.Sname, mustVal(n.Version())[:4])
+		s += fmt.Sprintf("{D} %s (%s, %d) [%s -> %s] [%x]\n", n.name, n.mime, n.length, n.rname, n.sname, mustVal(n.Version())[:4])
 	}
 	return
 }

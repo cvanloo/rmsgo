@@ -55,30 +55,30 @@ func init() {
 	}
 }
 
-func calculateETag(n *Node) error {
+func calculateETag(n *node) error {
 	hash := md5.New()
 	io.WriteString(hash, hostname)
 
-	ns := []*Node{n}
+	ns := []*node{n}
 	for len(ns) > 0 {
 		cn := ns[0]
 		ns = ns[1:]
 
-		if cn.IsFolder {
-			io.WriteString(hash, cn.Name)
+		if cn.isFolder {
+			io.WriteString(hash, cn.name)
 			children := maps.Values(cn.children)
 			// Ensure that etag is deterministic by always hashing children in
 			// the same order.
 			sort.Slice(children, func(i, j int) bool {
-				return children[i].Rname < children[j].Rname
+				return children[i].rname < children[j].rname
 			})
 			ns = append(ns, children...)
 		} else {
-			io.WriteString(hash, cn.Name)
-			io.WriteString(hash, cn.Mime)
-			io.WriteString(hash, cn.LastMod.Format(rmsTimeFormat))
+			io.WriteString(hash, cn.name)
+			io.WriteString(hash, cn.mime)
+			io.WriteString(hash, cn.lastMod.Format(rmsTimeFormat))
 
-			fd, err := FS.Open(cn.Sname)
+			fd, err := FS.Open(cn.sname)
 			if err != nil {
 				return err
 			}
@@ -87,8 +87,8 @@ func calculateETag(n *Node) error {
 			if err != nil {
 				return err
 			}
-			if cn.Length != int64(n) {
-				return fmt.Errorf("etag: expected to read %d bytes, got: %d", cn.Length, n)
+			if cn.length != int64(n) {
+				return fmt.Errorf("etag: expected to read %d bytes, got: %d", cn.length, n)
 			}
 
 			err = fd.Close()
@@ -98,12 +98,12 @@ func calculateETag(n *Node) error {
 		}
 	}
 
-	n.ETag = hash.Sum(nil)
+	n.etag = hash.Sum(nil)
 	n.etagValid = true
 	return nil
 }
 
-func recalculateAncestorETags(n *Node) error {
+func recalculateAncestorETags(n *node) error {
 	for n != nil {
 		err := calculateETag(n)
 		if err != nil {

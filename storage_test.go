@@ -28,23 +28,23 @@ func TestCreateDocument(t *testing.T) {
 		t.Error(err)
 	}
 
-	if n.Name != "Vector Geometry.md" {
-		t.Errorf("got: `%s', want: `Vector Geometry.md'", n.Name)
+	if n.name != "Vector Geometry.md" {
+		t.Errorf("got: `%s', want: `Vector Geometry.md'", n.name)
 	}
-	if n.Rname != "/Documents/Homework/Assignments/2023/04/Vector Geometry.md" {
-		t.Errorf("got: `%s', want: `/Documents/Homework/Assignments/2023/04/Vector Geometry.md'", n.Rname)
+	if n.rname != "/Documents/Homework/Assignments/2023/04/Vector Geometry.md" {
+		t.Errorf("got: `%s', want: `/Documents/Homework/Assignments/2023/04/Vector Geometry.md'", n.rname)
 	}
-	if n.Sname != docSPath {
-		t.Errorf("got: `%s', want: `%s'", n.Sname, docSPath)
+	if n.sname != docSPath {
+		t.Errorf("got: `%s', want: `%s'", n.sname, docSPath)
 	}
-	if n.IsFolder {
+	if n.isFolder {
 		t.Error("got: isFolder == true, want: isFolder == false")
 	}
-	if n.Length != 18 {
-		t.Errorf("got: `%d', want: 18", n.Length)
+	if n.length != 18 {
+		t.Errorf("got: `%d', want: 18", n.length)
 	}
-	if n.Mime != "text/markdown" {
-		t.Errorf("got: `%s', want: text/markdown", n.Mime)
+	if n.mime != "text/markdown" {
+		t.Errorf("got: `%s', want: text/markdown", n.mime)
 	}
 
 	checks := []struct {
@@ -81,26 +81,26 @@ func TestCreateDocument(t *testing.T) {
 			t.Error(err)
 		}
 
-		if n.Name != c.name {
-			t.Errorf("got: `%s', want: `%s'", n.Name, c.name)
+		if n.name != c.name {
+			t.Errorf("got: `%s', want: `%s'", n.name, c.name)
 		}
-		if n.Rname != c.rname {
-			t.Errorf("got: `%s', want: `%s'", n.Rname, c.rname)
+		if n.rname != c.rname {
+			t.Errorf("got: `%s', want: `%s'", n.rname, c.rname)
 		}
-		if n.Mime != "inode/directory" {
-			t.Errorf("got: `%s', want: inode/directory", n.Mime)
+		if n.mime != "inode/directory" {
+			t.Errorf("got: `%s', want: inode/directory", n.mime)
 		}
-		if !n.IsFolder {
+		if !n.isFolder {
 			t.Error("got: isFolder == false, want: isFolder == true")
 		}
 		if len(n.children) != 1 {
-			t.Errorf("%s has `%d' children, want: 1", n.Name, len(n.children))
+			t.Errorf("%s has `%d' children, want: 1", n.name, len(n.children))
 		}
 		if v := maps.Values(p.children)[0]; v != n {
-			t.Errorf("parent `%s' has wrong child; got: `%s', want: `%s'", p.Name, v.Name, n.Name)
+			t.Errorf("parent `%s' has wrong child; got: `%s', want: `%s'", p.name, v.name, n.name)
 		}
 		if n.parent != p {
-			t.Errorf("wrong parent for `%s'; got: `%s', want: `%s'", n.Name, n.parent.Name, p.Name)
+			t.Errorf("wrong parent for `%s'; got: `%s', want: `%s'", n.name, n.parent.name, p.name)
 		}
 		p = n
 	}
@@ -146,11 +146,11 @@ func TestUpdateDocument(t *testing.T) {
 
 	UpdateDocument(n, "image/png", 5)
 
-	if n.Mime != "image/png" {
-		t.Errorf("got: `%s', want: `image/png'", n.Mime)
+	if n.mime != "image/png" {
+		t.Errorf("got: `%s', want: `image/png'", n.mime)
 	}
-	if n.Length != 5 {
-		t.Errorf("got: %d, want: 5", n.Length)
+	if n.length != 5 {
+		t.Errorf("got: %d, want: 5", n.length)
 	}
 	// n.LastMod
 }
@@ -264,7 +264,7 @@ func TestFolderETagUpdatedWhenDocumentAdded(t *testing.T) {
 func TestFolderETagUpdatedWhenDocumentRemoved(t *testing.T) {
 	mockServer()
 
-	var helloDoc *Node
+	var helloDoc *node
 	{
 		sname := filepath.Join(sroot, mustVal(UUID()).String())
 		fd, err := FS.Create(sname)
@@ -310,7 +310,7 @@ func TestFolderETagUpdatedWhenDocumentRemoved(t *testing.T) {
 	}
 
 	RemoveDocument(helloDoc)
-	err = FS.Remove(helloDoc.Sname)
+	err = FS.Remove(helloDoc.sname)
 	if err != nil {
 		t.Error(err)
 	}
@@ -348,7 +348,7 @@ func TestFolderETagUpdatedWhenDocumentUpdated(t *testing.T) {
 		}
 	}
 
-	var errorDoc *Node
+	var errorDoc *node
 	{
 		sname := filepath.Join(sroot, mustVal(UUID()).String())
 		fd, err := FS.Create(sname)
@@ -381,7 +381,7 @@ func TestFolderETagUpdatedWhenDocumentUpdated(t *testing.T) {
 	}
 
 	newContents := []byte("var ErrExistentialCrisis = errors.New(\"why?\")")
-	err = FS.WriteFile(errorDoc.Sname, newContents, 0666)
+	err = FS.WriteFile(errorDoc.sname, newContents, 0666)
 	if err != nil {
 		t.Error(err)
 	}
@@ -479,8 +479,8 @@ func TestFolderETagNotAffectedWhenDifferentFolderChanged(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if f.Length != 9 {
-			t.Errorf("got: `%d', want: 9", f.Length)
+		if f.length != 9 {
+			t.Errorf("got: `%d', want: 9", f.length)
 		}
 	}
 
@@ -510,7 +510,7 @@ func TestFolderETagNotAffectedWhenDifferentFolderChanged(t *testing.T) {
 func TestDocumentETagUpdatedWhenDocumentUpdated(t *testing.T) {
 	mockServer()
 
-	var kittenDoc *Node
+	var kittenDoc *node
 	{
 		sname := filepath.Join(sroot, mustVal(UUID()).String())
 		fd, err := FS.Create(sname)
@@ -527,8 +527,8 @@ func TestDocumentETagUpdatedWhenDocumentUpdated(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if kittenDoc.Length != 9 {
-			t.Errorf("got: `%d', want: 9", kittenDoc.Length)
+		if kittenDoc.length != 9 {
+			t.Errorf("got: `%d', want: 9", kittenDoc.length)
 		}
 	}
 
@@ -682,20 +682,20 @@ func TestLoad(t *testing.T) {
 			t.Error(err)
 		}
 
-		if n.Name != c.name {
-			t.Errorf("got: `%s', want: `%s'", n.Name, c.name)
+		if n.name != c.name {
+			t.Errorf("got: `%s', want: `%s'", n.name, c.name)
 		}
-		if n.Rname != c.rname {
-			t.Errorf("got: `%s', want: `%s'", n.Rname, c.rname)
+		if n.rname != c.rname {
+			t.Errorf("got: `%s', want: `%s'", n.rname, c.rname)
 		}
-		if n.Mime != c.mime {
-			t.Errorf("got: `%s', want: `%s'", n.Mime, c.mime)
+		if n.mime != c.mime {
+			t.Errorf("got: `%s', want: `%s'", n.mime, c.mime)
 		}
-		if n.IsFolder != c.isDir {
-			t.Errorf("got: isFolder == %t, want: isFolder == %t", n.IsFolder, c.isDir)
+		if n.isFolder != c.isDir {
+			t.Errorf("got: isFolder == %t, want: isFolder == %t", n.isFolder, c.isDir)
 		}
 		if len(n.children) != c.nchildren {
-			t.Errorf("%s has %d children, want: %d", n.Name, len(n.children), c.nchildren)
+			t.Errorf("%s has %d children, want: %d", n.name, len(n.children), c.nchildren)
 		}
 		hasAsChild := false
 		for _, v := range p.children {
@@ -705,10 +705,10 @@ func TestLoad(t *testing.T) {
 			}
 		}
 		if !hasAsChild {
-			t.Errorf("parent `%s' is missing `%s' as a child", p.Name, n.Name)
+			t.Errorf("parent `%s' is missing `%s' as a child", p.name, n.name)
 		}
 		if n.parent != p {
-			t.Errorf("wrong parent for `%s'; got: `%s', want: `%s'", n.Name, n.parent.Name, p.Name)
+			t.Errorf("wrong parent for `%s'; got: `%s', want: `%s'", n.name, n.parent.name, p.name)
 		}
 		if c.isDir {
 			p = n // [#child_after]
@@ -773,20 +773,20 @@ func TestMigrate(t *testing.T) {
 			t.Error(err)
 		}
 
-		if n.Name != c.name {
-			t.Errorf("got: `%s', want: `%s'", n.Name, c.name)
+		if n.name != c.name {
+			t.Errorf("got: `%s', want: `%s'", n.name, c.name)
 		}
-		if n.Rname != c.rname {
-			t.Errorf("got: `%s', want: `%s'", n.Rname, c.rname)
+		if n.rname != c.rname {
+			t.Errorf("got: `%s', want: `%s'", n.rname, c.rname)
 		}
-		if n.Mime != c.mime {
-			t.Errorf("got: `%s', want: `%s'", n.Mime, c.mime)
+		if n.mime != c.mime {
+			t.Errorf("got: `%s', want: `%s'", n.mime, c.mime)
 		}
-		if n.IsFolder != c.isDir {
-			t.Errorf("got: isFolder == %t, want: isFolder == %t", n.IsFolder, c.isDir)
+		if n.isFolder != c.isDir {
+			t.Errorf("got: isFolder == %t, want: isFolder == %t", n.isFolder, c.isDir)
 		}
 		if len(n.children) != c.nchildren {
-			t.Errorf("%s has %d children, want: %d", n.Name, len(n.children), c.nchildren)
+			t.Errorf("%s has %d children, want: %d", n.name, len(n.children), c.nchildren)
 		}
 		hasAsChild := false
 		for _, v := range p.children {
@@ -796,10 +796,10 @@ func TestMigrate(t *testing.T) {
 			}
 		}
 		if !hasAsChild {
-			t.Errorf("parent `%s' is missing `%s' as a child", p.Name, n.Name)
+			t.Errorf("parent `%s' is missing `%s' as a child", p.name, n.name)
 		}
 		if n.parent != p {
-			t.Errorf("wrong parent for `%s'; got: `%s', want: `%s'", n.Name, n.parent.Name, p.Name)
+			t.Errorf("wrong parent for `%s'; got: `%s', want: `%s'", n.name, n.parent.name, p.name)
 		}
 		if c.isDir {
 			p = n // [#child_after]

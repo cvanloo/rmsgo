@@ -215,26 +215,26 @@ func TestPutDocument(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if n.Mime != "funny/format" {
-		t.Errorf("got: `%s', want: funny/format", n.Mime)
+	if n.mime != "funny/format" {
+		t.Errorf("got: `%s', want: funny/format", n.mime)
 	}
 	if mustVal(n.Version()).String() != "f0d0f717619b09cc081bb0c11d9b9c6b" {
-		t.Errorf("got: `%s', want: `f0d0f717619b09cc081bb0c11d9b9c6b'", n.ETag)
+		t.Errorf("got: `%s', want: `f0d0f717619b09cc081bb0c11d9b9c6b'", n.etag)
 	}
-	if n.Name != "First.txt" {
-		t.Errorf("got: `%s', want: `First.txt'", n.Name)
+	if n.name != "First.txt" {
+		t.Errorf("got: `%s', want: `First.txt'", n.name)
 	}
-	if n.Rname != "/Documents/First.txt" {
-		t.Errorf("got: `%s', want: `/Documents/First.txt'", n.Rname)
+	if n.rname != "/Documents/First.txt" {
+		t.Errorf("got: `%s', want: `/Documents/First.txt'", n.rname)
 	}
-	if n.Length != int64(len(content)) {
-		t.Errorf("got: `%d', want: `%d'", n.Length, len(content))
+	if n.length != int64(len(content)) {
+		t.Errorf("got: `%d', want: `%d'", n.length, len(content))
 	}
-	if n.IsFolder {
+	if n.isFolder {
 		t.Error("a document should never be a folder")
 	}
 
-	bs, err := fs.ReadFile(n.Sname)
+	bs, err := fs.ReadFile(n.sname)
 	if err != nil {
 		t.Error(err)
 	}
@@ -485,7 +485,7 @@ func TestDeleteDocument(t *testing.T) {
 		t.Error(err)
 	}
 
-	_, err = fs.Stat(n.Sname)
+	_, err = fs.Stat(n.sname)
 	if err != nil {
 		t.Error(err)
 	}
@@ -507,7 +507,7 @@ func TestDeleteDocument(t *testing.T) {
 		t.Errorf("got: `%s', want: `%s'", e, firstETag)
 	}
 
-	_, err = fs.Stat(n.Sname)
+	_, err = fs.Stat(n.sname)
 	if !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("got: `%v', want: `%v'", err, os.ErrNotExist)
 	}

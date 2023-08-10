@@ -192,12 +192,12 @@ func GetFolder(w http.ResponseWriter, r *http.Request) error {
 			return writeError(w, err) // internal server error
 		}
 		desc["ETag"] = etag.String()
-		if !child.IsFolder {
-			desc["Content-Type"] = child.Mime
-			desc["Content-Length"] = child.Length
-			desc["Last-Modified"] = child.LastMod.Format(rmsTimeFormat)
+		if !child.isFolder {
+			desc["Content-Type"] = child.mime
+			desc["Content-Length"] = child.length
+			desc["Last-Modified"] = child.lastMod.Format(rmsTimeFormat)
 		}
-		items[child.Name] = desc
+		items[child.name] = desc
 	}
 
 	desc := ldjson{
@@ -252,7 +252,7 @@ func GetDocument(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	fd, err := FS.Open(n.Sname)
+	fd, err := FS.Open(n.sname)
 	if err != nil {
 		return writeError(w, err) // internal server error
 	}
@@ -260,7 +260,7 @@ func GetDocument(w http.ResponseWriter, r *http.Request) error {
 	hs := w.Header()
 	hs.Set("Cache-Control", "no-cache")
 	hs.Set("ETag", etag.String())
-	hs.Set("Content-Type", n.Mime)
+	hs.Set("Content-Type", n.mime)
 	_, err = io.Copy(w, fd) // @perf: is this efficient for HEAD requests?
 	return err
 }
@@ -274,7 +274,7 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 		return writeError(w, err) // internal server error
 	}
 
-	if found && n.IsFolder {
+	if found && n.isFolder {
 		return writeError(w, HttpError{
 			Msg:  "conflicting path names",
 			Desc: "The document conflicts with an already existing folder of the same name.",
@@ -332,7 +332,7 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 
 	// @todo: merge Create and Update into one function?
 	if found {
-		fd, err := FS.Create(n.Sname)
+		fd, err := FS.Create(n.sname)
 		if err != nil {
 			return writeError(w, err) // internal server error
 		}
@@ -460,7 +460,7 @@ func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	RemoveDocument(n)
-	err = FS.Remove(n.Sname)
+	err = FS.Remove(n.sname)
 	if err != nil {
 		return writeError(w, err) // internal server error
 	}
