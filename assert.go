@@ -13,6 +13,6 @@ func assert(v bool, msg string) {
 }
 
 func must[T any](t T, err error) T {
-	assert(err == nil, "non-nil error in must")
+	assert(err == nil, fmt.Sprintf("must: %v", err))
 	return t
 }
