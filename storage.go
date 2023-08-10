@@ -199,7 +199,7 @@ func Load(persistFile io.Reader) error {
 
 // Migrate traverses the root directory and copies any files contained therein
 // into the remoteStorage root (cfg.Sroot).
-func Migrate(cfg Server, root string) (errs []error) {
+func Migrate(root string) (errs []error) {
 	err := FS.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -226,7 +226,7 @@ func Migrate(cfg Server, root string) (errs []error) {
 			errs = append(errs, err)
 			return nil
 		}
-		sname := filepath.Join(cfg.sroot, u.String())
+		sname := filepath.Join(sroot, u.String())
 
 		rmsFD, err := FS.Create(sname)
 		if err != nil {
@@ -283,10 +283,6 @@ func DetectMime(fd File) (mime string, err error) {
 	}
 
 	return m.String(), nil
-}
-
-func DeleteDocument(sname string) error {
-	return FS.Remove(sname)
 }
 
 func AddDocument(rname, sname string, fsize int64, mime string) (*Node, error) {
@@ -413,7 +409,7 @@ func (n Node) StringIdent(ident int) (s string) {
 		s += "  "
 	}
 	if n.IsFolder {
-		s += fmt.Sprintf("{F} %s [%s] [%x]\n", n.Name, n.Rname, must(n.Version())[:4])
+		s += fmt.Sprintf("{F} %s [%s] [%x]\n", n.Name, n.Rname, mustVal(n.Version())[:4])
 		children := maps.Values(n.children)
 		// Ensure that output is deterministic by always printing in the same
 		// order. (Exmaple functions need this to verify their output.)
@@ -424,7 +420,7 @@ func (n Node) StringIdent(ident int) (s string) {
 			s += c.StringIdent(ident + 1)
 		}
 	} else {
-		s += fmt.Sprintf("{D} %s (%s, %d) [%s -> %s] [%x]\n", n.Name, n.Mime, n.Length, n.Rname, n.Sname, must(n.Version())[:4])
+		s += fmt.Sprintf("{D} %s (%s, %d) [%s -> %s] [%x]\n", n.Name, n.Mime, n.Length, n.Rname, n.Sname, mustVal(n.Version())[:4])
 	}
 	return
 }

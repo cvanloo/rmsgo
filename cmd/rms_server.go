@@ -23,12 +23,13 @@ func logger(next http.Handler) http.Handler {
 func main() {
 	mfs := mock.Mock()
 	mfs.CreateDirectories("/tmp/rms/storage/")
-	rms, err := rmsgo.New(RemoteRoot, StorageRoot, func(err error) {
-		log.Println(err)
-	})
+
+	err := rmsgo.Configure(RemoteRoot, StorageRoot, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	rms := rmsgo.ServeMux{}
 
 	// Option 1:
 	log.Fatal(http.ListenAndServe(":8080", logger(rms)))

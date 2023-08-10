@@ -1,11 +1,11 @@
 package rmsgo
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -21,55 +21,75 @@ func init() {
 	}
 }
 
-// Server configuration for the remoteStorage endpoint.
-// Server implements http.Handler and can therefore be passed directly to a
-// http.ServeMux.Handle or http.ListenAndServe(TLS)
-type Server struct {
-	rroot, sroot string
-	unhandled    ErrorHandler
-}
-
+// Any errors that the remoteStorage server doesn't know how to handle itself
+// are passed to the ErrorHandler.
 type ErrorHandler func(err error)
 
-// New constructs a remoteStorage server configuration.
+type ldjson = map[string]any
+
+// ServeMux implements http.Handler and can therefore be passed directly to a
+// http.ServeMux.Handle or http.ListenAndServe(TLS).
+type ServeMux struct{}
+
+func (ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	err := Serve(w, r)
+	if err != nil {
+		unhandled(err)
+	}
+}
+
+const rmsTimeFormat = time.RFC1123
+
+var (
+	rroot, sroot string
+	unhandled    ErrorHandler = func(err error) {
+		log.Printf("rmsgo: unhandled error: %v\n", err)
+	}
+)
+
+// Configure creates a remoteStorage server configuration.
 // remoteRoot is the root folder of the storage tree (used in the URL),
 // storageRoot is a folder on the server's file system where remoteStorage
 // documents are written to and read from.
-func New(remoteRoot, storageRoot string, errHandler ErrorHandler) (srv Server, err error) {
-	rroot := filepath.Clean(remoteRoot)
-	sroot := filepath.Clean(storageRoot)
-	srv = Server{rroot, sroot, errHandler}
+func Configure(remoteRoot, storageRoot string, errHandler ErrorHandler) error {
+	rroot = filepath.Clean(remoteRoot)
+	sroot = filepath.Clean(storageRoot)
+
+	if errHandler != nil {
+		// @todo: use Options pattern
+		unhandled = errHandler
+	}
 
 	fi, err := FS.Stat(sroot)
 	if err != nil {
-		return srv, err
+		return err
 	}
 	if !fi.IsDir() {
-		return srv, fmt.Errorf("storage root is not a directory: %s", sroot)
+		return fmt.Errorf("storage root is not a directory: %s", sroot)
 	}
-	return srv, nil
+	return nil
 }
 
 // Rroot specifies the URL path at which remoteStorage is rooted.
 // E.g. if Rroot is "/storage" then a document "/Picture/Kittens.png" can
 // be accessed using the URL "example.com/storage/Picture/Kittens.png".
 // Rroot does not have a trailing slash.
-func (s Server) Rroot() string {
-	return s.rroot
+func Rroot() string {
+	return rroot
 }
 
 // Sroot is a path specifying the location on the server's file system
 // where all of remoteStorage's files are stored.
 // Sroot does not have a trailing slash.
-func (s Server) Sroot() string {
-	return s.sroot
+func Sroot() string {
+	return sroot
 }
 
-func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var err error
+// Serve responds to a remoteStorage request.
+func Serve(w http.ResponseWriter, r *http.Request) error {
 	path := r.URL.Path
-	if !strings.HasPrefix(path, s.rroot) {
-		err = writeError(w, ErrNotFound)
+	if !strings.HasPrefix(path, rroot) {
+		return writeError(w, ErrNotFound)
 	}
 	isFolder := false
 	if path[len(path)-1] == '/' {
@@ -81,30 +101,24 @@ func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case http.MethodHead:
 			fallthrough
 		case http.MethodGet:
-			err = s.GetFolder(w, r)
-		default:
-			err = writeError(w, ErrMethodNotAllowed)
+			return GetFolder(w, r)
 		}
 	} else {
 		switch r.Method {
 		case http.MethodHead:
 			fallthrough
 		case http.MethodGet:
-			err = s.GetDocument(w, r)
+			return GetDocument(w, r)
 		case http.MethodPut:
-			err = s.PutDocument(w, r)
+			return PutDocument(w, r)
 		case http.MethodDelete:
-			err = s.DeleteDocument(w, r)
-		default:
-			err = writeError(w, ErrMethodNotAllowed)
+			return DeleteDocument(w, r)
 		}
 	}
-
-	if err != nil {
-		s.unhandled(err)
-	}
+	return writeError(w, ErrMethodNotAllowed)
 }
 
+/*
 const userKey = "AUTHENTICATED_USER"
 
 // @todo: interceptor for authentication/authorization
@@ -122,6 +136,7 @@ func authenticator(next http.Handler) http.Handler {
 		next.ServeHTTP(w, nr)
 	})
 }
+*/
 
 // @todo: OPTIONS/cors
 // @todo: https://datatracker.ietf.org/doc/html/draft-dejong-remotestorage-21#section-6
@@ -129,12 +144,8 @@ func authenticator(next http.Handler) http.Handler {
 // > A provider MAY offer version rollback functionality to its users,
 // > but this specification does not define the interface for that.
 
-type ldjson = map[string]any
-
-const rmsTimeFormat = time.RFC1123
-
-func (s Server) GetFolder(w http.ResponseWriter, r *http.Request) error {
-	rpath := strings.TrimPrefix(r.URL.Path, s.rroot)
+func GetFolder(w http.ResponseWriter, r *http.Request) error {
+	rpath := strings.TrimPrefix(r.URL.Path, rroot)
 
 	n, err := Retrieve(rpath)
 	if err != nil {
@@ -201,8 +212,8 @@ func (s Server) GetFolder(w http.ResponseWriter, r *http.Request) error {
 	return json.NewEncoder(w).Encode(desc)
 }
 
-func (s Server) GetDocument(w http.ResponseWriter, r *http.Request) error {
-	rpath := strings.TrimPrefix(r.URL.Path, s.rroot)
+func GetDocument(w http.ResponseWriter, r *http.Request) error {
+	rpath := strings.TrimPrefix(r.URL.Path, rroot)
 
 	n, err := Retrieve(rpath)
 	if err != nil {
@@ -254,8 +265,8 @@ func (s Server) GetDocument(w http.ResponseWriter, r *http.Request) error {
 	return err
 }
 
-func (s Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
-	rpath := strings.TrimPrefix(r.URL.Path, s.rroot)
+func PutDocument(w http.ResponseWriter, r *http.Request) error {
+	rpath := strings.TrimPrefix(r.URL.Path, rroot)
 
 	n, err := Retrieve(rpath)
 	found := !errors.Is(err, ErrNotExist)
@@ -349,7 +360,7 @@ func (s Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return writeError(w, err) // internal server error
 		}
-		sname := filepath.Join(s.sroot, u.String())
+		sname := filepath.Join(sroot, u.String())
 
 		fd, err := FS.Create(sname)
 		if err != nil {
@@ -400,8 +411,8 @@ func (s Server) PutDocument(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (s Server) DeleteDocument(w http.ResponseWriter, r *http.Request) error {
-	rpath := strings.TrimPrefix(r.URL.Path, s.rroot)
+func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
+	rpath := strings.TrimPrefix(r.URL.Path, rroot)
 
 	n, err := Retrieve(rpath)
 	if err != nil {

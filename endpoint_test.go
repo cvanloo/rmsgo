@@ -39,36 +39,29 @@ import (
 //}
 //_ = body
 
-// @todo: should the server be a struct?
-//   it doesn't make sense to have multiple servers
-//   it's more a config than a server,
-//   but it allows to use it as an http.Handler (ServeHTTP)
-// @todo: how exactly should a server be configured and setup?
-
-func mockServer() (*FakeFileSystem, Server) {
+func mockServer() *FakeFileSystem {
 	const (
 		rroot = "/storage/"
 		sroot = "/tmp/rms/storage/"
 	)
-	server, _ := New(rroot, sroot, func(err error) {
-		log.Fatal(err)
-	})
 	fs := Mock()
-	fs.CreateDirectories(server.sroot)
+	fs.CreateDirectories(sroot)
+	must(Configure(rroot, sroot, func(err error) {
+		log.Fatal(err)
+	}))
 	Reset()
-	return fs, server
+	return fs
 }
 
-func ExampleServer_GetFolder() {
-	_, server := mockServer()
-	// Use: server, err := rmsgo.New(remoteRoot, storageRoot)
+func ExampleGetFolder() {
+	mockServer()
+	// Use: err := rmsgo.Configure(remoteRoot, storageRoot, nil)
 
-	// @todo: correct error handling, but we first have to implement good errors
-
-	ts := httptest.NewServer(server)
+	ts := httptest.NewServer(ServeMux{})
 	defer ts.Close()
 
-	remoteRoot := ts.URL + server.Rroot()
+	// server url + remote root
+	remoteRoot := ts.URL + rroot
 
 	// GET the currently empty root folder
 	r, err := http.Get(remoteRoot + "/")
@@ -192,12 +185,12 @@ func ExampleServer_GetFolder() {
 //    document clashes with existing folder
 
 func TestPutDocument(t *testing.T) {
-	fs, server := mockServer()
+	fs := mockServer()
 
-	ts := httptest.NewServer(server)
+	ts := httptest.NewServer(ServeMux{})
 	defer ts.Close()
 
-	remoteRoot := ts.URL + server.rroot
+	remoteRoot := ts.URL + rroot
 
 	const content = "My first document."
 
@@ -225,7 +218,7 @@ func TestPutDocument(t *testing.T) {
 	if n.Mime != "funny/format" {
 		t.Errorf("got: `%s', want: funny/format", n.Mime)
 	}
-	if must(n.Version()).String() != "f0d0f717619b09cc081bb0c11d9b9c6b" {
+	if mustVal(n.Version()).String() != "f0d0f717619b09cc081bb0c11d9b9c6b" {
 		t.Errorf("got: `%s', want: `f0d0f717619b09cc081bb0c11d9b9c6b'", n.ETag)
 	}
 	if n.Name != "First.txt" {
@@ -251,9 +244,9 @@ func TestPutDocument(t *testing.T) {
 }
 
 func TestGetFolder(t *testing.T) {
-	_, server := mockServer()
+	mockServer()
 
-	ts := httptest.NewServer(server)
+	ts := httptest.NewServer(ServeMux{})
 	defer ts.Close()
 
 	req, err := http.NewRequest(http.MethodPut, ts.URL+"/storage/Documents/First.txt", bytes.NewReader([]byte("My first document.")))
@@ -322,9 +315,9 @@ func TestGetFolder(t *testing.T) {
 }
 
 func TestHeadFolder(t *testing.T) {
-	_, server := mockServer()
+	mockServer()
 
-	ts := httptest.NewServer(server)
+	ts := httptest.NewServer(ServeMux{})
 	defer ts.Close()
 
 	req, err := http.NewRequest(http.MethodPut, ts.URL+"/storage/Documents/First.txt", bytes.NewReader([]byte("My first document.")))
@@ -363,9 +356,9 @@ func TestHeadFolder(t *testing.T) {
 }
 
 func TestGetDocument(t *testing.T) {
-	_, server := mockServer()
+	mockServer()
 
-	ts := httptest.NewServer(server)
+	ts := httptest.NewServer(ServeMux{})
 	defer ts.Close()
 
 	const content = "My first document."
@@ -417,9 +410,9 @@ func TestGetDocument(t *testing.T) {
 }
 
 func TestHeadDocument(t *testing.T) {
-	_, server := mockServer()
+	mockServer()
 
-	ts := httptest.NewServer(server)
+	ts := httptest.NewServer(ServeMux{})
 	defer ts.Close()
 
 	const content = "My first document."
@@ -465,9 +458,9 @@ func TestHeadDocument(t *testing.T) {
 }
 
 func TestDeleteDocument(t *testing.T) {
-	fs, server := mockServer()
+	fs := mockServer()
 
-	ts := httptest.NewServer(server)
+	ts := httptest.NewServer(ServeMux{})
 	defer ts.Close()
 
 	req, err := http.NewRequest(http.MethodPut, ts.URL+"/storage/Documents/First.txt", bytes.NewReader([]byte("My first document.")))

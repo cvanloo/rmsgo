@@ -202,10 +202,10 @@ func TestRemoveDocument(t *testing.T) {
 }
 
 func TestFolderETagUpdatedWhenDocumentAdded(t *testing.T) {
-	_, server := mockServer()
+	mockServer()
 
 	{
-		sname := filepath.Join(server.sroot, must(UUID()).String())
+		sname := filepath.Join(sroot, mustVal(UUID()).String())
 		fd, err := FS.Create(sname)
 		if err != nil {
 			t.Error(err)
@@ -232,7 +232,7 @@ func TestFolderETagUpdatedWhenDocumentAdded(t *testing.T) {
 	}
 
 	{
-		sname := filepath.Join(server.sroot, must(UUID()).String())
+		sname := filepath.Join(sroot, mustVal(UUID()).String())
 		fd, err := FS.Create(sname)
 		if err != nil {
 			t.Error(err)
@@ -262,11 +262,11 @@ func TestFolderETagUpdatedWhenDocumentAdded(t *testing.T) {
 }
 
 func TestFolderETagUpdatedWhenDocumentRemoved(t *testing.T) {
-	_, server := mockServer()
+	mockServer()
 
 	var helloDoc *Node
 	{
-		sname := filepath.Join(server.sroot, must(UUID()).String())
+		sname := filepath.Join(sroot, mustVal(UUID()).String())
 		fd, err := FS.Create(sname)
 		if err != nil {
 			t.Error(err)
@@ -283,7 +283,7 @@ func TestFolderETagUpdatedWhenDocumentRemoved(t *testing.T) {
 	}
 
 	{
-		sname := filepath.Join(server.sroot, must(UUID()).String())
+		sname := filepath.Join(sroot, mustVal(UUID()).String())
 		fd, err := FS.Create(sname)
 		if err != nil {
 			t.Error(err)
@@ -329,10 +329,10 @@ func TestFolderETagUpdatedWhenDocumentRemoved(t *testing.T) {
 }
 
 func TestFolderETagUpdatedWhenDocumentUpdated(t *testing.T) {
-	_, server := mockServer()
+	mockServer()
 
 	{
-		sname := filepath.Join(server.sroot, must(UUID()).String())
+		sname := filepath.Join(sroot, mustVal(UUID()).String())
 		fd, err := FS.Create(sname)
 		if err != nil {
 			t.Error(err)
@@ -350,7 +350,7 @@ func TestFolderETagUpdatedWhenDocumentUpdated(t *testing.T) {
 
 	var errorDoc *Node
 	{
-		sname := filepath.Join(server.sroot, must(UUID()).String())
+		sname := filepath.Join(sroot, mustVal(UUID()).String())
 		fd, err := FS.Create(sname)
 		if err != nil {
 			t.Error(err)
@@ -412,10 +412,10 @@ func TestFolderETagUpdatedWhenDocumentUpdated(t *testing.T) {
 }
 
 func TestFolderETagNotAffectedWhenDifferentFolderChanged(t *testing.T) {
-	_, server := mockServer()
+	mockServer()
 
 	{
-		sname := filepath.Join(server.sroot, must(UUID()).String())
+		sname := filepath.Join(sroot, mustVal(UUID()).String())
 		fd, err := FS.Create(sname)
 		if err != nil {
 			t.Error(err)
@@ -432,7 +432,7 @@ func TestFolderETagNotAffectedWhenDifferentFolderChanged(t *testing.T) {
 	}
 
 	{
-		sname := filepath.Join(server.sroot, must(UUID()).String())
+		sname := filepath.Join(sroot, mustVal(UUID()).String())
 		fd, err := FS.Create(sname)
 		if err != nil {
 			t.Error(err)
@@ -464,7 +464,7 @@ func TestFolderETagNotAffectedWhenDifferentFolderChanged(t *testing.T) {
 	}
 
 	{
-		sname := filepath.Join(server.sroot, must(UUID()).String())
+		sname := filepath.Join(sroot, mustVal(UUID()).String())
 		fd, err := FS.Create(sname)
 		if err != nil {
 			t.Error(err)
@@ -508,11 +508,11 @@ func TestFolderETagNotAffectedWhenDifferentFolderChanged(t *testing.T) {
 }
 
 func TestDocumentETagUpdatedWhenDocumentUpdated(t *testing.T) {
-	_, server := mockServer()
+	mockServer()
 
 	var kittenDoc *Node
 	{
-		sname := filepath.Join(server.sroot, must(UUID()).String())
+		sname := filepath.Join(sroot, mustVal(UUID()).String())
 		fd, err := FS.Create(sname)
 		if err != nil {
 			t.Error(err)
@@ -721,18 +721,18 @@ func TestMigrate(t *testing.T) {
 		rroot = "/storage/"
 		sroot = "/tmp/rms/storage/"
 	)
-	server, _ := New(rroot, sroot, func(err error) {
+	must(Configure(rroot, sroot, func(err error) {
 		log.Fatal(err)
-	})
+	}))
 	fs := Mock()
-	fs.CreateDirectories(server.sroot).
+	fs.CreateDirectories(sroot).
 		AddDirectory("somewhere").Into().
 		AddDirectory("Documents").Into().
 		AddFile("hello.txt", "Hello, World!").
 		AddFile("test.txt", "Whole life's a test.")
 
 	Reset()
-	errs := Migrate(server, "/somewhere/")
+	errs := Migrate("/somewhere/")
 	for _, err := range errs {
 		t.Error(err)
 	}
@@ -808,7 +808,7 @@ func TestMigrate(t *testing.T) {
 }
 
 func ExamplePersist() {
-	_, server := mockServer()
+	mockServer()
 
 	panicIf := func(err error) {
 		if err != nil {
@@ -818,7 +818,7 @@ func ExamplePersist() {
 
 	u, err := UUID()
 	panicIf(err)
-	sname := filepath.Join(server.sroot, u.String())
+	sname := filepath.Join(sroot, u.String())
 	fd, err := FS.Create(sname)
 	panicIf(err)
 	fsize, err := io.Copy(fd, bytes.NewReader([]byte("This is a test.")))
@@ -829,7 +829,7 @@ func ExamplePersist() {
 
 	u, err = UUID()
 	panicIf(err)
-	sname = filepath.Join(server.sroot, u.String())
+	sname = filepath.Join(sroot, u.String())
 	fd, err = FS.Create(sname)
 	panicIf(err)
 	fsize, err = io.Copy(fd, bytes.NewReader([]byte("Hello, World!")))
@@ -838,7 +838,7 @@ func ExamplePersist() {
 	_, err = AddDocument("/Documents/hello.txt", sname, fsize, "text/plain")
 	panicIf(err)
 
-	fd, err = FS.Create(server.sroot + "/marshalled.xml")
+	fd, err = FS.Create(sroot + "/marshalled.xml")
 	panicIf(err)
 	defer fd.Close()
 
