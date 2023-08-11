@@ -168,8 +168,8 @@ func ExampleGetFolder() {
 	// {"@context":"http://remotestorage.io/spec/folder-description","items":{"First.txt":{"Content-Length":18,"Content-Type":"funny/format","ETag":"f0d0f717619b09cc081bb0c11d9b9c6b","Last-Modified":"Mon, 01 Jan 0001 00:00:00 UTC"}}}
 }
 
-// @todo: PUT chunked transfer coding?
-// @todo: http1.1, offer switch to http2
+// @todo: PUT test chunked transfer-encoding
+// @todo: test requests with http1.1, and with switch to http2
 
 // @todo: TestPutDocument
 //  - check that parents are silently created as necessary

@@ -76,16 +76,3 @@ func (e HttpError) Error() string {
 func (e HttpError) Unwrap() error {
 	return e.Cause
 }
-
-// @todo: make storage its own package?
-
-type ConflictError struct {
-	Path         string
-	ConflictPath string
-}
-
-func (e ConflictError) Error() string {
-	return fmt.Sprintf("%s: conflicts with already existing path: %s", e.Path, e.ConflictPath)
-}
-
-var ErrNotExist = errors.New("no such document or folder")

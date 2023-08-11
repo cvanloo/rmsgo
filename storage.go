@@ -2,6 +2,7 @@ package rmsgo
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -27,8 +28,25 @@ func init() {
 	Reset()
 }
 
+type ConflictError struct {
+	Path         string
+	ConflictPath string
+}
+
+func (e ConflictError) Error() string {
+	return fmt.Sprintf("%s: conflicts with already existing path: %s", e.Path, e.ConflictPath)
+}
+
+var ErrNotExist = errors.New("no such document or folder")
+
 var (
+	// files keeps a reference for each document or folder, allowing for easy
+	// access.
 	files map[string]*node
+
+	// root keeps a reference to the root folder.
+	// The reference will stay valid for the entire duration of execution once
+	// Reset has been called.
 	root  *node
 )
 
@@ -77,6 +95,7 @@ func (n *node) Equal(other *node) bool {
 	return n.etag.Equal(other.etag)
 }
 
+// Reset (re-) initializes the storage tree, so that it only contains a root folder.
 func Reset() {
 	rn := &node{
 		isFolder: true,
@@ -102,6 +121,8 @@ type NodeDTO struct {
 	ParentRName string
 }
 
+// Persist serializes the storage tree to XML.
+// The generated XML is written to persistFile.
 func Persist(persistFile io.Writer) (err error) {
 	fileDTOs := []*NodeDTO{}
 	for _, n := range files {
@@ -154,6 +175,10 @@ func Persist(persistFile io.Writer) (err error) {
 	return nil
 }
 
+// Load deserializes XML data from persistFile and adds the documents and
+// folders to the storage tree.
+// If storage has not been initialized before, Reset must be invoked before
+// calling Load.
 func Load(persistFile io.Reader) error {
 	if root == nil {
 		return fmt.Errorf("storage root not initialized, try calling Reset() before Load()")
@@ -272,6 +297,8 @@ func Migrate(root string) (errs []error) {
 	return errs
 }
 
+// DetectMime rewinds fd, reads from fd to detect its mime type, and finally
+// rewinds fd again to the start.
 func DetectMime(fd File) (mime string, err error) {
 	_, err = fd.Seek(0, io.SeekStart)
 	if err != nil {
@@ -291,6 +318,10 @@ func DetectMime(fd File) (mime string, err error) {
 	return m.String(), nil
 }
 
+// AddDocument adds a new document to the storage tree and returns a reference to it.
+// ETags of ancestors are invalidated.
+// If the document name conflicts with any other document or folder an error of
+// type ConflictPath is returned and the *node is set to nil.
 func AddDocument(rname, sname string, fsize int64, mime string) (*node, error) {
 	rname = filepath.Clean(rname)
 
@@ -364,6 +395,8 @@ func AddDocument(rname, sname string, fsize int64, mime string) (*node, error) {
 	return f, nil
 }
 
+// UpdateDocument updates an existing document in the storage tree with new
+// information and invalidates etags of the document and its ancestors.
 func UpdateDocument(n *node, mime string, fsize int64) {
 	assert(!n.isFolder, "UpdateDocument must not be called on a folder")
 
@@ -379,6 +412,8 @@ func UpdateDocument(n *node, mime string, fsize int64) {
 	}
 }
 
+// RemoveDocument deletes a document from the storage tree and invalidates the
+// etags of its ancestors.
 func RemoveDocument(n *node) {
 	assert(!n.isFolder, "RemoveDocument must not be called on a folder")
 
@@ -397,6 +432,8 @@ func RemoveDocument(n *node) {
 	}
 }
 
+// Retrieve a document or folder identified by rname.
+// Returns ErrNotExist if rname can't be found.
 func Retrieve(rname string) (*node, error) {
 	rname = filepath.Clean(rname)
 	f, ok := files[rname]
@@ -407,10 +444,10 @@ func Retrieve(rname string) (*node, error) {
 }
 
 func (n node) String() string {
-	return n.StringIdent(0)
+	return n.stringIndent(0)
 }
 
-func (n node) StringIdent(ident int) (s string) {
+func (n node) stringIndent(ident int) (s string) {
 	for i := 0; i < ident; i++ {
 		s += "  "
 	}
@@ -423,7 +460,7 @@ func (n node) StringIdent(ident int) (s string) {
 			return children[i].rname < children[j].rname
 		})
 		for _, c := range children {
-			s += c.StringIdent(ident + 1)
+			s += c.stringIndent(ident + 1)
 		}
 	} else {
 		s += fmt.Sprintf("{D} %s (%s, %d) [%s -> %s] [%x]\n", n.name, n.mime, n.length, n.rname, n.sname, mustVal(n.Version())[:4])
