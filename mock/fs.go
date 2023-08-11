@@ -284,7 +284,7 @@ func (m *FakeFileSystem) WriteFile(path string, data []byte, perm os.FileMode) e
 		path:    path,
 		name:    filepath.Base(path),
 		bytes:   data,
-		mode:    perm,
+		mode:    perm - umask,
 		lastMod: Time(),
 		parent:  p,
 	}
@@ -380,11 +380,7 @@ func (m *FakeFileDescriptor) Read(b []byte) (n int, err error) {
 	return
 }
 
-func (m *FakeFileDescriptor) Write(b []byte) (n int, err error) {
-	// @todo: write a test with multiple subsequent writes, make sure the data
-	// is correctly written (nothing overlapping)
-	// @todo: write a test where something in the middle of the file is
-	// overwritten, beginning and end must stay the same.
+func (m *FakeFileDescriptor) Write(src []byte) (n int, err error) {
 	if m.file.isDir {
 		return 0, &os.PathError{
 			Op:   "write",
@@ -392,13 +388,20 @@ func (m *FakeFileDescriptor) Write(b []byte) (n int, err error) {
 			Err:  syscall.EBADF,
 		}
 	}
-	nl := len(b) + len(m.file.bytes[:m.cursor])
-	nbs := make([]byte, nl)
-	copy(nbs, m.file.bytes[:m.cursor])
-	n = copy(nbs[m.cursor:], b)
-	m.file.bytes = nbs
+
+	dst := m.file.bytes[m.cursor:]
+	if len(src) <= len(dst) { // enough space in file for new data
+		n = copy(dst, src)
+	} else { // not enough space, we are appending (and possibly overwriting the end of the file)
+		//          current len + amount missing
+		nl := len(m.file.bytes) + len(src) - len(dst)
+		nbs := make([]byte, nl)
+		copy(nbs, m.file.bytes[:m.cursor])
+		n = copy(nbs[m.cursor:], src)
+		m.file.bytes = nbs
+	}
 	m.cursor += int64(n)
-	return n, nil
+	return
 }
 
 func (m *FakeFileDescriptor) Seek(offset int64, whence int) (int64, error) {

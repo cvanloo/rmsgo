@@ -68,7 +68,7 @@ type node struct {
 
 	mime     string
 	length   int64
-	lastMod  *time.Time
+	lastMod  *time.Time // @todo: why a pointer?
 	children map[string]*node
 }
 

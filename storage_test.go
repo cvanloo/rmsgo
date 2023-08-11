@@ -12,6 +12,8 @@ import (
 	"golang.org/x/exp/maps"
 )
 
+// @todo: rework unit tests in the same manner as mock/fs_test.go
+
 func TestCreateDocument(t *testing.T) {
 	Reset()
 

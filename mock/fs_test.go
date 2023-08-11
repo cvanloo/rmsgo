@@ -8,142 +8,146 @@ import (
 	"testing"
 )
 
-func mockStorage() *FakeFileSystem {
-	m := MockFS(
-		WithFile("/test.txt", []byte("Hello, World!")),
-		WithFile("/Pictures/Kittens.png", []byte("A cute kitten!")),
-		WithFile("/Pictures/Gopher.jpg", []byte("It's Gopher!")),
-		WithFile("/Documents/doc.txt", []byte("Lorem ipsum dolores sit amet")),
-		WithFile("/Documents/fakenius.txt", []byte("Ich fand es schon immer verdächtig, dass die Sonne jeden Morgen im Osten aufgeht!")),
-	)
-	return m
-}
+// @todo: test error cases as well
+// @todo: seek verify with os.File.Seek that return position is really correct
+// @todo: verify with real if this really is by byte or by rune? (ä is 2 bytes)
+
+const (
+	testContent  = "Ich fand es schon immer verdächtig, dass die Sonne jeden Morgen im Osten aufgeht!"
+	testFilePath = "/Classified/Fakenius.txt"
+	testFileName = "Fakenius.txt"
+	testFileDir  = "/Classified/"
+	testPerm     = 0666
+)
 
 func TestReadFile(t *testing.T) {
-	m := mockStorage()
-	c, err := m.ReadFile("/test.txt")
+	m := MockFS(
+		WithFile(testFilePath, []byte(testContent)),
+	)
+	bs, err := m.ReadFile(testFilePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(c) != "Hello, World!" {
-		t.Errorf("file contents don't match; got: `%s', want: `%s'", c, "Hello, World!")
+	if string(bs) != testContent {
+		t.Errorf("got: `%s', want: `%s'", bs, testContent)
 	}
 }
 
-func TestWriteExistingFile(t *testing.T) {
-	m := mockStorage()
-	const path string = "/Documents/fakenius.txt"
-	err := m.WriteFile(path, []byte("Giraffe > Greif"), 0644)
+func TestWriteFile(t *testing.T) {
+	m := MockFS(
+		WithDirectory(testFileDir),
+	)
+	err := m.WriteFile(testFilePath, []byte(testContent), testPerm)
 	if err != nil {
 		t.Error(err)
 	}
-	c, err := m.ReadFile(path)
+	bs, err := m.ReadFile(testFilePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(c) != "Giraffe > Greif" {
-		t.Errorf("file contents don't match; got: `%s', want: `%s'", c, "Giraffe > Greif")
+	if string(bs) != testContent {
+		t.Errorf("got: `%s', want: `%s'", bs, testContent)
 	}
 }
 
-func TestWriteNewFile(t *testing.T) {
-	ms := mockStorage()
-	const path string = "/Documents/new.md"
-	err := ms.WriteFile(path, []byte("Cats > Dogs"), 0644)
+func TestWriteFileAndReadBack(t *testing.T) {
+	m := MockFS(
+		WithDirectory(testFileDir),
+	)
+	err := m.WriteFile(testFilePath, []byte(testContent), testPerm)
 	if err != nil {
 		t.Error(err)
 	}
-	c, err := ms.ReadFile(path)
+	fd, err := m.Open(testFilePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(c) != "Cats > Dogs" {
-		t.Errorf("file contents don't match; got: `%s', want: `%s'", c, "Cats > Dogs")
+	if fd.Name() != testFileName {
+		t.Errorf("got: `%s', want: `%s'", fd.Name(), testFileName)
+	}
+	bs := make([]byte, 128)
+	n, err := fd.Read(bs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != len(testContent) {
+		t.Errorf("got %d, want %d", n, len(testContent))
+	}
+	bs = bs[:n] // strings won't be equal otherwise
+	if string(bs) != testContent {
+		t.Errorf("got: `%s', want: `%s'", bs, testContent)
 	}
 }
 
-func TestWriteNewFileAndStats(t *testing.T) {
-	ms := mockStorage()
-	const path string = "/Documents/new.md"
-	err := ms.WriteFile(path, []byte("Cats > Dogs"), 0644)
+func TestWriteFileExisting(t *testing.T) {
+	m := MockFS(
+		WithFile(testFilePath, []byte(testContent)),
+	)
+	const newContent = "Giraffe > Greif"
+	err := m.WriteFile(testFilePath, []byte(newContent), testPerm)
 	if err != nil {
 		t.Error(err)
 	}
-
-	fd, err := ms.Open(path)
+	bs, err := m.ReadFile(testFilePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fd.Name() != "new.md" {
-		t.Errorf("incorrect name; got: `%s', want: `%s'", fd.Name(), "new.md")
-	}
-
-	content := make([]byte, 11)
-	n, err := fd.Read(content)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n != 11 {
-		t.Errorf("incorrect number of bytes read: got `%d', want `%d'", n, 11)
-	}
-	if string(content) != "Cats > Dogs" {
-		t.Errorf("file contents don't match; got: `%s', want: `%s'", content, "Cats > Dogs")
+	if string(bs) != newContent {
+		t.Errorf("got: `%s', want: `%s'", bs, newContent)
 	}
 }
 
 func TestTruncate(t *testing.T) {
-	m := mockStorage()
-	const path string = "/Pictures/Gopher.jpg"
-	err := m.Truncate(path, 2)
+	m := MockFS(
+		WithFile(testFilePath, []byte(testContent)),
+	)
+	err := m.Truncate(testFilePath, 8)
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := m.ReadFile(path)
+	bs, err := m.ReadFile(testFilePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(c) != "It" {
-		t.Errorf("file contents don't match; got: `%s', want: `%s'", c, "It")
+	expected := testContent[:8]
+	if string(bs) != expected {
+		t.Errorf("got: `%s', want: `%s'", bs, expected)
 	}
 }
 
 func TestStat(t *testing.T) {
-	m := mockStorage()
-	s, err := m.Stat("/Pictures/Kittens.png")
+	m := MockFS(
+		WithFile(testFilePath, []byte(testContent)),
+	)
+	fi, err := m.Stat(testFilePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Mode() != 0644 {
-		t.Errorf("incorrect mode; got: `%o', want: `%o'", s.Mode(), 0644)
+	if fi.Mode() != testPerm-umask {
+		t.Errorf("got: %o, want: %o", fi.Mode(), testPerm-umask)
 	}
-	if s.Name() != "Kittens.png" {
-		t.Errorf("incorrect name; got: `%s', want: `%s'", s.Name(), "Kittens.png")
+	if fi.Name() != testFileName {
+		t.Errorf("got: `%s', want: `%s'", fi.Name(), testFileName)
 	}
-	if s.Size() != int64(len("A cute kitten!")) {
-		t.Errorf("incorrect size; got: `%d', want: `%d'", s.Size(), len("A cute kitten!"))
+	if fi.Size() != int64(len(testContent)) {
+		t.Errorf("got: %d, want: %d", fi.Size(), len(testContent))
 	}
-	if s.IsDir() != false {
-		t.Error("incorrect type; got: `IsDir = true', want: `IsDir = false'")
+	if fi.IsDir() {
+		t.Error("got: `IsDir = true', want: `IsDir = false'")
 	}
-	//s.ModTime()
+	// fi.ModTime()
 }
 
-func TestOpenNonExistent(t *testing.T) {
-	m := mockStorage()
-	_, err := m.Open("/Does/Not/Exist")
-	if !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("got: `%v', want: `%v'", err, os.ErrNotExist)
-	}
-}
-
-func TestOpenExistent(t *testing.T) {
-	m := mockStorage()
-	fd, err := m.Open("/Documents/doc.txt")
+func TestOpen(t *testing.T) {
+	m := MockFS(
+		WithFile(testFilePath, []byte(testContent)),
+	)
+	fd, err := m.Open(testFilePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fd.Name() != "doc.txt" {
-		t.Errorf("got: `%s', want: `%s'", fd.Name(), "doc.txt")
+	if fd.Name() != testFileName {
+		t.Errorf("got: `%s', want: `%s'", fd.Name(), testFileName)
 	}
 	err = fd.Close()
 	if err != nil {
@@ -151,298 +155,333 @@ func TestOpenExistent(t *testing.T) {
 	}
 }
 
-func TestFileRead(t *testing.T) {
-	m := mockStorage()
-	const expectedContent string = "Lorem ipsum dolores sit amet"
-	fd, err := m.Open("/Documents/doc.txt")
-	if err != nil {
-		t.Fatalf("got error: `%v'", err)
-	}
-	content := make([]byte, 30)
-	nread, err := fd.Read(content)
-	if err != nil {
-		t.Error(err)
-	}
-	if nread != len(expectedContent) {
-		t.Errorf("incorrect number of bytes read; got: `%d', want: `%d'", nread, len(expectedContent))
-	}
-	if string(content[:nread]) != expectedContent {
-		t.Errorf("incorrect content read; got: `%s', want: `%s'", content[:nread], expectedContent)
+func TestOpenErrNotExist(t *testing.T) {
+	m := MockFS()
+	_, err := m.Open("/home/prince/Documents/Good Advice.md")
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("got: `%v', want: `%v'", err, os.ErrNotExist)
 	}
 }
 
-func TestFileReadEOF(t *testing.T) {
-	m := mockStorage()
-	fd, err := m.Open("/Documents/doc.txt")
+func TestFile_Read(t *testing.T) {
+	m := MockFS(
+		WithFile(testFilePath, []byte(testContent)),
+	)
+	fd, err := m.Open(testFilePath)
 	if err != nil {
 		t.Fatal(err)
 	}
+	bs := make([]byte, 128)
+	n, err := fd.Read(bs)
+	if err != nil {
+		t.Error(err)
+	}
+	bs = bs[:n]
+	if string(bs) != testContent {
+		t.Errorf("got: `%s', want: `%s'", bs, testContent)
+	}
+}
 
-	nc, err := fd.Seek(0, io.SeekEnd)
+func TestFile_ReadAtEOF(t *testing.T) {
+	m := MockFS(
+		WithFile(testFilePath, []byte(testContent)),
+	)
+	fd, err := m.Open(testFilePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if nc != 28 {
-		t.Errorf("incorrect cursor position; got: `%d', want: `%d'", nc, 28)
+	ret, err := fd.Seek(0, io.SeekEnd)
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	content := make([]byte, 30)
-	nread, err := fd.Read(content)
+	if ret != int64(len(testContent)) {
+		t.Errorf("got: %d, want: %d", ret, len(testContent))
+	}
+	bs := make([]byte, 128)
+	n, err := fd.Read(bs)
 	if err != io.EOF {
 		t.Errorf("got: `%v', want: `%v'", err, io.EOF)
 	}
-	if nread != 0 {
-		t.Errorf("incorrect number of bytes read; got: `%d', want: `%d'", nread, 0)
+	if n != 0 {
+		t.Errorf("got: %d, want: 0", n)
 	}
 }
 
-func TestFileSeek(t *testing.T) {
-	m := mockStorage()
-	fd, err := m.Open("/Documents/doc.txt")
+func TestFile_Seek(t *testing.T) {
+	m := MockFS(
+		WithFile(testFilePath, []byte(testContent)),
+	)
+	fd, err := m.Open(testFilePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	nc, err := fd.Seek(5, io.SeekStart)
+	ret, err := fd.Seek(5, io.SeekStart)
 	if err != nil {
 		t.Error(err)
 	}
-	if nc != 5 {
-		t.Errorf("incorrect cursor position; got: `%d', want: `%d'", nc, 5)
+	if ret != 5 {
+		t.Errorf("got: %d, want: 5", ret)
 	}
-
-	nc, err = fd.Seek(7, io.SeekCurrent)
+	ret, err = fd.Seek(7, io.SeekCurrent)
 	if err != nil {
 		t.Error(err)
 	}
-	if nc != 12 {
-		t.Errorf("incorrect cursor position; got: `%d', want: `%d'", nc, 12)
+	if ret != 12 {
+		t.Errorf("got: %d, want: 12", ret)
 	}
-
-	nc, err = fd.Seek(4, io.SeekEnd)
+	ret, err = fd.Seek(4, io.SeekEnd)
 	if err != nil {
 		t.Error(err)
 	}
-	if nc != 24 {
-		t.Errorf("incorrect cursor position; got: `%d', want: `%d'", nc, 24)
+	if ret != int64(len(testContent)-4) {
+		t.Errorf("got: %d, want: %d", ret, len(testContent)-4)
 	}
 }
 
-func TestFileWriteAtSeekEnd(t *testing.T) {
-	m := mockStorage()
-	fd, err := m.Open("/Documents/doc.txt")
+func TestFile_WriteAtSeekEnd(t *testing.T) {
+	m := MockFS(
+		WithFile(testFilePath, []byte(testContent)),
+	)
+	fd, err := m.Open(testFilePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	nc, err := fd.Seek(0, io.SeekEnd)
+	ret, err := fd.Seek(0, io.SeekEnd)
 	if err != nil {
 		t.Error(err)
 	}
-	if nc != 28 {
-		t.Errorf("incorrect cursor position; got: `%d', want: `%d'", nc, 28)
+	if ret != int64(len(testContent)) {
+		t.Errorf("got: %d, want: %d", ret, len(testContent))
 	}
-
-	nw, err := fd.Write([]byte("abcdef"))
+	n, err := fd.Write([]byte("123456"))
 	if err != nil {
 		t.Error(err)
 	}
-	if nw != 6 {
-		t.Errorf("incorrect number of bytes written; got: `%d', want: `%d'", nw, 6)
+	if n != 6 {
+		t.Errorf("got: %d, want: 6", n)
 	}
-
-	nc, err = fd.Seek(0, io.SeekStart)
+	err = fd.Close()
 	if err != nil {
 		t.Error(err)
 	}
-	if nc != 0 {
-		t.Errorf("incorrect cursor position; got: `%d', want: `%d'", nc, 0)
-	}
-
-	const expectedContent string = "Lorem ipsum dolores sit ametabcdef"
-	content := make([]byte, 40)
-	nread, err := fd.Read(content)
+	bs, err := m.ReadFile(testFilePath)
 	if err != nil {
 		t.Error(err)
 	}
-	if nread != len(expectedContent) {
-		t.Errorf("incorrect number of bytes read; got: `%d', want: `%d'", nread, len(expectedContent))
-	}
-	if string(content[:nread]) != expectedContent {
-		t.Errorf("incorrect content read; got: `%s', want: `%s'", content[:nread], expectedContent)
+	const expected = testContent + "123456"
+	if string(bs) != expected {
+		t.Errorf("got: `%s', want: `%s'", bs, expected)
 	}
 }
 
-func TestFileWriteOverwriteParts(t *testing.T) {
-	m := mockStorage()
-	fd, err := m.Open("/Documents/doc.txt")
+func TestFile_WriteSequence(t *testing.T) {
+	m := MockFS(
+		WithFile(testFilePath, []byte(testContent)),
+	)
+	fd, err := m.Open(testFilePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	nc, err := fd.Seek(4, io.SeekEnd)
+	ret, err := fd.Seek(8, io.SeekEnd)
 	if err != nil {
 		t.Error(err)
 	}
-	if nc != 24 {
-		t.Errorf("incorrect cursor position; got: `%d', want: `%d'", nc, 24)
+	if ret != int64(len(testContent)-8) {
+		t.Errorf("got: %d, want: %d", ret, len(testContent)-8)
 	}
-
-	nw, err := fd.Write([]byte("abcdef"))
+	n, err := fd.Write([]byte("abcdef"))
 	if err != nil {
 		t.Error(err)
 	}
-	if nw != 6 {
-		t.Errorf("incorrect number of bytes written; got: `%d', want: `%d'", nw, 6)
+	if n != 6 {
+		t.Errorf("got: %d, want: 6", n)
 	}
-
-	nc, err = fd.Seek(0, io.SeekStart)
+	n, err = fd.Write([]byte("1234567"))
 	if err != nil {
 		t.Error(err)
 	}
-	if nc != 0 {
-		t.Errorf("incorrect cursor position; got: `%d', want: `%d'", nc, 0)
+	if n != 7 {
+		t.Errorf("got: %d, want: 7", n)
 	}
-
-	const expectedContent string = "Lorem ipsum dolores sit abcdef"
-	content := make([]byte, 40)
-	nread, err := fd.Read(content)
+	err = fd.Close()
 	if err != nil {
 		t.Error(err)
 	}
-	if nread != len(expectedContent) {
-		t.Errorf("incorrect number of bytes read; got: `%d', want: `%d'", nread, len(expectedContent))
+	bs, err := m.ReadFile(testFilePath)
+	if err != nil {
+		t.Error(err)
 	}
-	if string(content[:nread]) != expectedContent {
-		t.Errorf("incorrect content read; got: `%s', want: `%s'", content[:nread], expectedContent)
+	expected := testContent[:len(testContent)-8] + "abcdef1234567"
+	if string(bs) != expected {
+		t.Errorf("got: `%s', want: `%s'", bs, expected)
 	}
 }
 
-func TestFileMultipleWrite(t *testing.T) {
-	m := mockStorage()
-	fd, err := m.Open("/Documents/doc.txt")
+func TestFile_SeekAndWrite(t *testing.T) {
+	m := MockFS(
+		WithFile(testFilePath, []byte("Ich fand es schon immer verdächtig, dass die Sonne jeden Morgen im Osten aufgeht!")),
+	)
+	fd, err := m.Open(testFilePath)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	nc, err := fd.Seek(4, io.SeekEnd)
+	// overwrite beginning of file
+	ns, err := fd.Write([]byte("1234"))
 	if err != nil {
 		t.Error(err)
 	}
-	if nc != 24 {
-		t.Errorf("incorrect cursor position; got: `%d', want: `%d'", nc, 24)
+	if ns != 4 {
+		t.Errorf("got: %d, want: 4", ns)
 	}
 
-	nw, err := fd.Write([]byte("abcdef"))
+	// overwrite in middle of file
+	ret, err := fd.Seek(5, io.SeekCurrent)
 	if err != nil {
 		t.Error(err)
 	}
-	if nw != 6 {
-		t.Errorf("incorrect number of bytes written; got: `%d', want: `%d'", nw, 6)
+	if ret != 9 {
+		t.Errorf("got: %d, want: 9", ret)
+	}
+	ns, err = fd.Write([]byte("abcdef"))
+	if err != nil {
+		t.Error(err)
+	}
+	if ns != 6 {
+		t.Errorf("got: %d, want: 6", ns)
 	}
 
-	// test that Write advances the cursor
-	nw, err = fd.Write([]byte("ghijkl"))
+	// overwrite at end of file
+	ret, err = fd.Seek(3, io.SeekEnd)
 	if err != nil {
 		t.Error(err)
 	}
-	if nw != 6 {
-		t.Errorf("incorrect number of bytes written; got: `%d', want: `%d'", nw, 6)
+	if ret != 79 {
+		t.Errorf("got: %d, want: 79", ret) // @todo: verify with real if this really is by byte or by rune? (ä is 2 bytes)
+	}
+	ns, err = fd.Write([]byte("___"))
+	if err != nil {
+		t.Error(err)
+	}
+	if ns != 3 {
+		t.Errorf("got: %d, want: 3", ns)
 	}
 
-	nc, err = fd.Seek(0, io.SeekStart)
+	// append to file
+	ns, err = fd.Write([]byte("---..."))
 	if err != nil {
 		t.Error(err)
 	}
-	if nc != 0 {
-		t.Errorf("incorrect cursor position; got: `%d', want: `%d'", nc, 0)
+	if ns != 6 {
+		t.Errorf("got: %d, want: 6", ns)
 	}
 
-	const expectedContent string = "Lorem ipsum dolores sit abcdefghijkl"
-	content := make([]byte, 40)
-	nread, err := fd.Read(content)
+	err = fd.Close()
 	if err != nil {
 		t.Error(err)
 	}
-	if nread != len(expectedContent) {
-		t.Errorf("incorrect number of bytes read; got: `%d', want: `%d'", nread, len(expectedContent))
+	const expected = "1234fand abcdefon immer verdächtig, dass die Sonne jeden Morgen im Osten aufge___---..."
+	bs, err := m.ReadFile(testFilePath)
+	if err != nil {
+		t.Error(err)
 	}
-	if string(content[:nread]) != expectedContent {
-		t.Errorf("incorrect content read; got: `%s', want: `%s'", content[:nread], expectedContent)
+	if string(bs) != expected {
+		t.Errorf("got: `%s', want: `%s'", bs, expected)
 	}
 }
 
-func TestFileStat(t *testing.T) {
-	m := mockStorage()
-	fd, err := m.Open("/Pictures/Kittens.png")
+func TestFile_Stat(t *testing.T) {
+	m := MockFS(
+		WithFile(testFilePath, []byte("Ich fand es schon immer verdächtig, dass die Sonne jeden Morgen im Osten aufgeht!")),
+	)
+	fd, err := m.Open(testFilePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := fd.Stat()
+	fi, err := fd.Stat()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Mode() != 0644 {
-		t.Errorf("incorrect mode; got: `%o', want: `%o'", s.Mode(), 0644)
+	if fi.Mode() != testPerm-umask {
+		t.Errorf("got: %o, want: %o", fi.Mode(), testPerm-umask)
 	}
-	if s.Name() != "Kittens.png" {
-		t.Errorf("incorrect name; got: `%s', want: `%s'", s.Name(), "Kittens.png")
+	if fi.Name() != testFileName {
+		t.Errorf("got: `%s', want: `%s'", fi.Name(), testFileName)
 	}
-	if s.Size() != int64(len("A cute kitten!")) {
-		t.Errorf("incorrect size; got: `%d', want: `%d'", s.Size(), len("A cute kitten!"))
+	if fi.Size() != int64(len(testContent)) {
+		t.Errorf("got: %d, want: %d", fi.Size(), len(testContent))
 	}
-	if s.IsDir() != false {
-		t.Error("incorrect type; got: `IsDir = true', want: `IsDir = false'")
+	if fi.IsDir() != false {
+		t.Error("got: `IsDir = true', want: `IsDir = false'")
 	}
-	//s.ModTime()
+	//fi.ModTime()
 }
 
-func TestRemove(t *testing.T) {
-	m := mockStorage()
-	const path = "/Documents/fakenius.txt"
-	_, err := m.Open(path)
+func TestRemoveFile(t *testing.T) {
+	m := MockFS(
+		WithFile(testFilePath, []byte("Ich fand es schon immer verdächtig, dass die Sonne jeden Morgen im Osten aufgeht!")),
+	)
+	_, err := m.Open(testFilePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = m.Remove(path)
+	err = m.Remove(testFilePath)
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = m.Open(path)
+	_, err = m.Open(testFilePath)
 	if !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("got: `%v', want: `%s' (expected file to be inexistent)", err, os.ErrNotExist)
+		t.Errorf("got: `%v', want: `%v'", err, os.ErrNotExist)
 	}
 }
 
-func TestRemoveNonEmpty(t *testing.T) {
-	m := mockStorage()
-	err := m.Remove("/Pictures/")
+func TestRemoveDir(t *testing.T) {
+	m := MockFS(
+		WithDirectory(testFileDir),
+	)
+	_, err := m.Open(testFileDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = m.Remove(testFileDir)
+	if err != nil {
+		t.Error(err)
+	}
+	_, err = m.Open(testFileDir)
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("got: `%v', want: `%v'", err, os.ErrNotExist)
+	}
+}
+
+func TestRemoveDirNonEmpty(t *testing.T) {
+	m := MockFS(
+		WithFile(testFilePath, []byte("Ich fand es schon immer verdächtig, dass die Sonne jeden Morgen im Osten aufgeht!")),
+	)
+	err := m.Remove(testFileDir)
 	if err == nil {
 		t.Error("expected removal of non-empty directory to report error")
 	}
 }
 
 func TestRemoveAll(t *testing.T) {
-	m := mockStorage()
-	_, err := m.Open("/Documents/fakenius.txt")
+	m := MockFS(
+		WithFile(testFilePath, []byte("Ich fand es schon immer verdächtig, dass die Sonne jeden Morgen im Osten aufgeht!")),
+	)
+	_, err := m.Open(testFilePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = m.RemoveAll("/Documents/")
+	err = m.RemoveAll(testFileDir)
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = m.Open("/Documents/fakenius.txt")
+	_, err = m.Open(testFilePath)
 	if !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("got: `%v', want: `%s' (expected file to be inexistent)", err, os.ErrNotExist)
+		t.Errorf("got: `%v', want: `%v'", err, os.ErrNotExist)
 	}
-	_, err = m.Open("/Documents/doc.txt")
+	_, err = m.Open(testFileDir)
 	if !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("got: `%v', want: `%s' (expected file to be inexistent)", err, os.ErrNotExist)
-	}
-	_, err = m.Open("/Documents/")
-	if !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("got: `%v', want: `%s' (expected file to be inexistent)", err, os.ErrNotExist)
+		t.Errorf("got: `%v', want: `%v'", err, os.ErrNotExist)
 	}
 }
 
@@ -477,11 +516,11 @@ func TestWalkDir(t *testing.T) {
 		t.Error(err)
 	}
 	if len(expected) != len(visited) {
-		t.Fatalf("incorrect paths visited: visited: `%v', expected: `%v'", visited, expected)
+		t.Fatalf("got: `%v', want: `%v'", visited, expected)
 	}
 	for i := range expected {
 		if expected[i] != visited[i] {
-			t.Errorf("wrong path: got: `%s', want: `%s'", visited[i], expected[i])
+			t.Errorf("got: `%s', want: `%s'", visited[i], expected[i])
 		}
 	}
 }
@@ -515,11 +554,11 @@ func TestWalkDirSkipOnDir(t *testing.T) {
 		t.Error(err)
 	}
 	if len(expected) != len(visited) {
-		t.Fatalf("incorrect paths visited: visited: `%v', expected: `%v'", visited, expected)
+		t.Fatalf("visited: `%v', expected: `%v'", visited, expected)
 	}
 	for i := range expected {
 		if expected[i] != visited[i] {
-			t.Errorf("wrong path: got: `%s', want: `%s'", visited[i], expected[i])
+			t.Errorf("got: `%s', want: `%s'", visited[i], expected[i])
 		}
 	}
 }
@@ -555,11 +594,11 @@ func TestWalkDirSkipWithinDir(t *testing.T) {
 		t.Error(err)
 	}
 	if len(expected) != len(visited) {
-		t.Fatalf("incorrect paths visited: visited: `%v', expected: `%v'", visited, expected)
+		t.Fatalf("visited: `%v', expected: `%v'", visited, expected)
 	}
 	for i := range expected {
 		if expected[i] != visited[i] {
-			t.Errorf("wrong path: got: `%s', want: `%s'", visited[i], expected[i])
+			t.Errorf("got: `%s', want: `%s'", visited[i], expected[i])
 		}
 	}
 }
