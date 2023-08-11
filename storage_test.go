@@ -555,6 +555,7 @@ const persistText = `<Root>
 	<Nodes IsFolder="true">
 		<Name>Documents/</Name>
 		<Rname>/Documents</Rname>
+		<ETag>86f32f54096e02778610b22d1d6c56db</ETag>
 		<Mime>inode/directory</Mime>
 		<ParentRName>/</ParentRName>
 	</Nodes>
@@ -562,6 +563,7 @@ const persistText = `<Root>
 		<Name>hello.txt</Name>
 		<Rname>/Documents/hello.txt</Rname>
 		<Sname>/tmp/rms/storage/32000000-0000-0000-0000-000000000000</Sname>
+		<ETag>ea724748ce53d55deb465a6d045fd160</ETag>
 		<Mime>text/plain</Mime>
 		<Length>13</Length>
 		<LastMod>0001-01-01T00:00:00Z</LastMod>
@@ -571,28 +573,53 @@ const persistText = `<Root>
 		<Name>test.txt</Name>
 		<Rname>/Documents/test.txt</Rname>
 		<Sname>/tmp/rms/storage/31000000-0000-0000-0000-000000000000</Sname>
+		<ETag>10b3bf730d787feceec1d534a876dc5f</ETag>
 		<Mime>text/plain</Mime>
-		<Length>15</Length>
+		<Length>20</Length>
 		<LastMod>0001-01-01T00:00:00Z</LastMod>
 		<ParentRName>/Documents</ParentRName>
 	</Nodes>
 </Root>`
 
 func TestPersist(t *testing.T) {
-	Reset()
+	mockServer()
 
-	_, err := AddDocument("/Documents/test.txt", "/tmp/rms/storage/31000000-0000-0000-0000-000000000000", 15, "text/plain")
-	if err != nil {
-		t.Error(err)
+	{
+		sname := filepath.Join(sroot, mustVal(UUID()).String())
+		fd, err := FS.Create(sname)
+		if err != nil {
+			t.Error(err)
+		}
+		fsize, err := io.Copy(fd, bytes.NewReader([]byte("Whole life's a test.")))
+		if err != nil {
+			t.Error(err)
+		}
+		fd.Close() // error ignored
+		_, err = AddDocument("/Documents/test.txt", sname, fsize, "text/plain")
+		if err != nil {
+			t.Error(err)
+		}
 	}
 
-	_, err = AddDocument("/Documents/hello.txt", "/tmp/rms/storage/32000000-0000-0000-0000-000000000000", 13, "text/plain")
-	if err != nil {
-		t.Error(err)
+	{
+		sname := filepath.Join(sroot, mustVal(UUID()).String())
+		fd, err := FS.Create(sname)
+		if err != nil {
+			t.Error(err)
+		}
+		fsize, err := io.Copy(fd, bytes.NewReader([]byte("Hello, World!")))
+		if err != nil {
+			t.Error(err)
+		}
+		fd.Close() // error ignored
+		_, err = AddDocument("/Documents/hello.txt", sname, fsize, "text/plain")
+		if err != nil {
+			t.Error(err)
+		}
 	}
 
 	bs := &bytes.Buffer{}
-	err = Persist(bs)
+	err := Persist(bs)
 	if err != nil {
 		t.Error(err)
 	}
@@ -605,20 +632,44 @@ func TestPersist(t *testing.T) {
 }
 
 func TestLoad(t *testing.T) {
-	Reset()
+	mockServer()
 
-	_, err := AddDocument("/Documents/test.txt", "/tmp/rms/storage/31000000-0000-0000-0000-000000000000", 15, "text/plain")
-	if err != nil {
-		t.Error(err)
+	{
+		sname := filepath.Join(sroot, mustVal(UUID()).String())
+		fd, err := FS.Create(sname)
+		if err != nil {
+			t.Error(err)
+		}
+		fsize, err := io.Copy(fd, bytes.NewReader([]byte("Whole life's a test.")))
+		if err != nil {
+			t.Error(err)
+		}
+		fd.Close() // error ignored
+		_, err = AddDocument("/Documents/test.txt", sname, fsize, "text/plain")
+		if err != nil {
+			t.Error(err)
+		}
 	}
 
-	_, err = AddDocument("/Documents/hello.txt", "/tmp/rms/storage/32000000-0000-0000-0000-000000000000", 13, "text/plain")
-	if err != nil {
-		t.Error(err)
+	{
+		sname := filepath.Join(sroot, mustVal(UUID()).String())
+		fd, err := FS.Create(sname)
+		if err != nil {
+			t.Error(err)
+		}
+		fsize, err := io.Copy(fd, bytes.NewReader([]byte("Hello, World!")))
+		if err != nil {
+			t.Error(err)
+		}
+		fd.Close() // error ignored
+		_, err = AddDocument("/Documents/hello.txt", sname, fsize, "text/plain")
+		if err != nil {
+			t.Error(err)
+		}
 	}
 
 	bs := &bytes.Buffer{}
-	err = Persist(bs)
+	err := Persist(bs)
 	if err != nil {
 		t.Error(err)
 	}
@@ -816,29 +867,29 @@ func ExamplePersist() {
 		}
 	}
 
-	u, err := UUID()
-	panicIf(err)
-	sname := filepath.Join(sroot, u.String())
-	fd, err := FS.Create(sname)
-	panicIf(err)
-	fsize, err := io.Copy(fd, bytes.NewReader([]byte("This is a test.")))
-	panicIf(err)
-	fd.Close()
-	_, err = AddDocument("/Documents/test.txt", sname, fsize, "text/plain")
-	panicIf(err)
+	{
+		sname := filepath.Join(sroot, mustVal(UUID()).String())
+		fd, err := FS.Create(sname)
+		panicIf(err)
+		fsize, err := io.Copy(fd, bytes.NewReader([]byte("Whole life's a test.")))
+		panicIf(err)
+		fd.Close() // error ignored
+		_, err = AddDocument("/Documents/test.txt", sname, fsize, "text/plain")
+		panicIf(err)
+	}
 
-	u, err = UUID()
-	panicIf(err)
-	sname = filepath.Join(sroot, u.String())
-	fd, err = FS.Create(sname)
-	panicIf(err)
-	fsize, err = io.Copy(fd, bytes.NewReader([]byte("Hello, World!")))
-	panicIf(err)
-	fd.Close()
-	_, err = AddDocument("/Documents/hello.txt", sname, fsize, "text/plain")
-	panicIf(err)
+	{
+		sname := filepath.Join(sroot, mustVal(UUID()).String())
+		fd, err := FS.Create(sname)
+		panicIf(err)
+		fsize, err := io.Copy(fd, bytes.NewReader([]byte("Hello, World!")))
+		panicIf(err)
+		fd.Close() // error ignored
+		_, err = AddDocument("/Documents/hello.txt", sname, fsize, "text/plain")
+		panicIf(err)
+	}
 
-	fd, err = FS.Create(sroot + "/marshalled.xml")
+	fd, err := FS.Create(sroot + "/marshalled.xml")
 	panicIf(err)
 	defer fd.Close()
 
@@ -861,6 +912,7 @@ func ExamplePersist() {
 	// 	<Nodes IsFolder="true">
 	// 		<Name>Documents/</Name>
 	// 		<Rname>/Documents</Rname>
+	// 		<ETag>86f32f54096e02778610b22d1d6c56db</ETag>
 	// 		<Mime>inode/directory</Mime>
 	// 		<ParentRName>/</ParentRName>
 	// 	</Nodes>
@@ -868,6 +920,7 @@ func ExamplePersist() {
 	// 		<Name>hello.txt</Name>
 	// 		<Rname>/Documents/hello.txt</Rname>
 	// 		<Sname>/tmp/rms/storage/32000000-0000-0000-0000-000000000000</Sname>
+	// 		<ETag>ea724748ce53d55deb465a6d045fd160</ETag>
 	// 		<Mime>text/plain</Mime>
 	// 		<Length>13</Length>
 	// 		<LastMod>0001-01-01T00:00:00Z</LastMod>
@@ -877,15 +930,16 @@ func ExamplePersist() {
 	// 		<Name>test.txt</Name>
 	// 		<Rname>/Documents/test.txt</Rname>
 	// 		<Sname>/tmp/rms/storage/31000000-0000-0000-0000-000000000000</Sname>
+	// 		<ETag>10b3bf730d787feceec1d534a876dc5f</ETag>
 	// 		<Mime>text/plain</Mime>
-	// 		<Length>15</Length>
+	// 		<Length>20</Length>
 	// 		<LastMod>0001-01-01T00:00:00Z</LastMod>
 	// 		<ParentRName>/Documents</ParentRName>
 	// 	</Nodes>
 	// </Root>
 	// Storage listing follows:
-	// {F} / [/] [6462373162316434]
-	//   {F} Documents/ [/Documents] [3466353235626333]
+	// {F} / [/] [6330643033303764]
+	//   {F} Documents/ [/Documents] [3836663332663534]
 	//     {D} hello.txt (text/plain, 13) [/Documents/hello.txt -> /tmp/rms/storage/32000000-0000-0000-0000-000000000000] [6561373234373438]
-	//     {D} test.txt (text/plain, 15) [/Documents/test.txt -> /tmp/rms/storage/31000000-0000-0000-0000-000000000000] [6530353836306537]
+	//     {D} test.txt (text/plain, 20) [/Documents/test.txt -> /tmp/rms/storage/31000000-0000-0000-0000-000000000000] [3130623362663733]
 }

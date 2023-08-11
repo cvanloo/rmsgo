@@ -95,7 +95,7 @@ type NodeDTO struct {
 	Name        string
 	Rname       string
 	Sname       string `xml:"Sname,omitempty"`
-	ETag        ETag   `xml:"ETag,omitempty"` // @todo: why isn't this marshalled?
+	ETag        string
 	Mime        string
 	Length      int64      `xml:"Length,omitempty"`
 	LastMod     *time.Time `xml:"LastMod,omitempty"`
@@ -106,12 +106,16 @@ func Persist(persistFile io.Writer) (err error) {
 	fileDTOs := []*NodeDTO{}
 	for _, n := range files {
 		if n != root {
+			etag, err := n.Version()
+			if err != nil {
+				return err
+			}
 			dto := &NodeDTO{
 				IsFolder:    n.isFolder,
 				Name:        n.name,
 				Rname:       n.rname,
 				Sname:       n.sname,
-				ETag:        n.etag,
+				ETag:        etag.String(),
 				Mime:        n.mime,
 				Length:      n.length,
 				LastMod:     n.lastMod,
@@ -169,12 +173,16 @@ func Load(persistFile io.Reader) error {
 	}
 
 	for _, n := range persist.Nodes {
+		etag, err := ParseETag(n.ETag)
+		if err != nil {
+			return err
+		}
 		model := &node{}
 		model.isFolder = n.IsFolder
 		model.name = n.Name
 		model.rname = n.Rname
 		model.sname = n.Sname
-		model.etag = n.ETag
+		model.etag = etag
 		model.mime = n.Mime
 		model.length = n.Length
 		model.lastMod = n.LastMod

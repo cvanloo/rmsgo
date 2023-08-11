@@ -25,7 +25,7 @@ func (e ETag) String() string {
 
 // ParseETag decodes an ETag previously encoded by (ETag).String()
 func ParseETag(s string) (ETag, error) {
-	if len(s) != md5.Size {
+	if len(s) != md5.Size*2 {
 		return nil, fmt.Errorf("not a valid etag")
 	}
 	return hex.DecodeString(s)
