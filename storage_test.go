@@ -775,12 +775,11 @@ func TestMigrate(t *testing.T) {
 	must(Configure(rroot, sroot, func(err error) {
 		log.Fatal(err)
 	}))
-	fs := Mock()
-	fs.CreateDirectories(sroot).
-		AddDirectory("somewhere").Into().
-		AddDirectory("Documents").Into().
-		AddFile("hello.txt", "Hello, World!").
-		AddFile("test.txt", "Whole life's a test.")
+	Mock(
+		WithDirectory(sroot),
+		WithFile("/somewhere/Documents/hello.txt", []byte("Hello, World!")),
+		WithFile("/somewhere/Documents/test.txt", []byte("Whole life's a test.")),
+	)
 
 	Reset()
 	errs := Migrate("/somewhere/")

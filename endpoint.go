@@ -56,7 +56,6 @@ func Configure(remoteRoot, storageRoot string, errHandler ErrorHandler) error {
 	sroot = filepath.Clean(storageRoot)
 
 	if errHandler != nil {
-		// @todo: use Options pattern
 		unhandled = errHandler
 	}
 

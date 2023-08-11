@@ -7,12 +7,9 @@ var (
 )
 
 // Mock re-initializes all mock variables to their mocked counterparts.
-// The underlying mock fileSystem is returned, so that directories and files
-// may be added.
-func Mock() *FakeFileSystem {
+// FSOptions may be used to setup directories and files.
+func Mock(fsOpts ...FSOption) {
 	Time = TimeFunc()
 	UUID = UUIDFunc()
-	fs := MockFS()
-	FS = fs
-	return fs
+	FS = MockFS(fsOpts...)
 }

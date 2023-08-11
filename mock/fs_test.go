@@ -9,18 +9,13 @@ import (
 )
 
 func mockStorage() *FakeFileSystem {
-	m := MockFS()
-	m.
-		AddFile("test.txt", "Hello, World!").
-		AddDirectory("Pictures").
-		Into().
-		AddFile("Kittens.png", "A cute kitten!").
-		AddFile("Gopher.jpg", "It's Gopher!").
-		Leave().
-		AddDirectory("Documents").
-		Into().
-		AddFile("doc.txt", "Lorem ipsum dolores sit amet").
-		AddFile("fakenius.txt", "Ich fand es schon immer verdächtig, dass die Sonne jeden Morgen im Osten aufgeht!")
+	m := MockFS(
+		WithFile("/test.txt", []byte("Hello, World!")),
+		WithFile("/Pictures/Kittens.png", []byte("A cute kitten!")),
+		WithFile("/Pictures/Gopher.jpg", []byte("It's Gopher!")),
+		WithFile("/Documents/doc.txt", []byte("Lorem ipsum dolores sit amet")),
+		WithFile("/Documents/fakenius.txt", []byte("Ich fand es schon immer verdächtig, dass die Sonne jeden Morgen im Osten aufgeht!")),
+	)
 	return m
 }
 
@@ -452,23 +447,14 @@ func TestRemoveAll(t *testing.T) {
 }
 
 func TestWalkDir(t *testing.T) {
-	m := MockFS().
-		AddDirectory("tmp").
-		Into().
-		AddDirectory("t").
-		Into().
-		AddFile("1", "").
-		AddDirectory("2").
-		AddFile("3", "").
-		Into().
-		AddFile("4", "").
-		AddFile("5", "").
-		AddFile("6", "").
-		AddDirectory("7").
-		Into().
-		AddDirectory("8").
-		Into().
-		AddFile("9", "")
+	m := MockFS(
+		WithFile("/tmp/t/1", []byte("")),
+		WithFile("/tmp/t/3", []byte("")),
+		WithFile("/tmp/t/2/4", []byte("")),
+		WithFile("/tmp/t/2/5", []byte("")),
+		WithFile("/tmp/t/2/6", []byte("")),
+		WithFile("/tmp/t/2/7/8/9", []byte("")),
+	)
 
 	expected, visited := []string{
 		"/tmp/t",
@@ -501,23 +487,14 @@ func TestWalkDir(t *testing.T) {
 }
 
 func TestWalkDirSkipOnDir(t *testing.T) {
-	m := MockFS().
-		AddDirectory("tmp").
-		Into().
-		AddDirectory("t").
-		Into().
-		AddFile("1", "").
-		AddDirectory("2").
-		AddFile("3", "").
-		Into().
-		AddFile("4", "").
-		AddFile("5", "").
-		AddFile("6", "").
-		AddDirectory("7").
-		Into().
-		AddDirectory("8").
-		Into().
-		AddFile("9", "")
+	m := MockFS(
+		WithFile("/tmp/t/1", []byte("")),
+		WithFile("/tmp/t/3", []byte("")),
+		WithFile("/tmp/t/2/4", []byte("")),
+		WithFile("/tmp/t/2/5", []byte("")),
+		WithFile("/tmp/t/2/6", []byte("")),
+		WithFile("/tmp/t/2/7/8/9", []byte("")),
+	)
 
 	expected, visited := []string{
 		"/tmp/t",
@@ -548,23 +525,14 @@ func TestWalkDirSkipOnDir(t *testing.T) {
 }
 
 func TestWalkDirSkipWithinDir(t *testing.T) {
-	m := MockFS().
-		AddDirectory("tmp").
-		Into().
-		AddDirectory("t").
-		Into().
-		AddFile("1", "").
-		AddDirectory("2").
-		AddFile("3", "").
-		Into().
-		AddFile("4", "").
-		AddFile("5", "").
-		AddFile("6", "").
-		AddDirectory("7").
-		Into().
-		AddDirectory("8").
-		Into().
-		AddFile("9", "")
+	m := MockFS(
+		WithFile("/tmp/t/1", []byte("")),
+		WithFile("/tmp/t/3", []byte("")),
+		WithFile("/tmp/t/2/4", []byte("")),
+		WithFile("/tmp/t/2/5", []byte("")),
+		WithFile("/tmp/t/2/6", []byte("")),
+		WithFile("/tmp/t/2/7/8/9", []byte("")),
+	)
 
 	expected, visited := []string{
 		"/tmp/t",

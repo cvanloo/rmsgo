@@ -39,18 +39,18 @@ import (
 //}
 //_ = body
 
-func mockServer() *FakeFileSystem {
+func mockServer() {
 	const (
 		rroot = "/storage/"
 		sroot = "/tmp/rms/storage/"
 	)
-	fs := Mock()
-	fs.CreateDirectories(sroot)
+	Mock(
+		WithDirectory(sroot),
+	)
 	must(Configure(rroot, sroot, func(err error) {
 		log.Fatal(err)
 	}))
 	Reset()
-	return fs
 }
 
 func ExampleGetFolder() {
@@ -185,7 +185,7 @@ func ExampleGetFolder() {
 //    document clashes with existing folder
 
 func TestPutDocument(t *testing.T) {
-	fs := mockServer()
+	mockServer()
 
 	ts := httptest.NewServer(ServeMux{})
 	defer ts.Close()
@@ -234,7 +234,7 @@ func TestPutDocument(t *testing.T) {
 		t.Error("a document should never be a folder")
 	}
 
-	bs, err := fs.ReadFile(n.sname)
+	bs, err := FS.ReadFile(n.sname)
 	if err != nil {
 		t.Error(err)
 	}
@@ -458,7 +458,7 @@ func TestHeadDocument(t *testing.T) {
 }
 
 func TestDeleteDocument(t *testing.T) {
-	fs := mockServer()
+	mockServer()
 
 	ts := httptest.NewServer(ServeMux{})
 	defer ts.Close()
@@ -485,7 +485,7 @@ func TestDeleteDocument(t *testing.T) {
 		t.Error(err)
 	}
 
-	_, err = fs.Stat(n.sname)
+	_, err = FS.Stat(n.sname)
 	if err != nil {
 		t.Error(err)
 	}
@@ -507,7 +507,7 @@ func TestDeleteDocument(t *testing.T) {
 		t.Errorf("got: `%s', want: `%s'", e, firstETag)
 	}
 
-	_, err = fs.Stat(n.sname)
+	_, err = FS.Stat(n.sname)
 	if !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("got: `%v', want: `%v'", err, os.ErrNotExist)
 	}

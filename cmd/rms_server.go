@@ -21,8 +21,9 @@ func logger(next http.Handler) http.Handler {
 }
 
 func main() {
-	mfs := mock.Mock()
-	mfs.CreateDirectories("/tmp/rms/storage/")
+	mock.Mock(
+		mock.WithDirectory("/tmp/rms/storage/"),
+	)
 
 	err := rmsgo.Configure(RemoteRoot, StorageRoot, nil)
 	if err != nil {

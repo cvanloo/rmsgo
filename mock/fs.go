@@ -78,8 +78,8 @@ func (*RealFileSystem) RemoveAll(path string) error {
 }
 
 type FakeFileSystem struct {
-	lastAdded, parent, root *FakeFile
-	contents                map[string]*FakeFile
+	parent, root *FakeFile
+	contents     map[string]*FakeFile
 }
 
 var _ FileSystem = (*FakeFileSystem)(nil)
@@ -445,7 +445,7 @@ func (m *FakeFileDescriptor) Sys() any {
 	return m.file
 }
 
-func MockFS() (fs *FakeFileSystem) {
+func MockFS(opts ...FSOption) (fs *FakeFileSystem) {
 	r := &FakeFile{
 		isDir:    true,
 		path:     "/",
@@ -456,98 +456,89 @@ func MockFS() (fs *FakeFileSystem) {
 		children: map[string]*FakeFile{},
 	}
 	fs = &FakeFileSystem{
-		lastAdded: r,
-		parent:    r,
-		root:      r,
+		parent: r,
+		root:   r,
 		contents: map[string]*FakeFile{
 			"/": r,
 		},
 	}
+	for _, opt := range opts {
+		opt(fs)
+	}
 	return
 }
 
-func (m *FakeFileSystem) CreateDirectories(path string) *FakeFileSystem {
-	path = filepath.Clean(path)
-	parts := strings.Split(path, "/")[1:] // exclude empty ""
+type FSOption func(*FakeFileSystem)
 
-	p := m.root
+func WithFile(path string, data []byte) FSOption {
+	return func(fs *FakeFileSystem) {
+		path := filepath.Clean(path)
+		parentPath := filepath.Dir(path)
+		parts := strings.Split(parentPath, "/")[1:] // exclude empty ""
 
-	for i := range parts {
-		pname := "/" + strings.Join(parts[:i+1], "/")
-		pn, ok := m.contents[pname]
-		if !ok {
-			pn = &FakeFile{
-				isDir:    true,
-				path:     pname,
-				name:     parts[i] + "/",
-				mode:     0777 - umask,
-				lastMod:  Time(),
-				parent:   p,
-				children: map[string]*FakeFile{},
+		p := fs.root
+
+		for i := range parts {
+			pname := "/" + strings.Join(parts[:i+1], "/")
+			pn, ok := fs.contents[pname]
+			if !ok {
+				pn = &FakeFile{
+					isDir:    true,
+					path:     pname,
+					name:     parts[i] + "/",
+					mode:     0777 - umask,
+					lastMod:  Time(),
+					parent:   p,
+					children: map[string]*FakeFile{},
+				}
+				p.children[pname] = pn
+				fs.contents[pname] = pn
 			}
-			p.children[pname] = pn
-			m.contents[pname] = pn
+			p = pn
 		}
-		p = pn
+		// p now points to the file's immediate ancestor
+
+		f := &FakeFile{
+			isDir:   false,
+			path:    path,
+			name:    filepath.Base(path),
+			bytes:   data,
+			mode:    0666 - umask,
+			lastMod: Time(),
+			parent:  p,
+		}
+		p.children[path] = f
+		fs.contents[path] = f
 	}
-	// p now points to the inner-most directory
-	m.lastAdded = p
-	return m
 }
 
-// @todo: Use Options pattern?
-// @todo: make sure to use os.PathSeparator everywhere!!! (or fix filepath.Clean to only use /)
+func WithDirectory(path string) FSOption {
+	return func(fs *FakeFileSystem) {
+		path = filepath.Clean(path)
+		parts := strings.Split(path, "/")[1:] // exclude empty ""
 
-func (m *FakeFileSystem) AddFile(name, data string) *FakeFileSystem {
-	if strings.Contains(name, "/") {
-		panic("file name must not contain the Unix path separator ('/')")
-	}
-	path := filepath.Join(m.parent.path, name)
-	f := &FakeFile{
-		isDir:   false,
-		path:    path,
-		name:    name,
-		bytes:   []byte(data),
-		mode:    0666 - umask,
-		lastMod: Time(),
-		parent:  m.parent,
-	}
-	m.contents[path] = f
-	m.parent.children[path] = f
-	return m
-}
+		p := fs.root
 
-func (m *FakeFileSystem) AddDirectory(name string) *FakeFileSystem {
-	if name[len(name)-1] == '/' {
-		name = name[:len(name)-1]
+		for i := range parts {
+			pname := "/" + strings.Join(parts[:i+1], "/")
+			pn, ok := fs.contents[pname]
+			if !ok {
+				pn = &FakeFile{
+					isDir:    true,
+					path:     pname,
+					name:     parts[i] + "/",
+					mode:     0777 - umask,
+					lastMod:  Time(),
+					parent:   p,
+					children: map[string]*FakeFile{},
+				}
+				p.children[pname] = pn
+				fs.contents[pname] = pn
+			}
+			p = pn
+		}
+		// p now points to the inner-most directory
 	}
-	if strings.Contains(name, "/") {
-		panic("directory name must only contain the Unix path separator ('/') as a suffix.")
-	}
-	path := filepath.Join(m.parent.path, name)
-	d := &FakeFile{
-		isDir:    true,
-		path:     path,
-		name:     name + "/",
-		mode:     0777 - umask,
-		lastMod:  Time(),
-		parent:   m.parent,
-		children: map[string]*FakeFile{},
-	}
-	m.lastAdded = d
-	m.contents[path] = d
-	m.parent.children[path] = d
-	return m
-}
-
-func (m *FakeFileSystem) Into() *FakeFileSystem {
-	m.parent = m.lastAdded
-	return m
-}
-
-func (m *FakeFileSystem) Leave() *FakeFileSystem {
-	m.parent = m.parent.parent
-	return m
 }
 
 func (m *FakeFileSystem) String() (pp string) {
