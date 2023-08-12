@@ -414,7 +414,7 @@ func (m *FakeFileDescriptor) Seek(offset int64, whence int) (int64, error) {
 		m.cursor += offset
 	case io.SeekEnd:
 		// relative to the end of the file
-		m.cursor = int64(len(m.file.bytes)) - offset
+		m.cursor = int64(len(m.file.bytes)) + offset
 	}
 	return m.cursor, nil
 }

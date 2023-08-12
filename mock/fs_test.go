@@ -9,8 +9,6 @@ import (
 )
 
 // @todo: test error cases as well
-// @todo: seek verify with os.File.Seek that return position is really correct
-// @todo: verify with real if this really is by byte or by rune? (ä is 2 bytes)
 
 const (
 	testContent  = "Ich fand es schon immer verdächtig, dass die Sonne jeden Morgen im Osten aufgeht!"
@@ -233,7 +231,7 @@ func TestFile_Seek(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if ret != int64(len(testContent)-4) {
+	if ret != int64(len(testContent)+4) {
 		t.Errorf("got: %d, want: %d", ret, len(testContent)-4)
 	}
 }
@@ -282,7 +280,11 @@ func TestFile_WriteSequence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ret, err := fd.Seek(8, io.SeekEnd)
+	ret, err := fd.Seek(0, io.SeekEnd)
+	if err != nil {
+		t.Error(err)
+	}
+	ret, err = fd.Seek(ret-8, io.SeekStart)
 	if err != nil {
 		t.Error(err)
 	}
@@ -352,12 +354,12 @@ func TestFile_SeekAndWrite(t *testing.T) {
 	}
 
 	// overwrite at end of file
-	ret, err = fd.Seek(3, io.SeekEnd)
+	ret, err = fd.Seek(79, io.SeekStart)
 	if err != nil {
 		t.Error(err)
 	}
 	if ret != 79 {
-		t.Errorf("got: %d, want: 79", ret) // @todo: verify with real if this really is by byte or by rune? (ä is 2 bytes)
+		t.Errorf("got: %d, want: 79", ret)
 	}
 	ns, err = fd.Write([]byte("___"))
 	if err != nil {
