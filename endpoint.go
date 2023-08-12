@@ -173,8 +173,10 @@ func GetFolder(w http.ResponseWriter, r *http.Request) error {
 		return writeError(w, err) // internal server error
 	}
 
-	if conds := r.Header["If-Non-Match"]; len(conds) > 0 {
+	if condStr := r.Header.Get("If-Non-Match"); condStr != "" {
+		conds := strings.Split(condStr, ",")
 		for _, cond := range conds {
+			cond = strings.TrimSpace(cond)
 			rev, err := ParseETag(cond)
 			if err != nil {
 				return writeError(w, HttpError{
