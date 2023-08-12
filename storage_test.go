@@ -12,9 +12,11 @@ import (
 	"golang.org/x/exp/maps"
 )
 
-// @todo: rework unit tests in the same manner as mock/fs_test.go
+var genpath = func() string {
+	return filepath.Join(sroot, mustVal(UUID()).String())
+}
 
-func TestCreateDocument(t *testing.T) {
+func TestAddDocument(t *testing.T) {
 	Reset()
 
 	const (
@@ -43,12 +45,13 @@ func TestCreateDocument(t *testing.T) {
 		t.Error("got: isFolder == true, want: isFolder == false")
 	}
 	if n.length != 18 {
-		t.Errorf("got: `%d', want: 18", n.length)
+		t.Errorf("got: %d, want: 18", n.length)
 	}
 	if n.mime != "text/markdown" {
 		t.Errorf("got: `%s', want: text/markdown", n.mime)
 	}
 
+	// children must be listed after their parents… [#1]
 	checks := []struct {
 		name, rname string
 	}{
@@ -74,8 +77,6 @@ func TestCreateDocument(t *testing.T) {
 		},
 	}
 
-	t.Logf("\n%s", root)
-
 	p := root
 	for _, c := range checks {
 		n, err := Retrieve(c.rname)
@@ -90,46 +91,50 @@ func TestCreateDocument(t *testing.T) {
 			t.Errorf("got: `%s', want: `%s'", n.rname, c.rname)
 		}
 		if n.mime != "inode/directory" {
-			t.Errorf("got: `%s', want: inode/directory", n.mime)
+			t.Errorf("got: `%s', want: `inode/directory'", n.mime)
 		}
 		if !n.isFolder {
 			t.Error("got: isFolder == false, want: isFolder == true")
 		}
 		if len(n.children) != 1 {
-			t.Errorf("%s has `%d' children, want: 1", n.name, len(n.children))
+			t.Errorf("got: %d, want: 1", len(n.children))
+		}
+		// [#1] …for these checks to work:
+		if n.parent != p {
+			t.Errorf("got: `%s', want: `%s'", n.parent.rname, p.rname)
 		}
 		if v := maps.Values(p.children)[0]; v != n {
-			t.Errorf("parent `%s' has wrong child; got: `%s', want: `%s'", p.name, v.name, n.name)
-		}
-		if n.parent != p {
-			t.Errorf("wrong parent for `%s'; got: `%s', want: `%s'", n.name, n.parent.name, p.name)
+			t.Errorf("got: `%s', want: `%s'", v.rname, n.rname)
 		}
 		p = n
 	}
 
 }
 
-func TestCreateDocuments(t *testing.T) {
+func TestAddDocumentMultipleInSameFolder(t *testing.T) {
 	Reset()
 
-	_, err := AddDocument("/code/hello.go", "", 0, "text/plain")
+	_, err := AddDocument("/code/hello.go", _s(), _i64(), "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = AddDocument("/code/error.go", "", 0, "text/plain")
+	_, err = AddDocument("/code/error.go", _s(), _i64(), "text/plain")
 	if err != nil {
 		t.Error(err)
-	}
-
-	t.Logf("\n%s", root)
-
-	if l := len(root.children); l != 1 {
-		t.Errorf("got: `%d', want: 1", l)
 	}
 
 	codeFolder, err := Retrieve("/code/")
 	if err != nil {
 		t.Error(err)
+	}
+	if codeFolder.parent != root {
+		t.Errorf("got: `%s', want: `%s'", codeFolder.parent.rname, root.rname)
+	}
+	if l := len(root.children); l != 1 {
+		t.Errorf("got: `%d', want: 1", l)
+	}
+	if fc := maps.Values(root.children)[0]; fc != codeFolder {
+		t.Errorf("got: `%s', want: `%s'", fc, codeFolder)
 	}
 	if l := len(codeFolder.children); l != 2 {
 		t.Errorf("got: `%d', want: 2", l)
@@ -141,10 +146,17 @@ func TestUpdateDocument(t *testing.T) {
 
 	const path = "/FunFacts/Part1.txt"
 
-	n, err := AddDocument(path, "", 0, "text/plain")
+	n, err := AddDocument(path, _s(), 14, "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
+	if n.mime != "text/plain" {
+		t.Errorf("got: `%s', want: `text/plain'", n.mime)
+	}
+	if n.length != 14 {
+		t.Errorf("got: %d, want: 14", n.length)
+	}
+	//mod1 := *n.lastMod
 
 	UpdateDocument(n, "image/png", 5)
 
@@ -154,7 +166,10 @@ func TestUpdateDocument(t *testing.T) {
 	if n.length != 5 {
 		t.Errorf("got: %d, want: 5", n.length)
 	}
-	// n.LastMod
+	//mod2 := *n.lastMod
+	//if mod1.Compare(mod2) == 0 {
+	//	t.Error("mod time did not change")
+	//}
 }
 
 func TestRetrieve(t *testing.T) {
@@ -162,7 +177,7 @@ func TestRetrieve(t *testing.T) {
 
 	const path = "/FunFacts/Part2.txt"
 
-	n1, err := AddDocument(path, "", 0, "text/plain")
+	n1, err := AddDocument(path, _s(), _i64(), "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
@@ -172,16 +187,16 @@ func TestRetrieve(t *testing.T) {
 		t.Error(err)
 	}
 	if n1 != n2 {
-		t.Error("expected nodes to be the same")
+		t.Error("nodes are not the same")
 	}
 }
 
 func TestRemoveDocument(t *testing.T) {
 	Reset()
 
-	const path = "/FunFacts/Part3.txt"
+	const path = `/Did/You/Know/That/Unix Paths May Contain Non﹣Breaking Spaces?۪txt`
 
-	n1, err := AddDocument(path, "", 0, "text/plain")
+	n1, err := AddDocument(path, _s(), _i64(), "text/plain")
 	if err != nil {
 		t.Error(err)
 	}
@@ -192,7 +207,7 @@ func TestRemoveDocument(t *testing.T) {
 	}
 
 	if n1 != n2 {
-		t.Error("expected nodes to be the same")
+		t.Error("nodes are not the same")
 	}
 
 	RemoveDocument(n2)
@@ -203,334 +218,27 @@ func TestRemoveDocument(t *testing.T) {
 	}
 }
 
-func TestFolderETagUpdatedWhenDocumentAdded(t *testing.T) {
+func TestUpdateDocumentUpdatesETag(t *testing.T) {
 	mockServer()
 
-	{
-		sname := filepath.Join(sroot, mustVal(UUID()).String())
-		fd, err := FS.Create(sname)
-		if err != nil {
-			t.Error(err)
-		}
-		fsize, err := io.Copy(fd, bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")))
-		if err != nil {
-			t.Error(err)
-		}
-		fd.Close() // error ignored
-		_, err = AddDocument("/code/hello.go", sname, fsize, "text/plain")
-		if err != nil {
-			t.Error(err)
-		}
-	}
-
-	codeFolder, err := Retrieve("/code/")
-	if err != nil {
-		t.Error(err)
-	}
-
-	v1, err := codeFolder.Version()
-	if err != nil {
-		t.Error(err)
-	}
-
-	{
-		sname := filepath.Join(sroot, mustVal(UUID()).String())
-		fd, err := FS.Create(sname)
-		if err != nil {
-			t.Error(err)
-		}
-		fsize, err := io.Copy(fd, bytes.NewReader([]byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")")))
-		if err != nil {
-			t.Error(err)
-		}
-		fd.Close() // error ignored
-		_, err = AddDocument("/code/error.go", sname, fsize, "text/plain")
-		if err != nil {
-			t.Error(err)
-		}
-	}
-
-	if codeFolder.Valid() != false {
-		t.Error("expected etag to have been invalidated")
-	}
-	v2, err := codeFolder.Version()
-	if err != nil {
-		t.Error(err)
-	}
-
-	if string(v1) == string(v2) {
-		t.Error("expected version to have changed")
-	}
-}
-
-func TestFolderETagUpdatedWhenDocumentRemoved(t *testing.T) {
-	mockServer()
-
-	var helloDoc *node
-	{
-		sname := filepath.Join(sroot, mustVal(UUID()).String())
-		fd, err := FS.Create(sname)
-		if err != nil {
-			t.Error(err)
-		}
-		fsize, err := io.Copy(fd, bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")))
-		if err != nil {
-			t.Error(err)
-		}
-		fd.Close() // error ignored
-		helloDoc, err = AddDocument("/code/hello.go", sname, fsize, "text/plain")
-		if err != nil {
-			t.Error(err)
-		}
-	}
-
-	{
-		sname := filepath.Join(sroot, mustVal(UUID()).String())
-		fd, err := FS.Create(sname)
-		if err != nil {
-			t.Error(err)
-		}
-		fsize, err := io.Copy(fd, bytes.NewReader([]byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")")))
-		if err != nil {
-			t.Error(err)
-		}
-		fd.Close() // error ignored
-		_, err = AddDocument("/code/error.go", sname, fsize, "text/plain")
-		if err != nil {
-			t.Error(err)
-		}
-	}
-
-	codeFolder, err := Retrieve("/code/")
-	if err != nil {
-		t.Error(err)
-	}
-
-	v1, err := codeFolder.Version()
-	if err != nil {
-		t.Error(err)
-	}
-
-	RemoveDocument(helloDoc)
-	err = FS.Remove(helloDoc.sname)
-	if err != nil {
-		t.Error(err)
-	}
-
-	if codeFolder.Valid() != false {
-		t.Error("expected version to have been invalidated")
-	}
-	v2, err := codeFolder.Version()
-	if err != nil {
-		t.Error(err)
-	}
-
-	if string(v1) == string(v2) {
-		t.Error("expected version to have changed")
-	}
-}
-
-func TestFolderETagUpdatedWhenDocumentUpdated(t *testing.T) {
-	mockServer()
-
-	{
-		sname := filepath.Join(sroot, mustVal(UUID()).String())
-		fd, err := FS.Create(sname)
-		if err != nil {
-			t.Error(err)
-		}
-		fsize, err := io.Copy(fd, bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")))
-		if err != nil {
-			t.Error(err)
-		}
-		fd.Close() // error ignored
-		_, err = AddDocument("/code/hello.go", sname, fsize, "text/plain")
-		if err != nil {
-			t.Error(err)
-		}
-	}
-
-	var errorDoc *node
-	{
-		sname := filepath.Join(sroot, mustVal(UUID()).String())
-		fd, err := FS.Create(sname)
-		if err != nil {
-			t.Error(err)
-		}
-		fsize, err := io.Copy(fd, bytes.NewReader([]byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")")))
-		if err != nil {
-			t.Error(err)
-		}
-		fd.Close() // error ignored
-		errorDoc, err = AddDocument("/code/error.go", sname, fsize, "text/plain")
-		if err != nil {
-			t.Error(err)
-		}
-	}
-
-	dv1, err := errorDoc.Version()
-	if err != nil {
-		t.Error(err)
-	}
-
-	codeFolder, err := Retrieve("/code/")
-	if err != nil {
-		t.Error(err)
-	}
-	fv1, err := codeFolder.Version()
-	if err != nil {
-		t.Error(err)
-	}
-
-	newContents := []byte("var ErrExistentialCrisis = errors.New(\"why?\")")
-	err = FS.WriteFile(errorDoc.sname, newContents, 0666)
-	if err != nil {
-		t.Error(err)
-	}
-	UpdateDocument(errorDoc, "text/plain", int64(len(newContents)))
-
-	if errorDoc.Valid() != false {
-		t.Error("expected document version to have been invalidated")
-	}
-	dv2, err := errorDoc.Version()
-	if err != nil {
-		t.Error(err)
-	}
-
-	if codeFolder.Valid() != false {
-		t.Error("expected folder version to have been invalidated")
-	}
-	fv2, err := codeFolder.Version()
-	if err != nil {
-		t.Error(err)
-	}
-
-	if string(fv1) == string(fv2) {
-		t.Error("expected folder version to have changed")
-	}
-	if string(dv1) == string(dv2) {
-		t.Error("expected document version to have changed")
-	}
-}
-
-func TestFolderETagNotAffectedWhenDifferentFolderChanged(t *testing.T) {
-	mockServer()
-
-	{
-		sname := filepath.Join(sroot, mustVal(UUID()).String())
-		fd, err := FS.Create(sname)
-		if err != nil {
-			t.Error(err)
-		}
-		fsize, err := io.Copy(fd, bytes.NewReader([]byte("func hello() string {\n\treturn \"Hello, World\"\n}")))
-		if err != nil {
-			t.Error(err)
-		}
-		fd.Close() // error ignored
-		_, err = AddDocument("/code/hello.go", sname, fsize, "text/plain")
-		if err != nil {
-			t.Error(err)
-		}
-	}
-
-	{
-		sname := filepath.Join(sroot, mustVal(UUID()).String())
-		fd, err := FS.Create(sname)
-		if err != nil {
-			t.Error(err)
-		}
-		fsize, err := io.Copy(fd, bytes.NewReader([]byte("var ErrYouSuck = errors.New(\"YOU SUCK!!\")")))
-		if err != nil {
-			t.Error(err)
-		}
-		fd.Close() // error ignored
-		_, err = AddDocument("/code/error.go", sname, fsize, "text/plain")
-		if err != nil {
-			t.Error(err)
-		}
-	}
-
-	codeFolder, err := Retrieve("/code/")
-	if err != nil {
-		t.Error(err)
-	}
-
-	v1, err := codeFolder.Version()
-	if err != nil {
-		t.Error(err)
-	}
-
-	rv1, err := root.Version()
-	if err != nil {
-		t.Error(err)
-	}
-
-	{
-		sname := filepath.Join(sroot, mustVal(UUID()).String())
-		fd, err := FS.Create(sname)
-		if err != nil {
-			t.Error(err)
-		}
+	const (
 		// 可愛い is 3 characters together taking up 9 bytes
-		fsize, err := io.Copy(fd, bytes.NewReader([]byte("可愛い")))
-		if err != nil {
-			t.Error(err)
-		}
-		fd.Close() // error ignored
-		f, err := AddDocument("/Pictures/Kittens.png", sname, fsize, "text/plain")
-		if err != nil {
-			t.Error(err)
-		}
-		if f.length != 9 {
-			t.Errorf("got: `%d', want: 9", f.length)
-		}
-	}
-
-	if codeFolder.Valid() != true {
-		t.Error("expected etag to still be valid")
-	}
-	v2, err := codeFolder.Version()
-	if err != nil {
-		t.Error(err)
-	}
-	if string(v1) != string(v2) {
-		t.Error("expected code folder etag to not have changed")
-	}
-
-	if root.Valid() != false {
-		t.Error("expected version to have been invalidated")
-	}
-	rv2, err := root.Version()
-	if err != nil {
-		t.Error(err)
-	}
-	if string(rv1) == string(rv2) {
-		t.Error("expected root etag to have changed")
-	}
-}
-
-func TestDocumentETagUpdatedWhenDocumentUpdated(t *testing.T) {
-	mockServer()
+		testContent = "可愛い"
+	)
 
 	var kittenDoc *node
 	{
-		sname := filepath.Join(sroot, mustVal(UUID()).String())
-		fd, err := FS.Create(sname)
+		sname := genpath()
+		err := FS.WriteFile(sname, []byte(testContent), 0666)
 		if err != nil {
 			t.Error(err)
 		}
-		// 可愛い is 3 characters together taking up 9 bytes
-		fsize, err := io.Copy(fd, bytes.NewReader([]byte("可愛い")))
-		if err != nil {
-			t.Error(err)
-		}
-		fd.Close() // error ignored
-		kittenDoc, err = AddDocument("/Pictures/Kittens.png", sname, fsize, "text/plain")
+		kittenDoc, err = AddDocument("/Pictures/Kittens.png", sname, int64(len(testContent)), "text/plain")
 		if err != nil {
 			t.Error(err)
 		}
 		if kittenDoc.length != 9 {
-			t.Errorf("got: `%d', want: 9", kittenDoc.length)
+			t.Errorf("got: %d, want: 9", kittenDoc.length)
 		}
 	}
 
@@ -542,14 +250,372 @@ func TestDocumentETagUpdatedWhenDocumentUpdated(t *testing.T) {
 	UpdateDocument(kittenDoc, "image/avif", 9)
 
 	if kittenDoc.Valid() {
-		t.Error("expected version to have been invalidated")
+		t.Error("etag is still valid")
 	}
 	v2, err := kittenDoc.Version()
 	if err != nil {
 		t.Error(err)
 	}
 	if string(v2) == string(v1) {
-		t.Error("expected document etag to have changed")
+		t.Error("etag has not changed")
+	}
+}
+
+func TestAddDocumentUpdatesParentETag(t *testing.T) {
+	mockServer()
+
+	const (
+		testContent1 = "func hello() string {\n\treturn \"Hello, World\"\n}"
+		testContent2 = "var ErrYouSuck = errors.New(\"YOU SUCK!!\")"
+	)
+
+	var helloDoc *node
+	{
+		sname := genpath()
+		err := FS.WriteFile(sname, []byte(testContent1), 0666)
+		if err != nil {
+			t.Error(err)
+		}
+		helloDoc, err = AddDocument("/code/hello.go", sname, int64(len(testContent1)), "text/plain")
+		if err != nil {
+			t.Error(err)
+		}
+	}
+
+	dv1, err := helloDoc.Version()
+	if err != nil {
+		t.Error(err)
+	}
+	codeFolder, err := Retrieve("/code/")
+	if err != nil {
+		t.Error(err)
+	}
+	fv1, err := codeFolder.Version()
+	if err != nil {
+		t.Error(err)
+	}
+
+	{
+		sname := genpath()
+		err := FS.WriteFile(sname, []byte(testContent2), 0666)
+		if err != nil {
+			t.Error(err)
+		}
+		_, err = AddDocument("/code/error.go", sname, int64(len(testContent2)), "text/plain")
+		if err != nil {
+			t.Error(err)
+		}
+	}
+
+	// hello.go document etag should remain unchanged
+	if !helloDoc.Valid() {
+		t.Error("document etag is not valid")
+	}
+	dv2, err := helloDoc.Version()
+	if err != nil {
+		t.Error(err)
+	}
+	if string(dv1) != string(dv2) {
+		t.Error("document etag changed")
+	}
+	// parent etag should change because another document was added to its children
+	if codeFolder.Valid() {
+		t.Error("parent etag is still valid")
+	}
+	fv2, err := codeFolder.Version()
+	if err != nil {
+		t.Error(err)
+	}
+	if string(fv1) == string(fv2) {
+		t.Error("parent etag has not changed")
+	}
+}
+
+func TestRevomeDocumentUpdatesParentETag(t *testing.T) {
+	mockServer()
+
+	const (
+		testContent1 = "func hello() string {\n\treturn \"Hello, World\"\n}"
+		testContent2 = "var ErrYouSuck = errors.New(\"YOU SUCK!!\")"
+	)
+
+	var helloDoc *node
+	{
+		sname := genpath()
+		err := FS.WriteFile(sname, []byte(testContent1), 0666)
+		if err != nil {
+			t.Error(err)
+		}
+		helloDoc, err = AddDocument("/code/hello.go", sname, int64(len(testContent1)), "text/plain")
+		if err != nil {
+			t.Error(err)
+		}
+	}
+
+	{
+		sname := genpath()
+		err := FS.WriteFile(sname, []byte(testContent2), 0666)
+		if err != nil {
+			t.Error(err)
+		}
+		_, err = AddDocument("/code/error.go", sname, int64(len(testContent2)), "text/plain")
+		if err != nil {
+			t.Error(err)
+		}
+	}
+
+	dv1, err := helloDoc.Version()
+	if err != nil {
+		t.Error(err)
+	}
+	codeFolder, err := Retrieve("/code/")
+	if err != nil {
+		t.Error(err)
+	}
+	v1, err := codeFolder.Version()
+	if err != nil {
+		t.Error(err)
+	}
+
+	RemoveDocument(helloDoc)
+	err = FS.Remove(helloDoc.sname)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// hello.go document etag should remain unchanged
+	if !helloDoc.Valid() {
+		t.Error("document etag is not valid")
+	}
+	dv2, err := helloDoc.Version()
+	if err != nil {
+		t.Error(err)
+	}
+	if string(dv1) != string(dv2) {
+		t.Error("document etag changed")
+	}
+	// parent etag should change because another document was deleted from its children
+	if codeFolder.Valid() != false {
+		t.Error("etag is still valid")
+	}
+	v2, err := codeFolder.Version()
+	if err != nil {
+		t.Error(err)
+	}
+	if string(v1) == string(v2) {
+		t.Error("etag has not changed")
+	}
+}
+
+func TestUpdateDocumentUpdatesParentETag(t *testing.T) {
+	mockServer()
+
+	const (
+		testContent1 = "func hello() string {\n\treturn \"Hello, World\"\n}"
+		testContent2 = "var ErrYouSuck = errors.New(\"YOU SUCK!!\")"
+		newContents  = "var ErrExistentialCrisis = errors.New(\"why?\")"
+	)
+
+	var helloDoc *node
+	{
+		sname := genpath()
+		err := FS.WriteFile(sname, []byte(testContent1), 0666)
+		if err != nil {
+			t.Error(err)
+		}
+		helloDoc, err = AddDocument("/code/hello.go", sname, int64(len(testContent1)), "text/plain")
+		if err != nil {
+			t.Error(err)
+		}
+	}
+
+	var errorDoc *node
+	{
+		sname := genpath()
+		err := FS.WriteFile(sname, []byte(testContent2), 0666)
+		if err != nil {
+			t.Error(err)
+		}
+		errorDoc, err = AddDocument("/code/error.go", sname, int64(len(testContent2)), "text/plain")
+		if err != nil {
+			t.Error(err)
+		}
+	}
+
+	dhv1, err := helloDoc.Version()
+	if err != nil {
+		t.Error(err)
+	}
+	dev1, err := errorDoc.Version()
+	if err != nil {
+		t.Error(err)
+	}
+	codeFolder, err := Retrieve("/code/")
+	if err != nil {
+		t.Error(err)
+	}
+	fv1, err := codeFolder.Version()
+	if err != nil {
+		t.Error(err)
+	}
+
+	err = FS.WriteFile(errorDoc.sname, []byte(newContents), 0666)
+	if err != nil {
+		t.Error(err)
+	}
+	UpdateDocument(errorDoc, "text/plain", int64(len(newContents)))
+
+	// hello.go document etag should remain unchanged
+	if !helloDoc.Valid() {
+		t.Error("hello document etag is not valid")
+	}
+	dhv2, err := helloDoc.Version()
+	if err != nil {
+		t.Error(err)
+	}
+	if string(dhv1) != string(dhv2) {
+		t.Error("hello document etag changed")
+	}
+	// error.go document etag should change because the file content changed
+	if errorDoc.Valid() {
+		t.Error("error document etag is still valid")
+	}
+	dev2, err := errorDoc.Version()
+	if err != nil {
+		t.Error(err)
+	}
+	if string(dev1) == string(dev2) {
+		t.Error("error document etag has not changed")
+	}
+	// parent etag should change because one of its children changed
+	if codeFolder.Valid() {
+		t.Error("parent etag is still valid")
+	}
+	fv2, err := codeFolder.Version()
+	if err != nil {
+		t.Error(err)
+	}
+	if string(fv1) == string(fv2) {
+		t.Error("parent etag has not changed")
+	}
+}
+
+func TestAddDocumentDoesNotUpdateETagOfOtherFolders(t *testing.T) {
+	mockServer()
+
+	const (
+		testContent1 = "func hello() string {\n\treturn \"Hello, World\"\n}"
+		testContent2 = "var ErrYouSuck = errors.New(\"YOU SUCK!!\")"
+
+		// 可愛い is 3 characters together taking up 9 bytes
+		testContent3 = "可愛い"
+	)
+
+	var helloDoc *node
+	{
+		sname := genpath()
+		err := FS.WriteFile(sname, []byte(testContent1), 0666)
+		if err != nil {
+			t.Error(err)
+		}
+		helloDoc, err = AddDocument("/code/hello.go", sname, int64(len(testContent1)), "text/plain")
+		if err != nil {
+			t.Error(err)
+		}
+	}
+
+	var errorDoc *node
+	{
+		sname := genpath()
+		err := FS.WriteFile(sname, []byte(testContent2), 0666)
+		if err != nil {
+			t.Error(err)
+		}
+		errorDoc, err = AddDocument("/code/error.go", sname, int64(len(testContent2)), "text/plain")
+		if err != nil {
+			t.Error(err)
+		}
+	}
+
+	dhv1, err := helloDoc.Version()
+	if err != nil {
+		t.Error(err)
+	}
+	dev1, err := errorDoc.Version()
+	if err != nil {
+		t.Error(err)
+	}
+	codeFolder, err := Retrieve("/code/")
+	if err != nil {
+		t.Error(err)
+	}
+	fv1, err := codeFolder.Version()
+	if err != nil {
+		t.Error(err)
+	}
+	rv1, err := root.Version()
+	if err != nil {
+		t.Error(err)
+	}
+
+	{
+		sname := genpath()
+		err := FS.WriteFile(sname, []byte(testContent3), 0666)
+		if err != nil {
+			t.Error(err)
+		}
+		f, err := AddDocument("/Pictures/Kittens.png", sname, int64(len(testContent3)), "text/plain")
+		if err != nil {
+			t.Error(err)
+		}
+		if f.length != 9 {
+			t.Errorf("got: %d, want: 9", f.length)
+		}
+	}
+
+	// hello.go document etag should remain unchanged
+	if !helloDoc.Valid() {
+		t.Error("hello document etag is not valid")
+	}
+	dhv2, err := helloDoc.Version()
+	if err != nil {
+		t.Error(err)
+	}
+	if string(dhv1) != string(dhv2) {
+		t.Error("hello document etag changed")
+	}
+	// error.go document etag should remain unchanged
+	if !errorDoc.Valid() {
+		t.Error("error document etag is not valid")
+	}
+	dev2, err := errorDoc.Version()
+	if err != nil {
+		t.Error(err)
+	}
+	if string(dev1) != string(dev2) {
+		t.Error("error document etag changed")
+	}
+	// code folder etag should remain unchanged
+	if !codeFolder.Valid() {
+		t.Error("code folder etag is not valid")
+	}
+	fv2, err := codeFolder.Version()
+	if err != nil {
+		t.Error(err)
+	}
+	if string(fv1) != string(fv2) {
+		t.Error("parent etag has changed")
+	}
+	// root folder should change
+	if root.Valid() {
+		t.Error("root etag is still valid")
+	}
+	rv2, err := root.Version()
+	if err != nil {
+		t.Error(err)
+	}
+	if string(rv1) == string(rv2) {
+		t.Error("expected root etag to have changed")
 	}
 }
 
@@ -586,35 +652,30 @@ const persistText = `<Root>
 func TestPersist(t *testing.T) {
 	mockServer()
 
+	const (
+		testContent1 = "Whole life's a test."
+		testContent2 = "Hello, World!"
+	)
+
 	{
-		sname := filepath.Join(sroot, mustVal(UUID()).String())
-		fd, err := FS.Create(sname)
+		sname := genpath()
+		err := FS.WriteFile(sname, []byte(testContent1), 0666)
 		if err != nil {
 			t.Error(err)
 		}
-		fsize, err := io.Copy(fd, bytes.NewReader([]byte("Whole life's a test.")))
-		if err != nil {
-			t.Error(err)
-		}
-		fd.Close() // error ignored
-		_, err = AddDocument("/Documents/test.txt", sname, fsize, "text/plain")
+		_, err = AddDocument("/Documents/test.txt", sname, int64(len(testContent1)), "text/plain")
 		if err != nil {
 			t.Error(err)
 		}
 	}
 
 	{
-		sname := filepath.Join(sroot, mustVal(UUID()).String())
-		fd, err := FS.Create(sname)
+		sname := genpath()
+		err := FS.WriteFile(sname, []byte(testContent2), 0666)
 		if err != nil {
 			t.Error(err)
 		}
-		fsize, err := io.Copy(fd, bytes.NewReader([]byte("Hello, World!")))
-		if err != nil {
-			t.Error(err)
-		}
-		fd.Close() // error ignored
-		_, err = AddDocument("/Documents/hello.txt", sname, fsize, "text/plain")
+		_, err = AddDocument("/Documents/hello.txt", sname, int64(len(testContent2)), "text/plain")
 		if err != nil {
 			t.Error(err)
 		}
@@ -625,46 +686,38 @@ func TestPersist(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-
-	Reset()
-
 	if persistText != bs.String() {
-		t.Errorf("incorrect XML generated:\ngot:\n%s\n----\nwant:\n%s\n----", bs, persistText)
+		t.Errorf("got:\n%s\nwant:\n%s\n", bs, persistText)
 	}
 }
 
 func TestLoad(t *testing.T) {
 	mockServer()
 
+	const (
+		testContent1 = "Whole life's a test."
+		testContent2 = "Hello, World!"
+	)
+
 	{
-		sname := filepath.Join(sroot, mustVal(UUID()).String())
-		fd, err := FS.Create(sname)
+		sname := genpath()
+		err := FS.WriteFile(sname, []byte(testContent1), 0666)
 		if err != nil {
 			t.Error(err)
 		}
-		fsize, err := io.Copy(fd, bytes.NewReader([]byte("Whole life's a test.")))
-		if err != nil {
-			t.Error(err)
-		}
-		fd.Close() // error ignored
-		_, err = AddDocument("/Documents/test.txt", sname, fsize, "text/plain")
+		_, err = AddDocument("/Documents/test.txt", sname, int64(len(testContent1)), "text/plain")
 		if err != nil {
 			t.Error(err)
 		}
 	}
 
 	{
-		sname := filepath.Join(sroot, mustVal(UUID()).String())
-		fd, err := FS.Create(sname)
+		sname := genpath()
+		err := FS.WriteFile(sname, []byte(testContent2), 0666)
 		if err != nil {
 			t.Error(err)
 		}
-		fsize, err := io.Copy(fd, bytes.NewReader([]byte("Hello, World!")))
-		if err != nil {
-			t.Error(err)
-		}
-		fd.Close() // error ignored
-		_, err = AddDocument("/Documents/hello.txt", sname, fsize, "text/plain")
+		_, err = AddDocument("/Documents/hello.txt", sname, int64(len(testContent2)), "text/plain")
 		if err != nil {
 			t.Error(err)
 		}
@@ -675,28 +728,25 @@ func TestLoad(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-
 	Reset()
-
 	err = Load(bs)
 	if err != nil {
 		t.Error(err)
 	}
-
 	if len(files) != 4 {
-		t.Errorf("wrong number of nodes; got: %d, want: 4", len(files))
+		t.Errorf("got: %d, want: 4", len(files))
 	}
 
-	// Ensure root is set correctly.
+	// ensure root is set correctly
 	r, err := Retrieve("/")
 	if err != nil {
 		t.Error(err)
 	}
 	if r != root {
-		t.Errorf("root not set correctly; got: `%p', want: `%p'", r, root)
+		t.Errorf("got: `%v', want: `%v'", r, root)
 	}
 	if len(r.children) != 1 {
-		t.Errorf("root has %d children, want: 1", len(r.children))
+		t.Errorf("got: %d, want: 1", len(r.children))
 	}
 
 	// Children must be listed immediately after their parents for parent/child
@@ -868,32 +918,30 @@ func ExamplePersist() {
 		}
 	}
 
+	const (
+		testContent1 = "Whole life's a test."
+		testContent2 = "Hello, World!"
+	)
+
 	{
-		sname := filepath.Join(sroot, mustVal(UUID()).String())
-		fd, err := FS.Create(sname)
+		sname := genpath()
+		err := FS.WriteFile(sname, []byte(testContent1), 0666)
 		panicIf(err)
-		fsize, err := io.Copy(fd, bytes.NewReader([]byte("Whole life's a test.")))
-		panicIf(err)
-		fd.Close() // error ignored
-		_, err = AddDocument("/Documents/test.txt", sname, fsize, "text/plain")
+		_, err = AddDocument("/Documents/test.txt", sname, int64(len(testContent1)), "text/plain")
 		panicIf(err)
 	}
 
 	{
-		sname := filepath.Join(sroot, mustVal(UUID()).String())
-		fd, err := FS.Create(sname)
+		sname := genpath()
+		err := FS.WriteFile(sname, []byte(testContent2), 0666)
 		panicIf(err)
-		fsize, err := io.Copy(fd, bytes.NewReader([]byte("Hello, World!")))
-		panicIf(err)
-		fd.Close() // error ignored
-		_, err = AddDocument("/Documents/hello.txt", sname, fsize, "text/plain")
+		_, err = AddDocument("/Documents/hello.txt", sname, int64(len(testContent2)), "text/plain")
 		panicIf(err)
 	}
 
 	fd, err := FS.Create(sroot + "/marshalled.xml")
 	panicIf(err)
 	defer fd.Close()
-
 	err = Persist(fd)
 	panicIf(err)
 

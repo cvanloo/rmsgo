@@ -417,7 +417,7 @@ func UpdateDocument(n *node, mime string, fsize int64) {
 func RemoveDocument(n *node) {
 	assert(!n.isFolder, "RemoveDocument must not be called on a folder")
 
-	p := n
+	p := n // works because a document's children is nil and len(nil-map) is zero
 	for len(p.children) == 0 && p != root {
 		pp := p.parent
 		delete(pp.children, p.rname)
