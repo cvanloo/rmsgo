@@ -482,40 +482,37 @@ func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 
 func writeError(w http.ResponseWriter, err error) error {
 	var (
-		unhandled          error
-		status, isSentinel = 500, false
-		httpErr            HttpError
-		data               LDjson
+		httpErr   HttpError
+		unhandled error
 	)
 	if errors.As(err, &httpErr) {
-		status, isSentinel = StatusCodes[httpErr.Cause]
+		status, isSentinel := StatusCodes[httpErr.Cause]
 		if !isSentinel {
 			unhandled = httpErr.Cause
 			status = StatusCodes[ErrServerError]
 		}
-		data = LDjson{
+		data := LDjson{
 			"message":     httpErr.Msg,
 			"description": httpErr.Desc,
 			"url":         httpErr.URL,
 			"data":        httpErr.Data,
 		}
+		hs := w.Header()
+		hs.Set("Content-Type", "application/ld+json")
+		w.WriteHeader(status)
+		encErr := json.NewEncoder(w).Encode(data)
+		if encErr != nil {
+			unhandled = errors.Join(unhandled, encErr)
+		}
+		w.WriteHeader(status)
+		return unhandled
 	} else {
-		status, isSentinel = StatusCodes[err]
+		status, isSentinel := StatusCodes[err]
 		if !isSentinel {
 			unhandled = err
-			err = ErrServerError
 			status = StatusCodes[ErrServerError]
 		}
-		data = LDjson{
-			"message": err.Error(),
-		}
+		w.WriteHeader(status)
+		return unhandled
 	}
-	hs := w.Header()
-	hs.Set("Content-Type", "application/ld+json")
-	w.WriteHeader(status)
-	encErr := json.NewEncoder(w).Encode(data)
-	if encErr != nil {
-		unhandled = errors.Join(unhandled, encErr)
-	}
-	return unhandled
 }
