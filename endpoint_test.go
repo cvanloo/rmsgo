@@ -149,10 +149,10 @@ func ExampleGetFolder() {
 
 func TestPutDocument(t *testing.T) {
 	const (
-		testContent      = "[...] It is written in Lisp, which is the only computer language that is beautiful." // @todo: change to something else
-		testMime         = "wise/quote"
-		testDocument     = "/Quotes/Neal Stephenson.txt"
-		testDocumentEtag = "3dc42d11db35b8354dc06c46a53c9c9d"
+		testContent      = "The material is classified. Its composition is classified. Its use in the weapon is classified, and the process itself is classified."
+		testMime         = "top/secret"
+		testDocument     = "/Classified/FOGBANK.txt"
+		testDocumentEtag = "60ca7ee51a4a4886d00ae2470457b206"
 	)
 	mockServer()
 	ts := httptest.NewServer(ServeMux{})
