@@ -57,7 +57,7 @@ type HttpError struct {
 	// A URL where further details or help for the solution can be found.
 	URL string
 	// Additonal Data related to the error.
-	Data ldjson
+	Data LDjson
 	// Underlying error that caused the exception.
 	// Cause is used to look up a response status code in StatusCodes.
 	// If not contained in StatusCodes, ErrServerError is used instead, and the

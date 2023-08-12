@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	. "github.com/cvanloo/rmsgo.git/mock"
 )
@@ -53,7 +54,7 @@ func mockServer() {
 	Reset()
 }
 
-func ExampleGetFolder() {
+func ExampleGetFolder() { // @todo: overwork
 	mockServer()
 	// Use: err := rmsgo.Configure(remoteRoot, storageRoot, nil)
 
@@ -171,77 +172,844 @@ func ExampleGetFolder() {
 // @todo: PUT test chunked transfer-encoding
 // @todo: test requests with http1.1, and with switch to http2
 
-// @todo: TestPutDocument
-//  - check that parents are silently created as necessary
-//  - check that all parent folders have their version updated
-//  - Don't provide content type (auto-detect)
-//  - put to already existing document
-//  - put to folder (must fail) 4XX
-//  - conditional (If-Match) with success
-//  - conditional (If-Match) with failure 412
-//  - conditional (If-Non-Match: *) with success (document does not exist)
-//  - conditional (If-Non-Match: *) with failure 412 (document already exists)
-//  - 409 when any parent folder name clashes with existing document, or
-//    document clashes with existing folder
-
 func TestPutDocument(t *testing.T) {
+	const (
+		testContent      = "[...] It is written in Lisp, which is the only computer language that is beautiful." // @todo: change to something else
+		testMime         = "wise/quote"
+		testDocument     = "/Quotes/Neal Stephenson.txt"
+		testDocumentEtag = "3dc42d11db35b8354dc06c46a53c9c9d"
+	)
 	mockServer()
-
 	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
-	remoteRoot := ts.URL + rroot
-
-	const content = "My first document."
-
-	req, err := http.NewRequest(http.MethodPut, remoteRoot+"/Documents/First.txt", bytes.NewReader([]byte(content)))
-	req.Header.Set("Content-Type", "funny/format")
+	req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
 	if err != nil {
 		t.Error(err)
 	}
-
+	req.Header.Set("Content-Type", testMime)
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
 	}
 	if r.StatusCode != http.StatusCreated {
-		t.Errorf("got: %d, want: %d", r.StatusCode, http.StatusCreated)
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
 	}
-	if e := r.Header.Get("ETag"); e != "f0d0f717619b09cc081bb0c11d9b9c6b" {
-		t.Errorf("got: `%s', want: `f0d0f717619b09cc081bb0c11d9b9c6b'", e)
+	if e := r.Header.Get("ETag"); e != testDocumentEtag {
+		t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag)
 	}
 
-	n, err := Retrieve("/Documents/First.txt")
+	r, err = http.Get(remoteRoot + testDocument)
 	if err != nil {
 		t.Error(err)
 	}
-	if n.mime != "funny/format" {
-		t.Errorf("got: `%s', want: funny/format", n.mime)
+	if r.StatusCode != http.StatusOK {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
 	}
-	if mustVal(n.Version()).String() != "f0d0f717619b09cc081bb0c11d9b9c6b" {
-		t.Errorf("got: `%s', want: `f0d0f717619b09cc081bb0c11d9b9c6b'", n.etag)
+	if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
+		t.Errorf("got: `%s', want: `no-cache'", cc)
 	}
-	if n.name != "First.txt" {
-		t.Errorf("got: `%s', want: `First.txt'", n.name)
+	if l := r.Header.Get("Content-Length"); l != fmt.Sprint(len(testContent)) {
+		t.Errorf("got: %s, want: %d", l, len(testContent))
 	}
-	if n.rname != "/Documents/First.txt" {
-		t.Errorf("got: `%s', want: `/Documents/First.txt'", n.rname)
+	if l := r.Header.Get("Content-Type"); l != testMime {
+		t.Errorf("got: `%s', want: `%s'", l, testMime)
 	}
-	if n.length != int64(len(content)) {
-		t.Errorf("got: `%d', want: `%d'", n.length, len(content))
+	if e := r.Header.Get("ETag"); e != testDocumentEtag {
+		t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag)
 	}
-	if n.isFolder {
-		t.Error("a document should never be a folder")
-	}
-
-	bs, err := FS.ReadFile(n.sname)
+	bs, err := io.ReadAll(r.Body)
 	if err != nil {
 		t.Error(err)
 	}
-	if string(bs) != content {
-		t.Errorf("got: `%s', want: `%s'", bs, content)
+	if string(bs) != testContent {
+		t.Errorf("got: `%s', want: `%s'", bs, testContent)
 	}
 }
+
+func TestPutDocumentSame(t *testing.T) {
+	const (
+		testMime     = "application/x-subrip"
+		testDocument = "/Lyrics/STARSET.txt"
+
+		testContent1      = "I will travel the distance in your eyes Interstellar Light years from you"
+		testDocumentEtag1 = "33f7b41f98820961b12134677ba3f231"
+
+		testContent2      = "I will travel the distance in your eyes Interstellar Light years from you Supernova We'll fuse when we collide Awaking in the light of all the stars aligned"
+		testDocumentEtag2 = "063c77ac4aa257f9396f1b5cae956004"
+	)
+	mockServer()
+	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent1)))
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Content-Type", testMime)
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentEtag1 {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag1)
+		}
+	}
+
+	{
+		r, err := http.Get(remoteRoot + testDocument)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
+			t.Errorf("got: `%s', want: `no-cache'", cc)
+		}
+		if l := r.Header.Get("Content-Length"); l != fmt.Sprint(len(testContent1)) {
+			t.Errorf("got: %s, want: %d", l, len(testContent1))
+		}
+		if l := r.Header.Get("Content-Type"); l != testMime {
+			t.Errorf("got: `%s', want: `%s'", l, testMime)
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentEtag1 {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag1)
+		}
+		bs, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+		}
+		if string(bs) != testContent1 {
+			t.Errorf("got: `%s', want: `%s'", bs, testContent1)
+		}
+	}
+
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent2)))
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Content-Type", testMime)
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentEtag2 {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag2)
+		}
+	}
+
+	{
+		r, err := http.Get(remoteRoot + testDocument)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
+			t.Errorf("got: `%s', want: `no-cache'", cc)
+		}
+		if l := r.Header.Get("Content-Length"); l != fmt.Sprint(len(testContent2)) {
+			t.Errorf("got: %s, want: %d", l, len(testContent2))
+		}
+		if l := r.Header.Get("Content-Type"); l != testMime {
+			t.Errorf("got: `%s', want: `%s'", l, testMime)
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentEtag2 {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag2)
+		}
+		bs, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+		}
+		if string(bs) != testContent2 {
+			t.Errorf("got: `%s', want: `%s'", bs, testContent2)
+		}
+	}
+}
+
+func TestPutDocumentIfMatchSuccess(t *testing.T) {
+	const (
+		testMime     = "application/x-subrip"
+		testDocument = "/Lyrics/STARSET.txt"
+
+		testContent1      = "I will travel the distance in your eyes Interstellar Light years from you"
+		testDocumentEtag1 = "33f7b41f98820961b12134677ba3f231"
+
+		testContent2      = "I will travel the distance in your eyes Interstellar Light years from you Supernova We'll fuse when we collide Awaking in the light of all the stars aligned"
+		testDocumentEtag2 = "063c77ac4aa257f9396f1b5cae956004"
+	)
+	mockServer()
+	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent1)))
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Content-Type", testMime)
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentEtag1 {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag1)
+		}
+	}
+
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent2)))
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Content-Type", testMime)
+		req.Header.Set("If-Match", testDocumentEtag1) // Set If-Match header!
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentEtag2 {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag2)
+		}
+	}
+}
+
+func TestPutDocumentIfMatchFail(t *testing.T) {
+	const (
+		testMime     = "application/x-subrip"
+		testDocument = "/Lyrics/STARSET.txt"
+		wrongETag    = "3de26fc06d5d1e20ff96a8142cd6fabf"
+
+		testContent1      = "I will travel the distance in your eyes Interstellar Light years from you"
+		testDocumentEtag1 = "33f7b41f98820961b12134677ba3f231"
+
+		testContent2      = "I will travel the distance in your eyes Interstellar Light years from you Supernova We'll fuse when we collide Awaking in the light of all the stars aligned"
+		testDocumentEtag2 = "063c77ac4aa257f9396f1b5cae956004"
+	)
+	mockServer()
+	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent1)))
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Content-Type", testMime)
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentEtag1 {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag1)
+		}
+	}
+
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent2)))
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Content-Type", testMime)
+		req.Header.Set("If-Match", wrongETag) // Set If-Match header!
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusPreconditionFailed {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusPreconditionFailed))
+		}
+	}
+}
+
+func TestPutDocumentIfNonMatchSuccess(t *testing.T) {
+	const (
+		testMime     = "application/x-subrip"
+		testDocument = "/Lyrics/STARSET.txt"
+
+		testContent      = "I will travel the distance in your eyes Interstellar Light years from you"
+		testDocumentEtag = "33f7b41f98820961b12134677ba3f231"
+	)
+	mockServer()
+	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Content-Type", testMime)
+	req.Header.Set("If-Non-Match", "*") // Set If-Non-Match header!
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusCreated {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+	}
+	if e := r.Header.Get("ETag"); e != testDocumentEtag {
+		t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag)
+	}
+}
+
+func TestPutDocumentIfNonMatchFail(t *testing.T) {
+	const (
+		testMime     = "application/x-subrip"
+		testDocument = "/Lyrics/STARSET.txt"
+
+		testContent1      = "I will travel the distance in your eyes Interstellar Light years from you"
+		testDocumentEtag1 = "33f7b41f98820961b12134677ba3f231"
+
+		testContent2      = "I will travel the distance in your eyes Interstellar Light years from you Supernova We'll fuse when we collide Awaking in the light of all the stars aligned"
+		testDocumentEtag2 = "063c77ac4aa257f9396f1b5cae956004"
+	)
+	mockServer()
+	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent1)))
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Content-Type", testMime)
+		req.Header.Set("If-Non-Match", "*") // Set If-Non-Match header!
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentEtag1 {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag1)
+		}
+	}
+
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent2)))
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Content-Type", testMime)
+		req.Header.Set("If-Non-Match", "*") // Set If-Non-Match header!
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusPreconditionFailed {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusPreconditionFailed))
+		}
+	}
+}
+
+func TestPutDocumentSilentlyCreateAncestors(t *testing.T) {
+	const (
+		rmsContext          = "http://remotestorage.io/spec/folder-description"
+		testContent         = "[...] It is written in Lisp, which is the only computer language that is beautiful." // sorry Go
+		testMime            = "wise/quote"
+		testDocument        = "/Quotes/Neal Stephenson.txt"
+		testDocumentName    = "Neal Stephenson.txt"
+		testDocumentEtag    = "3dc42d11db35b8354dc06c46a53c9c9d"
+		testDocumentDir     = "/Quotes/"
+		testDocumentDirETag = "3de26fc06d5d1e20ff96a8142cd6fabf"
+	)
+	mockServer()
+	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Content-Type", testMime)
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusCreated {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+	}
+	if e := r.Header.Get("ETag"); e != testDocumentEtag {
+		t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag)
+	}
+
+	r, err = http.Get(remoteRoot + testDocumentDir)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusOK {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+	}
+	if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
+		t.Errorf("got: `%s', want: `no-cache'", cc)
+	}
+	if e := r.Header.Get("ETag"); e != testDocumentDirETag {
+		t.Errorf("got: `%s', want: `%s'", e, testDocumentDirETag)
+	}
+	bs, err := io.ReadAll(r.Body)
+	if err != nil {
+		t.Error(err)
+	}
+
+	lst := LDjson{}
+	err = json.Unmarshal(bs, &lst)
+	if err != nil {
+		t.Error(err)
+	}
+	ctx, err := LDGet[string](lst, "@context")
+	if err != nil {
+		t.Error(err)
+	}
+	if ctx != rmsContext {
+		t.Errorf("got: `%s', want: `%s'", ctx, rmsContext)
+	}
+	docLst, err := LDGet[LDjson](lst, "items", testDocumentName)
+	if err != nil {
+		t.Error(err)
+	}
+
+	e, err := LDGet[string](docLst, "ETag")
+	if err != nil {
+		t.Error(err)
+	}
+	if e != testDocumentEtag {
+		t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag)
+	}
+	mime, err := LDGet[string](docLst, "Content-Type")
+	if err != nil {
+		t.Error(err)
+	}
+	if mime != testMime {
+		t.Errorf("got: `%s', want: `%s'", mime, testMime)
+	}
+	l, err := LDGet[float64](docLst, "Content-Length")
+	if err != nil {
+		t.Error(err)
+	}
+	if l != float64(len(testContent)) {
+		t.Errorf("got: %f, want: %d", l, len(testContent))
+	}
+	modt, err := LDGet[string](docLst, "Last-Modified")
+	if err != nil {
+		t.Error(err)
+	}
+	tme, err := time.Parse(rmsTimeFormat, modt)
+	if err != nil {
+		t.Error(err)
+	}
+	_ = tme // @todo: we can't really verify this right now
+}
+
+func TestPutDocumentUpdatesAncestorETags(t *testing.T) {
+	const (
+		testMime = "application/x-subrip"
+
+		testContent1      = "Run for the heavens Sing to the stars Love like a lover Shine in the dark Shout like an army Sound the alarm I am a burning [...] Heart"
+		testDocument1     = "/Lyrics/SVRCINA.srt"
+		testDocument1Name = "SVRCINA.srt"
+		testDocument1ETag = "6f9cd924b8654c70d5bec5f96491f55e"
+
+		testContent2      = "I'm attracted to the sky To the sky To the sky Every life I learn to fly Learn to fly Learn to fly"
+		testDocument2     = "/Lyrics/Raizer.srt"
+		testDocument2Name = "Raizer.srt"
+		testDocument2ETag = "9323d12cc9b79190804d1c6b9c2708f3"
+
+		testDocumentDir      = "/Lyrics/"
+		testDocumentDirETag1 = "bc42be34636d852ecd65d8b3a3857a62"
+		testDocumentDirETag2 = "6dedad00af566fbfbb811661e6f88387"
+
+		testRootETag1 = "e441dd5f0422b305cf30bca3bbdefd68"
+		testRootETag2 = "628e5ebbbcf131c9103ebd51019d1b7e"
+	)
+	mockServer()
+	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	// PUT first document
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument1, bytes.NewReader([]byte(testContent1)))
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Content-Type", testMime)
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocument1ETag {
+			t.Errorf("got: `%s', want: `%s'", e, testDocument1ETag)
+		}
+	}
+
+	// GET parent folder ETag
+	{
+		r, err := http.Get(remoteRoot + testDocumentDir)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
+			t.Errorf("got: `%s', want: `no-cache'", cc)
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentDirETag1 {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentDirETag1)
+		}
+		// @todo: maybe we want to validate this as well?
+		//bs, err := io.ReadAll(r.Body)
+		//if err != nil {
+		//	t.Error(err)
+		//}
+	}
+
+	// Get root folder ETag
+	{
+		r, err := http.Get(remoteRoot + "/")
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
+			t.Errorf("got: `%s', want: `no-cache'", cc)
+		}
+		if e := r.Header.Get("ETag"); e != testRootETag1 {
+			t.Errorf("got: `%s', want: `%s'", e, testRootETag1)
+		}
+		// @todo: maybe we want to validate this as well?
+		//bs, err := io.ReadAll(r.Body)
+		//if err != nil {
+		//	t.Error(err)
+		//}
+	}
+
+	// PUT second document
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument2, bytes.NewReader([]byte(testContent2)))
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Content-Type", testMime)
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocument2ETag {
+			t.Errorf("got: `%s', want: `%s'", e, testDocument2ETag)
+		}
+	}
+
+	// GET parent folder ETag
+	{
+		r, err := http.Get(remoteRoot + testDocumentDir)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
+			t.Errorf("got: `%s', want: `no-cache'", cc)
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentDirETag2 {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentDirETag2)
+		}
+		// @todo: maybe we want to validate this as well?
+		//bs, err := io.ReadAll(r.Body)
+		//if err != nil {
+		//	t.Error(err)
+		//}
+	}
+
+	// Get root folder ETag
+	{
+		r, err := http.Get(remoteRoot + "/")
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
+			t.Errorf("got: `%s', want: `no-cache'", cc)
+		}
+		if e := r.Header.Get("ETag"); e != testRootETag2 {
+			t.Errorf("got: `%s', want: `%s'", e, testRootETag2)
+		}
+		// @todo: maybe we want to validate this as well?
+		//bs, err := io.ReadAll(r.Body)
+		//if err != nil {
+		//	t.Error(err)
+		//}
+	}
+}
+
+func TestPutDocumentAutodetectContentType(t *testing.T) {
+	const (
+		testContent = `“But the plans were on display…”
+“On display? I eventually had to go down to the cellar to find them.”
+“That’s the display department.”
+“With a flashlight.”
+“Ah, well, the lights had probably gone.”
+“So had the stairs.”
+“But look, you found the notice, didn’t you?”
+“Yes,” said Arthur, “yes I did. It was on display in the bottom of a locked filing cabinet stuck in a disused lavatory with a sign on the door saying ‘Beware of the Leopard.”`
+		testDocument     = "/Quotes/Douglas Adams"
+		testDocumentETag = "e3e1c1d7f6952350b93d4935aa412497"
+		testMime         = "text/plain; charset=utf-8"
+	)
+	mockServer()
+	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+		if err != nil {
+			t.Error(err)
+		}
+		// don't set Content-Type header
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+		}
+	}
+
+	{
+		r, err := http.Get(remoteRoot + testDocument)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
+			t.Errorf("got: `%s', want: `no-cache'", cc)
+		}
+		if l := r.Header.Get("Content-Length"); l != fmt.Sprint(len(testContent)) {
+			t.Errorf("got: %s, want: %d", l, len(testContent))
+		}
+		if l := r.Header.Get("Content-Type"); l != testMime {
+			t.Errorf("got: `%s', want: `%s'", l, testMime)
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+		}
+		bs, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+		}
+		if string(bs) != testContent {
+			t.Errorf("got: `%s', want: `%s'", bs, testContent)
+		}
+	}
+}
+
+func TestPutDocumentAsFolderFails(t *testing.T) {
+	mockServer()
+	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodPut, remoteRoot+"/Edward/M/D/Teach/", bytes.NewReader([]byte("HA! Liar. I have to write sentences with multiple dependend clausse in order to repair the damage of your 5 word rhetorical cluster grenade.")))
+	if err != nil {
+		t.Error(err)
+	}
+	// (don't set Content-Type header)
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusBadRequest {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusBadRequest))
+	}
+}
+
+func TestPutDocumentClashesWithFolderFails(t *testing.T) {
+	const (
+		testMime = "application/x-subrip"
+
+		testContent1      = "Run for the heavens Sing to the stars Love like a lover Shine in the dark Shout like an army Sound the alarm I am a burning [...] Heart"
+		testDocument1     = "/Lyrics/Favourite/SVRCINA.srt"
+		testDocument1ETag = "6f9cd924b8654c70d5bec5f96491f55e"
+
+		testContent2  = "I'm attracted to the sky To the sky To the sky Every life I learn to fly Learn to fly Learn to fly"
+		testDocument2 = "/Lyrics/Favourite" // this is going to clash with the already existing /Lyrics/Favourite/ folder
+
+		expectedConflictPath = "/Lyrics/Favourite"
+	)
+	mockServer()
+	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	// PUT first document
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument1, bytes.NewReader([]byte(testContent1)))
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Content-Type", testMime)
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocument1ETag {
+			t.Errorf("got: `%s', want: `%s'", e, testDocument1ETag)
+		}
+	}
+
+	// PUT second document
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument2, bytes.NewReader([]byte(testContent2)))
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Content-Type", testMime)
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusConflict {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusConflict))
+		}
+
+		bs, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+		}
+		errLst := LDjson{}
+		err = json.Unmarshal(bs, &errLst)
+		if err != nil {
+			t.Error(err)
+		}
+		conflictPath, err := LDGet[string](errLst, "data", "conflict")
+		if err != nil {
+			t.Error(err)
+		}
+		if conflictPath != expectedConflictPath {
+			t.Errorf("got: `%s', want: `%s'", conflictPath, expectedConflictPath)
+		}
+	}
+}
+
+func TestPutDocumentAncestorFolderClashesWithDocumentFails(t *testing.T) {
+	const (
+		testMime = "application/x-subrip"
+
+		testContent1      = "Run for the heavens Sing to the stars Love like a lover Shine in the dark Shout like an army Sound the alarm I am a burning [...] Heart"
+		testDocument1     = "/Lyrics/Favourite"
+		testDocument1ETag = "421432bf1a9f22883bac81ad1714dd90"
+
+		testContent2  = "I'm attracted to the sky To the sky To the sky Every life I learn to fly Learn to fly Learn to fly"
+		testDocument2 = "/Lyrics/Favourite/STARSET.srt" // /Lyrics/Favourite/ is going to clash with the already existing /Lyrics/Favourite document
+
+		expectedConflictPath = "/Lyrics/Favourite"
+	)
+	mockServer()
+	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	// PUT first document
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument1, bytes.NewReader([]byte(testContent1)))
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Content-Type", testMime)
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocument1ETag {
+			t.Errorf("got: `%s', want: `%s'", e, testDocument1ETag)
+		}
+	}
+
+	// PUT second document
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument2, bytes.NewReader([]byte(testContent2)))
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Content-Type", testMime)
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusConflict {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusConflict))
+		}
+
+		bs, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+		}
+		errLst := LDjson{}
+		err = json.Unmarshal(bs, &errLst)
+		if err != nil {
+			t.Error(err)
+		}
+		conflictPath, err := LDGet[string](errLst, "data", "conflict")
+		if err != nil {
+			t.Error(err)
+		}
+		if conflictPath != expectedConflictPath {
+			t.Errorf("got: `%s', want: `%s'", conflictPath, expectedConflictPath)
+		}
+	}
+}
+
+// -------
 
 func TestGetFolder(t *testing.T) {
 	mockServer()
@@ -276,15 +1044,18 @@ func TestGetFolder(t *testing.T) {
 		t.Error(err)
 	}
 
-	lst := ldjson{}
-	json.Unmarshal(bs, &lst)
+	lst := LDjson{}
+	err = json.Unmarshal(bs, &lst)
+	if err != nil {
+		t.Error(err)
+	}
 
 	items, ok := lst["items"]
 	if !ok {
 		t.Error("response is missing items field")
 	}
 
-	itemsLd, ok := items.(ldjson)
+	itemsLd, ok := items.(LDjson)
 	if !ok {
 		t.Error("items field cannot be cast to ldjson")
 	}
@@ -294,7 +1065,7 @@ func TestGetFolder(t *testing.T) {
 		t.Error("Documents/ folder missing from items")
 	}
 
-	docLd, ok := doc.(ldjson)
+	docLd, ok := doc.(LDjson)
 	if !ok {
 		t.Error("Documents/ field cannot be cast to ldjson")
 	}

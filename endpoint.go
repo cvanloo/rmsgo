@@ -25,8 +25,6 @@ func init() {
 // are passed to the ErrorHandler.
 type ErrorHandler func(err error)
 
-type ldjson = map[string]any
-
 // ServeMux implements http.Handler and can therefore be passed directly to a
 // http.ServeMux.Handle or http.ListenAndServe(TLS).
 type ServeMux struct{}
@@ -95,25 +93,37 @@ func Serve(w http.ResponseWriter, r *http.Request) error {
 		isFolder = true
 	}
 
-	if isFolder {
-		switch r.Method {
-		case http.MethodHead:
-			fallthrough
-		case http.MethodGet:
+	switch r.Method {
+	case http.MethodHead:
+		fallthrough
+	case http.MethodGet:
+		if isFolder {
 			return GetFolder(w, r)
-		}
-	} else {
-		switch r.Method {
-		case http.MethodHead:
-			fallthrough
-		case http.MethodGet:
+		} else {
 			return GetDocument(w, r)
-		case http.MethodPut:
+		}
+	case http.MethodPut:
+		if isFolder {
+			return writeError(w, HttpError{
+				Msg:   "put to folder disallowed",
+				Desc:  "PUT requests only need to be made to documents, and never to folders.",
+				Cause: ErrBadRequest,
+			})
+		} else {
 			return PutDocument(w, r)
-		case http.MethodDelete:
+		}
+	case http.MethodDelete:
+		if isFolder {
+			return writeError(w, HttpError{
+				Msg:   "delete to folder disallowed",
+				Desc:  "DELETE requests only need to be made to documents, and never to folders.",
+				Cause: ErrBadRequest,
+			})
+		} else {
 			return DeleteDocument(w, r)
 		}
 	}
+
 	return writeError(w, ErrMethodNotAllowed)
 }
 
@@ -151,7 +161,7 @@ func GetFolder(w http.ResponseWriter, r *http.Request) error {
 		return writeError(w, HttpError{
 			Msg:  "folder not found",
 			Desc: "The requested folder does not exist on the server.",
-			Data: ldjson{
+			Data: LDjson{
 				"rname": rpath,
 			},
 			Cause: ErrNotFound,
@@ -170,7 +180,7 @@ func GetFolder(w http.ResponseWriter, r *http.Request) error {
 				return writeError(w, HttpError{
 					Msg:  "invalid etag",
 					Desc: "Failed to parse the ETag contained in the If-Non-Match header.",
-					Data: ldjson{
+					Data: LDjson{
 						"rname":        rpath,
 						"if_non_match": cond,
 					},
@@ -183,9 +193,9 @@ func GetFolder(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	items := ldjson{}
+	items := LDjson{}
 	for _, child := range n.children {
-		desc := ldjson{}
+		desc := LDjson{}
 		etag, err := child.Version()
 		if err != nil {
 			return writeError(w, err) // internal server error
@@ -199,7 +209,7 @@ func GetFolder(w http.ResponseWriter, r *http.Request) error {
 		items[child.name] = desc
 	}
 
-	desc := ldjson{
+	desc := LDjson{
 		"@context": "http://remotestorage.io/spec/folder-description",
 		"items":    items,
 	}
@@ -219,7 +229,7 @@ func GetDocument(w http.ResponseWriter, r *http.Request) error {
 		return writeError(w, HttpError{
 			Msg:  "document not found",
 			Desc: "The requested document does not exist on the server.",
-			Data: ldjson{
+			Data: LDjson{
 				"rname": rpath,
 			},
 			Cause: ErrNotFound,
@@ -238,7 +248,7 @@ func GetDocument(w http.ResponseWriter, r *http.Request) error {
 				return writeError(w, HttpError{
 					Msg:  "invalid etag",
 					Desc: "Failed to parse the ETag contained in the If-Non-Match header.",
-					Data: ldjson{
+					Data: LDjson{
 						"rname":        rpath,
 						"if_non_match": cond,
 					},
@@ -278,7 +288,8 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 			Msg:  "conflicting path names",
 			Desc: "The document conflicts with an already existing folder of the same name.",
 			Data: map[string]any{
-				"rname": rpath,
+				"rname":    rpath,
+				"conflict": rpath,
 			},
 			Cause: ErrConflict,
 		})
@@ -288,7 +299,7 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 		return writeError(w, HttpError{
 			Msg:  fmt.Sprintf("document already exists: %s", rpath),
 			Desc: "The request was rejected because the requested document already exists, but `If-Non-Match: *' was specified.",
-			Data: ldjson{
+			Data: LDjson{
 				"rname": rpath,
 			},
 			Cause: ErrPreconditionFailed,
@@ -302,7 +313,7 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 			return writeError(w, HttpError{
 				Msg:  "invalid etag",
 				Desc: "Failed to parse the ETag contained in the If-Match header.",
-				Data: ldjson{
+				Data: LDjson{
 					"rname":    rpath,
 					"if_match": cond,
 				},
@@ -317,7 +328,7 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 			return writeError(w, HttpError{
 				Msg:  "version mismatch",
 				Desc: "The version provided in the If-Match header does not match the document's current version.",
-				Data: ldjson{
+				Data: LDjson{
 					"rname":    rpath,
 					"if_match": cond,
 					"etag":     etag.String(),
@@ -379,12 +390,12 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		n, err = AddDocument(rpath, sname, fsize, mime)
-		var conflictErr *ConflictError
+		var conflictErr ConflictError
 		if err != nil && errors.As(err, &conflictErr) {
 			return writeError(w, HttpError{
 				Msg:  "conflicting path names",
 				Desc: "The name of an ancestor collides with the name of an existing document.",
-				Data: ldjson{
+				Data: LDjson{
 					"rname":    rpath,
 					"conflict": conflictErr.ConflictPath,
 				},
@@ -418,7 +429,7 @@ func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 		return writeError(w, HttpError{
 			Msg:  "document not found",
 			Desc: "The requested document does not exist on the server.",
-			Data: ldjson{
+			Data: LDjson{
 				"rname": rpath,
 			},
 			Cause: ErrNotFound,
@@ -437,7 +448,7 @@ func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 			return writeError(w, HttpError{
 				Msg:  "invalid etag",
 				Desc: "Failed to parse the ETag contained in the If-Match header.",
-				Data: ldjson{
+				Data: LDjson{
 					"rname":    rpath,
 					"if_match": cond,
 				},
@@ -448,7 +459,7 @@ func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 			return writeError(w, HttpError{
 				Msg:  "version mismatch",
 				Desc: "The version provided in the If-Match header does not match the document's current version.",
-				Data: ldjson{
+				Data: LDjson{
 					"rname":    rpath,
 					"if_match": cond,
 					"etag":     etag.String(),
@@ -474,7 +485,7 @@ func writeError(w http.ResponseWriter, err error) error {
 		unhandled          error
 		status, isSentinel = 500, false
 		httpErr            HttpError
-		data               ldjson
+		data               LDjson
 	)
 	if errors.As(err, &httpErr) {
 		status, isSentinel = StatusCodes[httpErr.Cause]
@@ -482,7 +493,7 @@ func writeError(w http.ResponseWriter, err error) error {
 			unhandled = httpErr.Cause
 			status = StatusCodes[ErrServerError]
 		}
-		data = ldjson{
+		data = LDjson{
 			"message":     httpErr.Msg,
 			"description": httpErr.Desc,
 			"url":         httpErr.URL,
@@ -495,7 +506,7 @@ func writeError(w http.ResponseWriter, err error) error {
 			err = ErrServerError
 			status = StatusCodes[ErrServerError]
 		}
-		data = ldjson{
+		data = LDjson{
 			"message": err.Error(),
 		}
 	}
