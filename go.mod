@@ -1,6 +1,6 @@
 module github.com/cvanloo/rmsgo.git
 
-go 1.20
+go 1.21
 
 require (
 	github.com/gabriel-vasile/mimetype v1.4.2
