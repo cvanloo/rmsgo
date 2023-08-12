@@ -984,122 +984,304 @@ func TestPutDocumentAncestorFolderClashesWithDocumentFails(t *testing.T) {
 	}
 }
 
-// -------
-
 func TestGetFolder(t *testing.T) {
 	mockServer()
-
 	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodPut, ts.URL+"/storage/Documents/First.txt", bytes.NewReader([]byte("My first document.")))
+	const (
+		testContent = `> If you masturbated and went to the grocery store, and I
+> ask you what you did today, and you tell me you went to the grocery
+> store, that is not lying, you are just hiding implementation details.\
+> -- <cite>ThePrimeagen, Twitch.tv</cite>`
+		testDocument     = "/Quotes/Twitch/ThePrimeagen.md"
+		testMime         = "text/plain; charset=utf-8"
+		testDocumentETag = "8c2d95a5232b32d1ad8c794313c0c549"
+
+		testDocumentDir     = "/Quotes/Twitch/"
+		testDocumentDirETag = "25c3d4a9bc64c223d9b8c07e8336952d"
+
+		responseBody = `{"@context":"http://remotestorage.io/spec/folder-description","items":{"ThePrimeagen.md":{"Content-Length":242,"Content-Type":"text/plain; charset=utf-8","ETag":"8c2d95a5232b32d1ad8c794313c0c549","Last-Modified":"Mon, 01 Jan 0001 00:00:00 UTC"}}}
+` // don't forget newline
+	)
+
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Content-Type", testMime)
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+		}
+	}
+
+	r, err := http.Get(remoteRoot + testDocumentDir)
 	if err != nil {
 		t.Error(err)
 	}
-
-	r, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Error(err)
+	if ct := r.Header.Get("Content-Type"); ct != "application/ld+json" {
+		t.Errorf("got: `%s', want: `application/ld+json'", ct)
 	}
-	if r.StatusCode != http.StatusCreated {
-		t.Errorf("got: %d, want: %d", r.StatusCode, http.StatusCreated)
-	}
-
-	r, err = http.Get(ts.URL + "/storage/")
-	if err != nil {
-		t.Error(err)
-	}
-
 	if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
 		t.Errorf("got: `%s', want: `no-cache'", cc)
 	}
-
+	if e := r.Header.Get("ETag"); e != testDocumentDirETag {
+		t.Errorf("got: `%s', want: `%s'", e, testDocumentDirETag)
+	}
 	bs, err := io.ReadAll(r.Body)
 	if err != nil {
 		t.Error(err)
 	}
+	if string(bs) != responseBody {
+		t.Errorf("got: `%s', want: `%s'", bs, responseBody)
+	}
+}
 
-	lst := LDjson{}
-	err = json.Unmarshal(bs, &lst)
+func TestGetFolderEmpty(t *testing.T) {
+	mockServer()
+	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	const (
+		testDocumentDirETag = "03d871638b18f0b459bf8fd12a58f1d8"
+		responseBody        = `{"@context":"http://remotestorage.io/spec/folder-description","items":{}}
+` // don't forget newline
+	)
+
+	// we can't have empty folders except for root
+	r, err := http.Get(remoteRoot + "/")
 	if err != nil {
 		t.Error(err)
 	}
+	if ct := r.Header.Get("Content-Type"); ct != "application/ld+json" {
+		t.Errorf("got: `%s', want: `application/ld+json'", ct)
+	}
+	if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
+		t.Errorf("got: `%s', want: `no-cache'", cc)
+	}
+	if e := r.Header.Get("ETag"); e != testDocumentDirETag {
+		t.Errorf("got: `%s', want: `%s'", e, testDocumentDirETag)
+	}
+	bs, err := io.ReadAll(r.Body)
+	if err != nil {
+		t.Error(err)
+	}
+	if string(bs) != responseBody {
+		t.Errorf("got: `%s', want: `%s'", bs, responseBody)
+	}
+}
 
-	items, ok := lst["items"]
-	if !ok {
-		t.Error("response is missing items field")
+func TestGetFolderNotFound(t *testing.T) {
+	mockServer()
+	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	const responseBody = `{"data":{"rname":"/nonexistent/"},"description":"The requested folder does not exist on the server.","message":"folder not found","url":""}
+` // don't forget newline
+
+	r, err := http.Get(remoteRoot + "/nonexistent/")
+	if err != nil {
+		t.Error(err)
+	}
+	if ct := r.Header.Get("Content-Type"); ct != "application/ld+json" {
+		t.Errorf("got: `%s', want: `application/ld+json'", ct)
+	}
+	// @todo: should error responses also include a Cache-Control header?
+	//if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
+	//	t.Errorf("got: `%s', want: `no-cache'", cc)
+	//}
+	bs, err := io.ReadAll(r.Body)
+	if err != nil {
+		t.Error(err)
+	}
+	if string(bs) != responseBody {
+		t.Errorf("got: `%s', want: `%s'", bs, responseBody)
+	}
+}
+
+func TestGetFolderIfNonMatchRevMatches(t *testing.T) {
+	mockServer()
+	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	const (
+		testContent      = `You may disagree with this idiom, and that's okay, because it's enforced by the compiler. You're welcome.`
+		testDocument     = "/public/go_devs_prbly"
+		testMime         = "text/joke"
+		testDocumentETag = "3e507240501005a29cc22520bd333f79"
+
+		testDocumentDir     = "/public/"
+		testDocumentDirETag = "660d6f3f14d933aa8e60bb17e7cae7e8"
+	)
+
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Content-Type", testMime)
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+		}
 	}
 
-	itemsLd, ok := items.(LDjson)
-	if !ok {
-		t.Error("items field cannot be cast to ldjson")
+	req, err := http.NewRequest(http.MethodGet, remoteRoot+testDocumentDir, nil)
+	if err != nil {
+		t.Error(err)
+	}
+	// include revision of the folder we're about to GET
+	req.Header.Set("If-Non-Match", fmt.Sprintf("03d871638b18f0b459bf8fd12a58f1d8, %s", testDocumentDirETag))
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusNotModified {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNotModified))
+	}
+}
+
+func TestGetFolderIfNonMatchRevNoMatch(t *testing.T) {
+	mockServer()
+	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	const (
+		testContent      = `You may disagree with this idiom, and that's okay, because it's enforced by the compiler. You're welcome.`
+		testDocument     = "/public/go_devs_prbly"
+		testMime         = "text/joke"
+		testDocumentETag = "3e507240501005a29cc22520bd333f79"
+
+		testDocumentDir     = "/public/"
+		testDocumentDirETag = "660d6f3f14d933aa8e60bb17e7cae7e8"
+
+		responseBody = `{"@context":"http://remotestorage.io/spec/folder-description","items":{"go_devs_prbly":{"Content-Length":105,"Content-Type":"text/joke","ETag":"3e507240501005a29cc22520bd333f79","Last-Modified":"Mon, 01 Jan 0001 00:00:00 UTC"}}}
+` // don't forget newline
+	)
+
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Content-Type", testMime)
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+		}
 	}
 
-	doc, ok := itemsLd["Documents/"]
-	if !ok {
-		t.Error("Documents/ folder missing from items")
+	req, err := http.NewRequest(http.MethodGet, remoteRoot+testDocumentDir, nil)
+	if err != nil {
+		t.Error(err)
 	}
-
-	docLd, ok := doc.(LDjson)
-	if !ok {
-		t.Error("Documents/ field cannot be cast to ldjson")
+	// none of the revisions match our public/ folder
+	req.Header.Set("If-Non-Match", "03d871638b18f0b459bf8fd12a58f1d8, 3e507240501005a29cc22520bd333f79, 33f7b41f98820961b12134677ba3f231")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
 	}
-
-	etag, ok := docLd["ETag"]
-	if !ok {
-		t.Error("Documents/ is missing ETag field")
+	if r.StatusCode != http.StatusOK {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
 	}
-
-	etagStr, ok := etag.(string)
-	if !ok {
-		t.Error("ETag is not of type string")
+	if ct := r.Header.Get("Content-Type"); ct != "application/ld+json" {
+		t.Errorf("got: `%s', want: `application/ld+json'", ct)
 	}
-
-	if etagStr != "b819cb916b90ce59d4064481754672b9" {
-		t.Errorf("got: `%s', want: %s", etagStr, "b819cb916b90ce59d4064481754672b9")
+	if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
+		t.Errorf("got: `%s', want: `no-cache'", cc)
+	}
+	if e := r.Header.Get("ETag"); e != testDocumentDirETag {
+		t.Errorf("got: `%s', want: `%s'", e, testDocumentDirETag)
+	}
+	bs, err := io.ReadAll(r.Body)
+	if err != nil {
+		t.Error(err)
+	}
+	if string(bs) != responseBody {
+		t.Errorf("got: `%s', want: `%s'", bs, responseBody)
 	}
 }
 
 func TestHeadFolder(t *testing.T) {
 	mockServer()
-
 	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodPut, ts.URL+"/storage/Documents/First.txt", bytes.NewReader([]byte("My first document.")))
+	const (
+		rootETag = "6495a5d8eb9f9c5343a03540b6e3dfaa"
+	)
+
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+"/Documents/First.txt", bytes.NewReader([]byte("My first document.")))
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+	}
+
+	r, err := http.Head(remoteRoot + "/")
 	if err != nil {
 		t.Error(err)
 	}
-
-	r, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Error(err)
-	}
-	if r.StatusCode != http.StatusCreated {
-		t.Errorf("got: %d, want: %d", r.StatusCode, http.StatusCreated)
-	}
-
-	r, err = http.Head(ts.URL + "/storage/")
-	if err != nil {
-		t.Error(err)
-	}
-
 	bs, err := io.ReadAll(r.Body)
 	if err != nil {
 		t.Error(err)
 	}
-	if len(bs) != 0 {
-		t.Error("the response to a head request should have an empty body")
+	if etag := r.Header.Get("ETag"); etag != rootETag {
+		t.Errorf("got: `%s', want: `%s'", etag, rootETag)
 	}
-
-	if etag := r.Header.Get("ETag"); etag != "6495a5d8eb9f9c5343a03540b6e3dfaa" {
-		t.Errorf("got: `%s', want: 6495a5d8eb9f9c5343a03540b6e3dfaa", etag)
-	}
-
 	if l := r.Header.Get("Content-Length"); l != "130" {
 		t.Errorf("got: `%s', want: 130", l)
 	}
+	if ct := r.Header.Get("Content-Type"); ct != "application/ld+json" {
+		t.Errorf("got: `%s', want: `application/ld+json'", ct)
+	}
+	if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
+		t.Errorf("got: `%s', want: `no-cache'", cc)
+	}
+	if len(bs) != 0 {
+		t.Error("the response to a head request should have an empty body")
+	}
 }
+
+// We don't need any more HEAD folder test cases.
+// The implementation logic is essentially the same: a HEAD request is also
+// directed to the GetFolder handler.
+// Go's HTTP lib takes care of not including the body in the response.
+
+// @todo: write tests for GetDocument
 
 func TestGetDocument(t *testing.T) {
 	mockServer()
@@ -1202,6 +1384,8 @@ func TestHeadDocument(t *testing.T) {
 		t.Errorf("the response to a head request should have an empty body; got: `%s'", bs)
 	}
 }
+
+// @todo: write tests for DELETE document
 
 func TestDeleteDocument(t *testing.T) {
 	mockServer()
