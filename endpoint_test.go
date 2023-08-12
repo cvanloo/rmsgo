@@ -16,30 +16,6 @@ import (
 	. "github.com/cvanloo/rmsgo.git/mock"
 )
 
-//fs, server := mockServer()
-//
-// Option 1:
-//ts := httptest.NewServer(server)
-//defer ts.Close()
-//
-//r, err := http.Get(ts.URL)
-//if err != nil {
-//	t.Error(err)
-//}
-//_ = r
-//
-// Option 2:
-//req := httptest.NewRequest(http.MethodGet, "http://localhost:8080/storage/", nil)
-//w := httptest.NewRecorder()
-//server.ServeHTTP(w, req)
-//
-//resp := w.Result()
-//body, err := io.ReadAll(resp.Body)
-//if err != nil {
-//	t.Error(err)
-//}
-//_ = body
-
 func mockServer() {
 	const (
 		rroot = "/storage/"
@@ -54,9 +30,8 @@ func mockServer() {
 	Reset()
 }
 
-func ExampleGetFolder() { // @todo: overwork
+func ExampleGetFolder() {
 	mockServer()
-	// Use: err := rmsgo.Configure(remoteRoot, storageRoot, nil)
 
 	ts := httptest.NewServer(ServeMux{})
 	defer ts.Close()
@@ -65,99 +40,99 @@ func ExampleGetFolder() { // @todo: overwork
 	remoteRoot := ts.URL + rroot
 
 	// GET the currently empty root folder
-	r, err := http.Get(remoteRoot + "/")
-	if err != nil {
-		log.Fatal(err)
+	{
+		r, err := http.Get(remoteRoot + "/")
+		if err != nil {
+			log.Fatal(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			log.Fatalf("%s %s: %s", r.Request.Method, r.Request.URL, r.Status)
+		}
+		bs, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("Root ETag: %s\n", r.Header.Get("ETag"))
+		fmt.Print(string(bs))
+		// Root ETag: 03d871638b18f0b459bf8fd12a58f1d8
+		// {
+		//   "@context": "http://remotestorage.io/spec/folder-description",
+		//   "items": {}
+		// }
 	}
-	if r.StatusCode != http.StatusOK {
-		log.Fatalf("%s %s: %s", r.Request.Method, r.Request.URL, r.Status)
-	}
-
-	bs, err := io.ReadAll(r.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Printf("Root ETag: %s\n", r.Header.Get("ETag"))
-	fmt.Print(string(bs))
-	// Root ETag: 03d871638b18f0b459bf8fd12a58f1d8
-	// {
-	//   "@context": "http://remotestorage.io/spec/folder-description",
-	//   "items": {}
-	// }
 
 	// PUT a document
-	req, err := http.NewRequest(http.MethodPut, remoteRoot+"/Documents/First.txt", bytes.NewReader([]byte("My first document.")))
-	if err != nil {
-		log.Fatal(err)
-	}
-	req.Header.Set("Content-Type", "funny/format")
-
-	r, err = http.DefaultClient.Do(req)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if r.StatusCode != http.StatusCreated {
-		log.Fatalf("%s %s: %s", r.Request.Method, r.Request.URL, r.Status)
-	}
-
-	fmt.Printf("Created ETag: %s\n", r.Header.Get("ETag"))
-	// Created ETag: f0d0f717619b09cc081bb0c11d9b9c6b
-
-	// GET the now non-empty root folder
-	r, err = http.Get(remoteRoot + "/")
-	if err != nil {
-		log.Fatal(err)
-	}
-	if r.StatusCode != http.StatusOK {
-		log.Fatalf("%s %s: %s", r.Request.Method, r.Request.URL, r.Status)
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+"/Documents/First.txt", bytes.NewReader([]byte("My first document.")))
+		if err != nil {
+			log.Fatal(err)
+		}
+		req.Header.Set("Content-Type", "funny/format") // mime type is auto-detected if not specified
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			log.Fatalf("%s %s: %s", r.Request.Method, r.Request.URL, r.Status)
+		}
+		fmt.Printf("Created ETag: %s\n", r.Header.Get("ETag"))
+		// Created ETag: f0d0f717619b09cc081bb0c11d9b9c6b
 	}
 
-	bs, err = io.ReadAll(r.Body)
-	if err != nil {
-		log.Fatal(err)
+	// GET the now NON-empty root folder
+	{
+		r, err := http.Get(remoteRoot + "/")
+		if err != nil {
+			log.Fatal(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			log.Fatalf("%s %s: %s", r.Request.Method, r.Request.URL, r.Status)
+		}
+		bs, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("Root ETag: %s\n", r.Header.Get("ETag"))
+		fmt.Print(string(bs))
+		// Root ETag: ef528a27b48c1b187ef7116f7306358b
+		// {
+		//   "@context": "http://remotestorage.io/spec/folder-description",
+		//   "items": {
+		//     "Documents/": {
+		//       "ETag": "cc4c6d3bbf39189be874992479b60e2a"
+		//     }
+		//   }
+		// }
 	}
-
-	fmt.Printf("Root ETag: %s\n", r.Header.Get("ETag"))
-	fmt.Print(string(bs))
-	// Root ETag: ef528a27b48c1b187ef7116f7306358b
-	// {
-	//   "@context": "http://remotestorage.io/spec/folder-description",
-	//   "items": {
-	//     "Documents/": {
-	//       "ETag": "cc4c6d3bbf39189be874992479b60e2a"
-	//     }
-	//   }
-	// }
 
 	// GET the document's folder
-	r, err = http.Get(remoteRoot + "/Documents/")
-	if err != nil {
-		log.Fatal(err)
+	{
+		r, err := http.Get(remoteRoot + "/Documents/")
+		if err != nil {
+			log.Fatal(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			log.Fatalf("%s %s: %s", r.Request.Method, r.Request.URL, r.Status)
+		}
+		bs, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("Documents/ ETag: %s\n", r.Header.Get("ETag"))
+		fmt.Print(string(bs))
+		// Documents/ ETag: cc4c6d3bbf39189be874992479b60e2a
+		// {
+		//   "@context": "http://remotestorage.io/spec/folder-description",
+		//   "items": {
+		//     "First.txt": {
+		//       "Content-Length": 18,
+		//       "Content-Type": "funny/format",
+		//       "ETag": "f0d0f717619b09cc081bb0c11d9b9c6b",
+		//       "Last-Modified": "Mon, 01 Jan 0001 00:00:00 UTC"
+		//     }
+		//   }
+		// }
 	}
-	if r.StatusCode != http.StatusOK {
-		log.Fatalf("%s %s: %s", r.Request.Method, r.Request.URL, r.Status)
-	}
-
-	bs, err = io.ReadAll(r.Body)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Printf("Documents/ ETag: %s\n", r.Header.Get("ETag"))
-	fmt.Print(string(bs))
-	// Documents/ ETag: cc4c6d3bbf39189be874992479b60e2a
-	// {
-	//   "@context": "http://remotestorage.io/spec/folder-description",
-	//   "items": {
-	//     "First.txt": {
-	//       "Content-Length": 18,
-	//       "Content-Type": "funny/format",
-	//       "ETag": "f0d0f717619b09cc081bb0c11d9b9c6b",
-	//       "Last-Modified": "Mon, 01 Jan 0001 00:00:00 UTC"
-	//     }
-	//   }
-	// }
 
 	// Output:
 	// Root ETag: 03d871638b18f0b459bf8fd12a58f1d8
