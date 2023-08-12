@@ -85,7 +85,7 @@ func Sroot() string {
 // Serve responds to a remoteStorage request.
 func Serve(w http.ResponseWriter, r *http.Request) error {
 	path := r.URL.Path
-	if !strings.HasPrefix(path, rroot) {
+	if !strings.HasPrefix(path, rroot+"/") {
 		return writeError(w, ErrNotFound)
 	}
 	isFolder := false
