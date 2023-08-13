@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/cvanloo/rmsgo.git"
 	"github.com/cvanloo/rmsgo.git/mock"
@@ -15,29 +16,40 @@ const (
 
 func logger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("%s %s [%s]", r.Method, r.URL.Path, r.URL.Path)
-		next.ServeHTTP(w, r)
+		start := time.Now()
+		lrw := rmsgo.NewLoggingResponseWriter(w)
+
+		next.ServeHTTP(lrw, r)
+
+		duration := time.Since(start)
+
+		log.Printf("%v", map[string]any{
+			"method":   r.Method,
+			"uri":      r.RequestURI,
+			"duration": duration,
+			"status":   lrw.Status,
+			"size":     lrw.Size,
+		})
 	})
 }
 
 func main() {
+	log.Println("starting listener on :8080")
+
 	mock.Mock(
 		mock.WithDirectory("/tmp/rms/storage/"),
 	)
 
-	err := rmsgo.Configure(RemoteRoot, StorageRoot, nil)
+	err := rmsgo.Setup(RemoteRoot, StorageRoot)
 	if err != nil {
 		log.Fatal(err)
 	}
+	rmsgo.UseErrorHandler(func(err error) {
+		log.Fatalf("remote storage: unhandled error: %v", err)
+	})
+	rmsgo.UseMiddleware(logger)
 
-	rms := rmsgo.ServeMux{}
-
-	// Option 1:
-	log.Fatal(http.ListenAndServe(":8080", logger(rms)))
-
-	// Option 2:
 	mux := http.NewServeMux()
-	mux.Handle(RemoteRoot, logger(rms))
-	log.Println("starting listener on :8080")
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	rmsgo.Register(mux)
+	http.ListenAndServe(":8080", mux) // @todo: use TLS
 }

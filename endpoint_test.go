@@ -22,16 +22,16 @@ func mockServer() {
 	Mock(
 		WithDirectory(sroot),
 	)
-	must(Configure(rroot, sroot, func(err error) {
-		log.Fatal(err)
-	}))
+	must(Setup(rroot, sroot))
 	Reset()
 }
 
 func ExampleGetFolder() {
 	mockServer()
 
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	defer ts.Close()
 
 	// server url + remote root
@@ -153,7 +153,9 @@ func TestPutDocument(t *testing.T) {
 		testDocumentEtag = "60ca7ee51a4a4886d00ae2470457b206"
 	)
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -213,7 +215,9 @@ func TestPutDocumentSame(t *testing.T) {
 		testDocumentEtag2 = "063c77ac4aa257f9396f1b5cae956004"
 	)
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -324,7 +328,9 @@ func TestPutDocumentIfMatchSuccess(t *testing.T) {
 		testDocumentEtag2 = "063c77ac4aa257f9396f1b5cae956004"
 	)
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -378,7 +384,9 @@ func TestPutDocumentIfMatchFail(t *testing.T) {
 		testContent2 = "I will travel the distance in your eyes Interstellar Light years from you Supernova We'll fuse when we collide Awaking in the light of all the stars aligned"
 	)
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -429,7 +437,9 @@ func TestPutDocumentIfNonMatchSuccess(t *testing.T) {
 		testDocumentEtag = "33f7b41f98820961b12134677ba3f231"
 	)
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -463,7 +473,9 @@ func TestPutDocumentIfNonMatchFail(t *testing.T) {
 		testDocumentEtag2 = "063c77ac4aa257f9396f1b5cae956004"
 	)
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -518,7 +530,9 @@ func TestPutDocumentSilentlyCreateAncestors(t *testing.T) {
 		testDocumentDirETag = "3de26fc06d5d1e20ff96a8142cd6fabf"
 	)
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -627,7 +641,9 @@ func TestPutDocumentUpdatesAncestorETags(t *testing.T) {
 		testRootETag2 = "628e5ebbbcf131c9103ebd51019d1b7e"
 	)
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -769,11 +785,13 @@ func TestPutDocumentAutodetectContentType(t *testing.T) {
 “But look, you found the notice, didn’t you?”
 “Yes,” said Arthur, “yes I did. It was on display in the bottom of a locked filing cabinet stuck in a disused lavatory with a sign on the door saying ‘Beware of the Leopard.”`
 		testDocument     = "/Quotes/Douglas Adams"
-		testDocumentETag = "e3e1c1d7f6952350b93d4935aa412497"
-		testMime         = "text/plain; charset=utf-8"
+		testDocumentETag = "c1d56d2d5814cf52357a0129341402db"
+		testMime         = "application/octet-stream"
 	)
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -827,7 +845,9 @@ func TestPutDocumentAutodetectContentType(t *testing.T) {
 
 func TestPutDocumentAsFolderFails(t *testing.T) {
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -859,7 +879,9 @@ func TestPutDocumentClashesWithFolderFails(t *testing.T) {
 		expectedConflictPath = "/Lyrics/Favourite"
 	)
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -930,7 +952,9 @@ func TestPutDocumentAncestorFolderClashesWithDocumentFails(t *testing.T) {
 		expectedConflictPath = "/Lyrics/Favourite"
 	)
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -989,7 +1013,9 @@ func TestPutDocumentAncestorFolderClashesWithDocumentFails(t *testing.T) {
 
 func TestGetFolder(t *testing.T) {
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -1051,7 +1077,9 @@ func TestGetFolder(t *testing.T) {
 
 func TestGetFolderEmpty(t *testing.T) {
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -1086,7 +1114,9 @@ func TestGetFolderEmpty(t *testing.T) {
 
 func TestGetFolderNotFound(t *testing.T) {
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -1115,7 +1145,9 @@ func TestGetFolderNotFound(t *testing.T) {
 
 func TestGetFolderIfNonMatchRevMatches(t *testing.T) {
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -1164,7 +1196,9 @@ func TestGetFolderIfNonMatchRevMatches(t *testing.T) {
 
 func TestGetFolderIfNonMatchRevNoMatch(t *testing.T) {
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -1232,13 +1266,15 @@ func TestGetFolderIfNonMatchRevNoMatch(t *testing.T) {
 
 func TestHeadFolder(t *testing.T) {
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
 	const (
-		testDocumentETag = "eabd59d0c27b78077e391800e7cf8777"
-		rootETag         = "962e336a5a324e5adf7d8eca569e0c70"
+		testDocumentETag = "1d8fc022c47d2abb16e03f2765575a33"
+		rootETag         = "8bcad8e369ee8b5a6cfc069ca5b4d315"
 	)
 
 	{
@@ -1293,7 +1329,9 @@ func TestHeadFolder(t *testing.T) {
 
 func TestGetDocument(t *testing.T) {
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -1352,7 +1390,9 @@ func TestGetDocument(t *testing.T) {
 
 func TestGetDocumentNotFound(t *testing.T) {
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -1377,7 +1417,9 @@ func TestGetDocumentNotFound(t *testing.T) {
 
 func TestGetDocumentIfNonMatchRevMatches(t *testing.T) {
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -1429,7 +1471,9 @@ around inheritance.`
 
 func TestGetDocumentIfNonMatchRevNoMatch(t *testing.T) {
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -1500,7 +1544,9 @@ around inheritance.`
 
 func TestHeadDocument(t *testing.T) {
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -1556,7 +1602,9 @@ func TestHeadDocument(t *testing.T) {
 
 func TestDeleteDocument(t *testing.T) {
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -1756,7 +1804,9 @@ func TestDeleteDocument(t *testing.T) {
 
 func TestDeleteDocumentNotFound(t *testing.T) {
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -1775,7 +1825,9 @@ func TestDeleteDocumentNotFound(t *testing.T) {
 
 func TestDeleteDocumentToFolder(t *testing.T) {
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -1820,7 +1872,9 @@ func TestDeleteDocumentToFolder(t *testing.T) {
 
 func TestDeleteDocumentIfMatch(t *testing.T) {
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
@@ -1883,7 +1937,9 @@ func TestDeleteDocumentIfMatch(t *testing.T) {
 
 func TestDeleteDocumentIfMatchFail(t *testing.T) {
 	mockServer()
-	ts := httptest.NewServer(ServeMux{})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 

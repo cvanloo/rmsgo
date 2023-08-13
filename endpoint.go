@@ -5,15 +5,20 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/cvanloo/rmsgo.git/isdelve"
 	. "github.com/cvanloo/rmsgo.git/mock"
 )
+
+// @todo: OPTIONS preflight
+
+// @todo: BEARER
+//   @todo: authentication
+//   @todo: authorization
+//   @todo: WebFinger
 
 func init() {
 	if !isdelve.Enabled {
@@ -21,69 +26,8 @@ func init() {
 	}
 }
 
-// Any errors that the remoteStorage server doesn't know how to handle itself
-// are passed to the ErrorHandler.
-type ErrorHandler func(err error)
-
-// ServeMux implements http.Handler and can therefore be passed directly to a
-// http.ServeMux.Handle or http.ListenAndServe(TLS).
-type ServeMux struct{}
-
-func (ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	err := Serve(w, r)
-	if err != nil {
-		unhandled(err)
-	}
-}
-
-const rmsTimeFormat = time.RFC1123
-
-var (
-	rroot, sroot string
-	unhandled    ErrorHandler = func(err error) {
-		log.Printf("rmsgo: unhandled error: %v\n", err)
-	}
-)
-
-// Configure creates a remoteStorage server configuration.
-// remoteRoot is the root folder of the storage tree (used in the URL),
-// storageRoot is a folder on the server's file system where remoteStorage
-// documents are written to and read from.
-func Configure(remoteRoot, storageRoot string, errHandler ErrorHandler) error {
-	rroot = filepath.Clean(remoteRoot)
-	sroot = filepath.Clean(storageRoot)
-
-	if errHandler != nil {
-		unhandled = errHandler
-	}
-
-	fi, err := FS.Stat(sroot)
-	if err != nil {
-		return err
-	}
-	if !fi.IsDir() {
-		return fmt.Errorf("storage root is not a directory: %s", sroot)
-	}
-	return nil
-}
-
-// Rroot specifies the URL path at which remoteStorage is rooted.
-// E.g. if Rroot is "/storage" then a document "/Picture/Kittens.png" can
-// be accessed using the URL "example.com/storage/Picture/Kittens.png".
-// Rroot does not have a trailing slash.
-func Rroot() string {
-	return rroot
-}
-
-// Sroot is a path specifying the location on the server's file system
-// where all of remoteStorage's files are stored.
-// Sroot does not have a trailing slash.
-func Sroot() string {
-	return sroot
-}
-
-// Serve responds to a remoteStorage request.
-func Serve(w http.ResponseWriter, r *http.Request) error {
+// serve responds to a remoteStorage request.
+func serve(w http.ResponseWriter, r *http.Request) error {
 	path := r.URL.Path
 	if !strings.HasPrefix(path, rroot+"/") {
 		return writeError(w, ErrNotFound)

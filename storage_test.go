@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log"
 	"path/filepath"
 	"testing"
 
@@ -824,9 +823,7 @@ func TestMigrate(t *testing.T) {
 		rroot = "/storage/"
 		sroot = "/tmp/rms/storage/"
 	)
-	must(Configure(rroot, sroot, func(err error) {
-		log.Fatal(err)
-	}))
+	must(Setup(rroot, sroot))
 	Mock(
 		WithDirectory(sroot),
 		WithFile("/somewhere/Documents/hello.txt", []byte("Hello, World!")),
