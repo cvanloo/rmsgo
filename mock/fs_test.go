@@ -8,6 +8,7 @@ import (
 	"testing"
 )
 
+// @todo: many more tests needed to test the correct (complicated) behaviour
 // @todo: test error cases as well
 
 const (
@@ -240,7 +241,7 @@ func TestFile_WriteAtSeekEnd(t *testing.T) {
 	m := MockFS(
 		WithFile(testFilePath, []byte(testContent)),
 	)
-	fd, err := m.Open(testFilePath)
+	fd, err := m.OpenFile(testFilePath, os.O_RDWR, 0666)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +277,7 @@ func TestFile_WriteSequence(t *testing.T) {
 	m := MockFS(
 		WithFile(testFilePath, []byte(testContent)),
 	)
-	fd, err := m.Open(testFilePath)
+	fd, err := m.OpenFile(testFilePath, os.O_RDWR, 0666)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +324,7 @@ func TestFile_SeekAndWrite(t *testing.T) {
 	m := MockFS(
 		WithFile(testFilePath, []byte("Ich fand es schon immer verdächtig, dass die Sonne jeden Morgen im Osten aufgeht!")),
 	)
-	fd, err := m.Open(testFilePath)
+	fd, err := m.OpenFile(testFilePath, os.O_RDWR, 0666)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -602,5 +603,91 @@ func TestWalkDirSkipWithinDir(t *testing.T) {
 		if expected[i] != visited[i] {
 			t.Errorf("got: `%s', want: `%s'", visited[i], expected[i])
 		}
+	}
+}
+
+func TestFile_SeekPastEndAndReadReturnsEOF(t *testing.T) {
+	m := MockFS(
+		WithFile(testFilePath, []byte(testContent)),
+	)
+	fd, err := m.Open(testFilePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// We seek 7 bytes past the end of the file
+	ret, err := fd.Seek(7, io.SeekEnd)
+	if err != nil {
+		t.Error(err)
+	}
+	expLen := int64(len(testContent) + 7)
+	if ret != expLen {
+		t.Errorf("got: %d, want: %d", ret, expLen)
+	}
+
+	bs := make([]byte, 128)
+	n, err := fd.Read(bs)
+	if err != io.EOF {
+		t.Errorf("got: `%v', want: `%v'", err, io.EOF)
+	}
+	if n != 0 {
+		t.Errorf("got: %d, want: 0", n)
+	}
+}
+
+func TestFile_SeekPastEndAndWrite(t *testing.T) {
+	m := MockFS(
+		WithFile(testFilePath, []byte(testContent)),
+	)
+	fd, err := m.OpenFile(testFilePath, os.O_RDWR, 0666)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// We seek 7 bytes past the end of the file
+	ret, err := fd.Seek(7, io.SeekEnd)
+	if err != nil {
+		t.Error(err)
+	}
+	expLen := int64(len(testContent) + 7)
+	if ret != expLen {
+		t.Errorf("got: %d, want: %d", ret, expLen)
+	}
+
+	const (
+		appendText = "1234----"
+
+		//          original content + 7 bytes skipped                + appended text
+		expectedResult = testContent + "\x00\x00\x00\x00\x00\x00\x00" + appendText
+	)
+
+	n, err := fd.Write([]byte(appendText))
+	if err != nil {
+		t.Error(err)
+	}
+	if n != len(appendText) {
+		t.Errorf("got: %d, want: %d", n, len(appendText))
+	}
+
+	ret, err = fd.Seek(0, io.SeekEnd)
+	if err != nil {
+		t.Error(err)
+	}
+	nl := int64(len(expectedResult))
+	if ret != nl {
+		t.Errorf("got: %d, want: %d", ret, nl)
+	}
+
+	err = fd.Close()
+	if err != nil {
+		t.Error(err)
+	}
+
+	bs, err := m.ReadFile(testFilePath)
+	if err != nil {
+		t.Error(err)
+	}
+	if string(bs) != expectedResult {
+		t.Errorf("got: `%s', want: `%s'", bs, expectedResult)
 	}
 }

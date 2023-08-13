@@ -1,6 +1,7 @@
 package mock
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -20,6 +21,9 @@ type FileSystem interface {
 	Create(path string) (File, error)
 	Open(path string) (File, error)
 	Stat(path string) (os.FileInfo, error)
+	OpenFile(path string, flag int, perm fs.FileMode) (File, error)
+	// @todo: Mkdir(name string, perm FileMode) error
+	// @todo: MkdirAll(path string, perm FileMode) error
 	WalkDir(root string, fn fs.WalkDirFunc) error
 	Truncate(path string, size int64) error
 	ReadFile(path string) ([]byte, error)
@@ -51,6 +55,10 @@ func (*RealFileSystem) Open(path string) (File, error) {
 
 func (*RealFileSystem) Stat(path string) (fs.FileInfo, error) {
 	return os.Stat(path)
+}
+
+func (*RealFileSystem) OpenFile(path string, flag int, perm os.FileMode) (File, error) {
+	return os.OpenFile(path, flag, perm)
 }
 
 func (*RealFileSystem) WalkDir(root string, fn fs.WalkDirFunc) error {
@@ -86,7 +94,7 @@ var _ FileSystem = (*FakeFileSystem)(nil)
 
 const umask = 0022
 
-func (m *FakeFileSystem) Create(path string) (File, error) {
+func (m *FakeFileSystem) createFile(path string, flag int, perm fs.FileMode) (File, error) {
 	path = filepath.Clean(path)
 
 	if path[len(path)-1] == '/' {
@@ -105,38 +113,64 @@ func (m *FakeFileSystem) Create(path string) (File, error) {
 				Err:  syscall.EISDIR,
 			}
 		}
+		// @todo: are we allowed to open and truncate the file? (check perms)
 		f.bytes = nil
 		f.lastMod = Time()
-		return f.FD(), nil
+		return &FakeFileDescriptor{
+			file:   f,
+			cursor: 0,
+			flag:   flag,
+		}, nil
 	}
 
 	parentPath := filepath.Dir(path)
-	p, ok := m.contents[parentPath]
-	if !ok {
-		return nil, &os.PathError{
-			Op:   "open",
-			Path: path,
-			Err:  syscall.ENOENT,
+	if p, ok := m.contents[parentPath]; ok {
+		if !p.isDir {
+			return nil, &os.PathError{
+				Op:   "open",
+				Path: path,
+				Err:  syscall.ENOTDIR,
+			}
 		}
+
+		// @todo: are we allowed to create the file? (check perms of directory)
+		f := &FakeFile{
+			isDir:   false,
+			path:    path,
+			name:    filepath.Base(path),
+			mode:    perm - umask,
+			lastMod: Time(),
+			parent:  p,
+		}
+		p.children[path] = f
+		m.contents[path] = f
+		return &FakeFileDescriptor{
+			file:   f,
+			cursor: 0,
+			flag:   flag,
+		}, nil
 	}
 
-	f := &FakeFile{
-		isDir:   false,
-		path:    path,
-		name:    filepath.Base(path),
-		mode:    0666 - umask,
-		lastMod: Time(),
-		parent:  p,
+	return nil, &os.PathError{
+		Op:   "open",
+		Path: path,
+		Err:  syscall.ENOENT,
 	}
-	p.children[path] = f
-	m.contents[path] = f
-	return f.FD(), nil
+}
+
+func (m *FakeFileSystem) Create(path string) (File, error) {
+	return m.createFile(path, os.O_RDWR, 0666)
 }
 
 func (m *FakeFileSystem) Open(path string) (File, error) {
 	path = filepath.Clean(path)
 	if f, ok := m.contents[path]; ok {
-		return f.FD(), nil
+		// @todo: are we allowed to open the file (check perms)
+		return &FakeFileDescriptor{
+			file:   f,
+			cursor: 0,
+			flag:   os.O_RDONLY,
+		}, nil
 	}
 	return nil, &os.PathError{
 		Op:   "open",
@@ -145,10 +179,59 @@ func (m *FakeFileSystem) Open(path string) (File, error) {
 	}
 }
 
+func (m *FakeFileSystem) OpenFile(path string, flag int, perm os.FileMode) (File, error) {
+	cpath := filepath.Clean(path)
+	if f, ok := m.contents[cpath]; ok {
+		// @todo: are we allowed to open the file? (check perms)
+		if f.isDir {
+			return nil, &os.PathError{
+				Op:   "open",
+				Path: cpath,
+				Err:  syscall.EISDIR,
+			}
+		}
+		if (flag&os.O_CREATE) == 1 && (flag&os.O_EXCL) == 1 {
+			return nil, &os.PathError{
+				Op:   "open",
+				Path: cpath,
+				Err:  syscall.EEXIST,
+			}
+		}
+		if (flag & os.O_TRUNC) == 1 {
+			f.bytes = nil
+		}
+		return &FakeFileDescriptor{
+			file:   f,
+			cursor: 0,
+			flag:   flag,
+		}, nil
+	}
+	if (flag & os.O_CREATE) == 1 {
+		// @todo: are we allowed to create the file? (check perms of directory)
+		if path[len(path)-1] == '/' {
+			return nil, &os.PathError{
+				Op:   "open",
+				Path: cpath,
+				Err:  syscall.EISDIR,
+			}
+		}
+		return m.createFile(cpath, flag, perm)
+	}
+	return nil, &os.PathError{
+		Op:   "open",
+		Path: cpath,
+		Err:  syscall.ENOENT,
+	}
+}
+
 func (m *FakeFileSystem) Stat(path string) (fs.FileInfo, error) {
 	path = filepath.Clean(path)
 	if f, ok := m.contents[path]; ok {
-		return f.FD(), nil
+		return &FakeFileDescriptor{
+			file:   f,
+			cursor: 0,
+			flag:   os.O_RDONLY,
+		}, nil
 	}
 	return nil, &os.PathError{
 		Op:   "stat",
@@ -167,7 +250,11 @@ func readDir(d *FakeFile) []*FakeFile {
 }
 
 func walkDir(d *FakeFile, fn fs.WalkDirFunc) error {
-	err := fn(d.path, d.FD(), nil)
+	err := fn(d.path, &FakeFileDescriptor{
+		file:   d,
+		cursor: 0,
+		flag:   os.O_RDONLY,
+	}, nil)
 	if err == fs.SkipDir {
 		return nil // successfully skipped directory
 	}
@@ -178,11 +265,15 @@ func walkDir(d *FakeFile, fn fs.WalkDirFunc) error {
 	dirEntries := readDir(d)
 	for _, d := range dirEntries {
 		if d.isDir {
-			// we decend into directories first, before we continue on in the
+			// we descend into directories first, before we continue on in the
 			// current directory
 			err = walkDir(d, fn)
 		} else {
-			err = fn(d.path, d.FD(), nil)
+			err = fn(d.path, &FakeFileDescriptor{
+				file:   d,
+				cursor: 0,
+				flag:   os.O_RDONLY,
+			}, nil)
 		}
 		if err != nil {
 			if err == fs.SkipDir {
@@ -207,7 +298,11 @@ func (m *FakeFileSystem) WalkDir(root string, fn fs.WalkDirFunc) (err error) {
 	}
 
 	if err != nil {
-		err = fn(root, r.FD(), err)
+		err = fn(root, &FakeFileDescriptor{
+			file:   r,
+			cursor: 0,
+			flag:   os.O_RDONLY,
+		}, err)
 	} else {
 		err = walkDir(r, fn)
 	}
@@ -270,32 +365,44 @@ func (m *FakeFileSystem) WriteFile(path string, data []byte, perm os.FileMode) e
 		return nil
 	}
 	parentPath := filepath.Dir(path)
-	p, ok := m.contents[parentPath]
-	if !ok {
-		return &os.PathError{
-			Op:   "open",
-			Path: path,
-			Err:  syscall.ENOENT,
+	if p, ok := m.contents[parentPath]; ok {
+		if !p.isDir {
+			return &os.PathError{
+				Op:   "open",
+				Path: path,
+				Err:  syscall.ENOTDIR,
+			}
 		}
+		f := &FakeFile{
+			isDir:   false,
+			path:    path,
+			name:    filepath.Base(path),
+			bytes:   data,
+			mode:    perm - umask,
+			lastMod: Time(),
+			parent:  p,
+		}
+		p.children[path] = f
+		m.contents[path] = f
+		return nil
 	}
-
-	f := &FakeFile{
-		isDir:   false,
-		path:    path,
-		name:    filepath.Base(path),
-		bytes:   data,
-		mode:    perm - umask,
-		lastMod: Time(),
-		parent:  p,
+	return &os.PathError{
+		Op:   "open",
+		Path: path,
+		Err:  syscall.ENOENT,
 	}
-	p.children[path] = f
-	m.contents[path] = f
-	return nil
 }
 
 func (m *FakeFileSystem) Remove(path string) error {
 	path = filepath.Clean(path)
 	if f, ok := m.contents[path]; ok {
+		if f == m.root {
+			return &os.PathError{
+				Op:   "remove",
+				Path: path,
+				Err:  syscall.EPERM,
+			}
+		}
 		if f.isDir && len(f.children) > 0 {
 			return &os.PathError{
 				Op:   "remove",
@@ -304,6 +411,7 @@ func (m *FakeFileSystem) Remove(path string) error {
 			}
 		}
 		delete(m.contents, path)
+		delete(f.parent.children, path) // @todo: write tests to verify that no such references are forgotten about!!!
 		return nil
 	}
 	return &os.PathError{
@@ -314,16 +422,22 @@ func (m *FakeFileSystem) Remove(path string) error {
 }
 
 func (m *FakeFileSystem) RemoveAll(path string) error {
-	path = filepath.Clean(path)
-	if f, ok := m.contents[path]; ok {
-		delete(m.contents, path)
-		if f.isDir {
-			for _, c := range f.children {
-				delete(m.contents, c.path)
+	return m.WalkDir(path, func(path string, d fs.DirEntry, err error) error {
+		fd := d.(*FakeFileDescriptor)
+		if fd.file == m.root {
+			return &os.PathError{
+				Op:   "remove",
+				Path: path,
+				Err:  syscall.EPERM,
 			}
 		}
-	}
-	return nil
+		delete(m.contents, path)
+		// technically only needed for the top-most directory, for all others
+		// the parent itself was already deleted, no need to remove the
+		// children reference
+		delete(fd.file.parent.children, path)
+		return nil
+	})
 }
 
 type FakeFile struct {
@@ -337,13 +451,11 @@ type FakeFile struct {
 	children map[string]*FakeFile
 }
 
-func (m *FakeFile) FD() *FakeFileDescriptor {
-	return &FakeFileDescriptor{m, 0}
-}
-
 type FakeFileDescriptor struct {
 	file   *FakeFile
 	cursor int64
+	flag   int
+	closed bool
 }
 
 var _ File = (*FakeFileDescriptor)(nil)
@@ -351,8 +463,8 @@ var _ fs.DirEntry = (*FakeFileDescriptor)(nil)
 var _ fs.FileInfo = (*FakeFileDescriptor)(nil)
 
 func (m *FakeFileDescriptor) Close() error {
-	// m.file = nil // make sure that a closed fd can't be used anymore ???
-	return nil // nop
+	m.closed = true
+	return nil
 }
 
 func (m *FakeFileDescriptor) Name() string {
@@ -360,19 +472,33 @@ func (m *FakeFileDescriptor) Name() string {
 }
 
 func (m *FakeFileDescriptor) Stat() (fs.FileInfo, error) {
+	if m.closed {
+		return nil, &os.PathError{
+			Op:   "stat",
+			Path: m.file.path,
+			Err:  errors.New("use of closed file"),
+		}
+	}
 	// m implements fs.FileInfo
 	return m, nil
 }
 
 func (m *FakeFileDescriptor) Read(b []byte) (n int, err error) {
-	if m.file.isDir {
+	if m.closed {
+		return 0, &os.PathError{
+			Op:   "stat",
+			Path: m.file.path,
+			Err:  errors.New("file already closed"),
+		}
+	}
+	if m.file.isDir || (m.flag&0b11) == os.O_WRONLY {
 		return 0, &os.PathError{
 			Op:   "read",
 			Path: m.file.path,
 			Err:  syscall.EISDIR,
 		}
 	}
-	if m.cursor == int64(len(m.file.bytes)) {
+	if m.cursor >= int64(len(m.file.bytes)) {
 		return 0, io.EOF
 	}
 	n = copy(b, m.file.bytes[m.cursor:])
@@ -381,14 +507,27 @@ func (m *FakeFileDescriptor) Read(b []byte) (n int, err error) {
 }
 
 func (m *FakeFileDescriptor) Write(src []byte) (n int, err error) {
-	if m.file.isDir {
+	if m.closed {
+		return 0, &os.PathError{
+			Op:   "stat",
+			Path: m.file.path,
+			Err:  errors.New("file already closed"),
+		}
+	}
+	if m.file.isDir || (m.flag&0b11) == os.O_RDONLY {
 		return 0, &os.PathError{
 			Op:   "write",
 			Path: m.file.path,
 			Err:  syscall.EBADF,
 		}
 	}
-
+	if (m.flag & os.O_APPEND) == 1 {
+		m.cursor = int64(len(m.file.bytes))
+	} else {
+		for m.cursor > int64(len(m.file.bytes)) {
+			m.file.bytes = append(m.file.bytes, 0)
+		}
+	}
 	dst := m.file.bytes[m.cursor:]
 	if len(src) <= len(dst) { // enough space in file for new data
 		n = copy(dst, src)
@@ -405,6 +544,13 @@ func (m *FakeFileDescriptor) Write(src []byte) (n int, err error) {
 }
 
 func (m *FakeFileDescriptor) Seek(offset int64, whence int) (int64, error) {
+	if m.closed {
+		return 0, &os.PathError{
+			Op:   "stat",
+			Path: m.file.path,
+			Err:  errors.New("file already closed"),
+		}
+	}
 	switch whence {
 	case io.SeekStart:
 		// relative to the origin of the file
@@ -420,6 +566,9 @@ func (m *FakeFileDescriptor) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (m *FakeFileDescriptor) Info() (fs.FileInfo, error) {
+	// "The returned FileInfo may be from the time of the original directory read [...]"
+	// -- go doc fs.DirEntry
+
 	// m implements fs.FileInfo
 	return m, nil
 }
@@ -445,6 +594,13 @@ func (m *FakeFileDescriptor) Size() int64 {
 }
 
 func (m *FakeFileDescriptor) Sys() any {
+	if m.closed {
+		return &os.PathError{
+			Op:   "stat",
+			Path: m.file.path,
+			Err:  errors.New("file already closed"),
+		}
+	}
 	return m.file
 }
 
