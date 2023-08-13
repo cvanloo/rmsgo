@@ -179,6 +179,8 @@ func GetFolder(w http.ResponseWriter, r *http.Request) error {
 			cond = strings.TrimSpace(cond)
 			rev, err := ParseETag(cond)
 			if err != nil {
+				// @note(#orig_error): it's fine to lose the original error,
+				// since it can only be caused by a malformed ETag.
 				return writeError(w, HttpError{
 					Msg:  "invalid etag",
 					Desc: "Failed to parse the ETag contained in the If-Non-Match header.",
@@ -249,6 +251,8 @@ func GetDocument(w http.ResponseWriter, r *http.Request) error {
 			cond = strings.TrimSpace(cond)
 			rev, err := ParseETag(cond)
 			if err != nil {
+				// @note(#orig_error): it's fine to lose the original error,
+				// since it can only be caused by a malformed ETag.
 				return writeError(w, HttpError{
 					Msg:  "invalid etag",
 					Desc: "Failed to parse the ETag contained in the If-Non-Match header.",
@@ -318,7 +322,8 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 	if cond := r.Header.Get("If-Match"); cond != "" {
 		rev, err := ParseETag(cond)
 		if err != nil {
-			// @todo(#ignore_orig): ignore original err?
+			// @note(#orig_error): it's fine to lose the original error, since
+			// it can only be caused by a malformed ETag.
 			return writeError(w, HttpError{
 				Msg:  "invalid etag",
 				Desc: "Failed to parse the ETag contained in the If-Match header.",
@@ -454,7 +459,8 @@ func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 	if cond := r.Header.Get("If-Match"); cond != "" {
 		rev, err := ParseETag(cond)
 		if err != nil {
-			// @todo(#ignore_orig): ignore original err?
+			// @note(#orig_error): it's fine to lose the original error, since
+			// it can only be caused by a malformed ETag.
 			return writeError(w, HttpError{
 				Msg:  "invalid etag",
 				Desc: "Failed to parse the ETag contained in the If-Match header.",
