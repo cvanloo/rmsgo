@@ -41,8 +41,6 @@ func serve(w http.ResponseWriter, r *http.Request) error {
 		isFolder = true
 	}
 
-	cors(r, w)
-
 	switch r.Method {
 	case http.MethodHead:
 		fallthrough
@@ -133,7 +131,7 @@ func GetFolder(w http.ResponseWriter, r *http.Request) error {
 		return writeError(w, err) // internal server error
 	}
 
-	if condStr := r.Header.Get("If-Non-Match"); condStr != "" {
+	if condStr := r.Header.Get("If-None-Match"); condStr != "" {
 		conds := strings.Split(condStr, ",")
 		for _, cond := range conds {
 			cond = strings.TrimSpace(cond)
@@ -143,10 +141,10 @@ func GetFolder(w http.ResponseWriter, r *http.Request) error {
 				// since it can only be caused by a malformed ETag.
 				return writeError(w, HttpError{
 					Msg:  "invalid etag",
-					Desc: "Failed to parse the ETag contained in the If-Non-Match header.",
+					Desc: "Failed to parse the ETag contained in the If-None-Match header.",
 					Data: LDjson{
-						"rname":        rpath,
-						"if_non_match": cond,
+						"rname":         rpath,
+						"if_none_match": cond,
 					},
 					Cause: ErrBadRequest,
 				})
@@ -215,7 +213,7 @@ func GetDocument(w http.ResponseWriter, r *http.Request) error {
 		return writeError(w, err) // internal server error
 	}
 
-	if condStr := r.Header.Get("If-Non-Match"); condStr != "" {
+	if condStr := r.Header.Get("If-None-Match"); condStr != "" {
 		conds := strings.Split(condStr, ",")
 		for _, cond := range conds {
 			cond = strings.TrimSpace(cond)
@@ -225,10 +223,10 @@ func GetDocument(w http.ResponseWriter, r *http.Request) error {
 				// since it can only have been caused by a malformed ETag.
 				return writeError(w, HttpError{
 					Msg:  "invalid etag",
-					Desc: "Failed to parse the ETag contained in the If-Non-Match header.",
+					Desc: "Failed to parse the ETag contained in the If-None-Match header.",
 					Data: LDjson{
-						"rname":        rpath,
-						"if_non_match": cond,
+						"rname":         rpath,
+						"if_none_match": cond,
 					},
 					Cause: ErrBadRequest,
 				})
@@ -273,7 +271,7 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 		})
 	}
 
-	if cond := r.Header.Get("If-Non-Match"); cond == "*" && found {
+	if cond := r.Header.Get("If-None-Match"); cond == "*" && found {
 		etag, err := n.Version()
 		if err != nil {
 			return writeError(w, err) // internal server error
@@ -281,7 +279,7 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 		w.Header().Set("ETag", etag.String())
 		return writeError(w, HttpError{
 			Msg:  fmt.Sprintf("document already exists: %s", rpath),
-			Desc: "The request was rejected because the requested document already exists, but `If-Non-Match: *' was specified.",
+			Desc: "The request was rejected because the requested document already exists, but `If-None-Match: *' was specified.",
 			Data: LDjson{
 				"rname": rpath,
 			},
@@ -486,29 +484,6 @@ func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 
 	hs := w.Header()
 	hs.Set("ETag", etag.String())
-	return nil
-}
-
-func cors(r *http.Request, w http.ResponseWriter) error {
-	hs := w.Header()
-	origin := r.Header.Get("Origin")
-
-	hs.Set("Vary", "Origin")
-
-	if origin == "" {
-		return nil
-	}
-
-	if !(allowAllOrigins || allowOriginFunc(r, origin)) {
-		return nil
-	}
-
-	if allowAllOrigins {
-		hs.Set("Access-Control-Allow-Origin", "*")
-	} else {
-		hs.Set("Access-Control-Allow-Origin", origin)
-	}
-
 	return nil
 }
 

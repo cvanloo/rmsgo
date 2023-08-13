@@ -450,7 +450,7 @@ func TestPutDocumentIfNonMatchSuccess(t *testing.T) {
 		t.Error(err)
 	}
 	req.Header.Set("Content-Type", testMime)
-	req.Header.Set("If-Non-Match", "*") // Set If-Non-Match header!
+	req.Header.Set("If-None-Match", "*") // Set If-None-Match header!
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
@@ -487,7 +487,7 @@ func TestPutDocumentIfNonMatchFail(t *testing.T) {
 			t.Error(err)
 		}
 		req.Header.Set("Content-Type", testMime)
-		req.Header.Set("If-Non-Match", "*") // Set If-Non-Match header!
+		req.Header.Set("If-None-Match", "*") // Set If-None-Match header!
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
@@ -506,7 +506,7 @@ func TestPutDocumentIfNonMatchFail(t *testing.T) {
 			t.Error(err)
 		}
 		req.Header.Set("Content-Type", testMime)
-		req.Header.Set("If-Non-Match", "*") // Set If-Non-Match header!
+		req.Header.Set("If-None-Match", "*") // Set If-None-Match header!
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
@@ -1191,7 +1191,7 @@ func TestGetFolderIfNonMatchRevMatches(t *testing.T) {
 		t.Error(err)
 	}
 	// include revision of the folder we're about to GET
-	req.Header.Set("If-Non-Match", fmt.Sprintf("03d871638b18f0b459bf8fd12a58f1d8, %s", testDocumentDirETag))
+	req.Header.Set("If-None-Match", fmt.Sprintf("03d871638b18f0b459bf8fd12a58f1d8, %s", testDocumentDirETag))
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
@@ -1245,7 +1245,7 @@ func TestGetFolderIfNonMatchRevNoMatch(t *testing.T) {
 		t.Error(err)
 	}
 	// none of the revisions match our public/ folder
-	req.Header.Set("If-Non-Match", "03d871638b18f0b459bf8fd12a58f1d8, 3e507240501005a29cc22520bd333f79, 33f7b41f98820961b12134677ba3f231")
+	req.Header.Set("If-None-Match", "03d871638b18f0b459bf8fd12a58f1d8, 3e507240501005a29cc22520bd333f79, 33f7b41f98820961b12134677ba3f231")
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
@@ -1508,7 +1508,7 @@ around inheritance.`
 		t.Error(err)
 	}
 	// include revision of the document we're about to GET
-	req.Header.Set("If-Non-Match", fmt.Sprintf("03d871638b18f0b459bf8fd12a58f1d8, %s", testDocumentETag))
+	req.Header.Set("If-None-Match", fmt.Sprintf("03d871638b18f0b459bf8fd12a58f1d8, %s", testDocumentETag))
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
@@ -1562,7 +1562,7 @@ around inheritance.`
 		t.Error(err)
 	}
 	// revision of our document NOT included
-	req.Header.Set("If-Non-Match", "03d871638b18f0b459bf8fd12a58f1d8, cc4c6d3bbf39189be874992479b60e2a, f0d0f717619b09cc081bb0c11d9b9c6b")
+	req.Header.Set("If-None-Match", "03d871638b18f0b459bf8fd12a58f1d8, cc4c6d3bbf39189be874992479b60e2a, f0d0f717619b09cc081bb0c11d9b9c6b")
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)

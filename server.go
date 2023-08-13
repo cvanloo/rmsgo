@@ -119,5 +119,5 @@ func Handler() http.Handler {
 // Register the remote storage server (with middleware if configured) to the
 // mux using Rroot + '/' as pattern.
 func Register(mux *http.ServeMux) {
-	mux.Handle(rroot+"/", middleware(Handler()))
+	mux.Handle(rroot+"/", middleware(handleCORS(Handler())))
 }
