@@ -21,7 +21,7 @@ func ExampleRegister() {
 
 	mux := http.NewServeMux()
 	rmsgo.Register(mux)
-	http.ListenAndServe(":8080", mux) // TODO: Use TLS
+	http.ListenAndServe(":8080", mux) // [!] TODO: Use TLS
 }
 
 func ExampleSetup() {

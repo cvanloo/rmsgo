@@ -31,8 +31,8 @@ var (
 	}
 )
 
-// Setup creates a remoteStorage server configuration.
-// remoteRoot is the root folder of the storage tree (used in the URL),
+// Setup initializes the remote storage server.
+// remoteRoot is the URL path below which remote storage is accessible, and
 // storageRoot is a folder on the server's file system where remoteStorage
 // documents are written to and read from.
 func Setup(remoteRoot, storageRoot string) error {
@@ -50,16 +50,16 @@ func Setup(remoteRoot, storageRoot string) error {
 }
 
 // Rroot specifies the URL path at which remoteStorage is rooted.
-// E.g. if Rroot is "/storage" then a document "/Picture/Kittens.png" can
-// be accessed using the URL "example.com/storage/Picture/Kittens.png".
+// E.g., if Rroot is "/storage" then a document "/Picture/Kittens.png" can
+// be accessed using the URL "https://example.com/storage/Picture/Kittens.png".
 // Rroot does not have a trailing slash.
 func Rroot() string {
 	return rroot
 }
 
-// Sroot is a path specifying the location on the server's file system
-// where all of remoteStorage's files are stored.
-// Sroot does not have a trailing slash.
+// Sroot is a path specifying the location on the server's file system where
+// all of remoteStorage's files are stored. Sroot does not have a trailing
+// slash.
 func Sroot() string {
 	return sroot
 }
@@ -74,6 +74,8 @@ func UseMiddleware(m Middleware) {
 
 // Handler returns an http.Handler which may be passed directly to a
 // http.ServeMux.Handle or http.ListenAndServe/TLS.
+// Usually you would want to use Register instead.
+// If using Handler directly, make sure that it is accessible at Rroot+'/' or '/'.
 func Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		err := serve(w, r)
@@ -83,6 +85,8 @@ func Handler() http.Handler {
 	})
 }
 
+// Register the remote storage server (with middleware if configured) to the
+// mux using Rroot + '/' as pattern.
 func Register(mux *http.ServeMux) {
 	mux.Handle(rroot+"/", middleware(Handler()))
 }
