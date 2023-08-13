@@ -368,10 +368,16 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if mime == "" {
-			mime, err = DetectMime(fd)
+			_, err := fd.Seek(0, io.SeekStart)
 			if err != nil {
 				return writeError(w, err) // internal server error
 			}
+			bs := make([]byte, 512)
+			_, err = fd.Read(bs)
+			if err != nil {
+				return writeError(w, err) // internal server error
+			}
+			mime = http.DetectContentType(bs)
 		}
 
 		UpdateDocument(n, mime, fsize)
@@ -398,10 +404,16 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if mime == "" {
-			mime, err = DetectMime(fd)
+			_, err := fd.Seek(0, io.SeekStart)
 			if err != nil {
 				return writeError(w, err) // internal server error
 			}
+			bs := make([]byte, 512)
+			_, err = fd.Read(bs)
+			if err != nil {
+				return writeError(w, err) // internal server error
+			}
+			mime = http.DetectContentType(bs)
 		}
 
 		n, err = AddDocument(rpath, sname, fsize, mime)

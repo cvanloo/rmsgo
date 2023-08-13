@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -15,7 +16,6 @@ import (
 
 	"github.com/cvanloo/rmsgo.git/isdelve"
 	. "github.com/cvanloo/rmsgo.git/mock"
-	"github.com/gabriel-vasile/mimetype"
 	"github.com/google/uuid"
 	"golang.org/x/exp/maps"
 )
@@ -47,7 +47,7 @@ var (
 	// root keeps a reference to the root folder.
 	// The reference will stay valid for the entire duration of execution once
 	// Reset has been called.
-	root  *node
+	root *node
 )
 
 type node struct {
@@ -277,11 +277,19 @@ func Migrate(root string) (errs []error) {
 			return nil
 		}
 
-		mime, err := DetectMime(rmsFD)
+		_, err = fd.Seek(0, io.SeekStart)
 		if err != nil {
 			errs = append(errs, err)
 			return nil
 		}
+
+		bs := make([]byte, 512)
+		_, err = fd.Read(bs)
+		if err != nil {
+			errs = append(errs, err)
+			return nil
+		}
+		mime := http.DetectContentType(bs)
 
 		rname := strings.TrimPrefix(path, root[:len(root)-1])
 		_, err = AddDocument(rname, sname, fsize, mime)
@@ -295,27 +303,6 @@ func Migrate(root string) (errs []error) {
 		errs = append(errs, err)
 	}
 	return errs
-}
-
-// DetectMime rewinds fd, reads from fd to detect its mime type, and finally
-// rewinds fd again to the start.
-func DetectMime(fd File) (mime string, err error) {
-	_, err = fd.Seek(0, io.SeekStart)
-	if err != nil {
-		return "", err
-	}
-
-	m, err := mimetype.DetectReader(fd)
-	if err != nil {
-		return m.String(), err
-	}
-
-	_, err = fd.Seek(0, io.SeekStart)
-	if err != nil {
-		return "", err
-	}
-
-	return m.String(), nil
 }
 
 // AddDocument adds a new document to the storage tree and returns a reference to it.

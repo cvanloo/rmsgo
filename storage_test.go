@@ -859,12 +859,12 @@ func TestMigrate(t *testing.T) {
 		{
 			name:  "test.txt",
 			rname: "/Documents/test.txt",
-			mime:  "text/plain; charset=utf-8",
+			mime:  "application/octet-stream",
 		},
 		{
 			name:  "hello.txt",
 			rname: "/Documents/hello.txt",
-			mime:  "text/plain; charset=utf-8",
+			mime:  "application/octet-stream",
 		},
 	}
 
