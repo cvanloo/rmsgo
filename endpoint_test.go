@@ -1234,11 +1234,12 @@ func TestHeadFolder(t *testing.T) {
 	defer ts.Close()
 
 	const (
-		rootETag = "6495a5d8eb9f9c5343a03540b6e3dfaa"
+		testDocumentETag = "eabd59d0c27b78077e391800e7cf8777"
+		rootETag         = "962e336a5a324e5adf7d8eca569e0c70"
 	)
 
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+"/Documents/First.txt", bytes.NewReader([]byte("My first document.")))
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+"/yt/rendle/citation", bytes.NewReader([]byte("In space no one can set a breakpoint.")))
 		if err != nil {
 			t.Error(err)
 		}
@@ -1249,11 +1250,17 @@ func TestHeadFolder(t *testing.T) {
 		if r.StatusCode != http.StatusCreated {
 			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
 		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+		}
 	}
 
 	r, err := http.Head(remoteRoot + "/")
 	if err != nil {
 		t.Error(err)
+	}
+	if r.StatusCode != http.StatusOK {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
 	}
 	bs, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -1262,8 +1269,8 @@ func TestHeadFolder(t *testing.T) {
 	if etag := r.Header.Get("ETag"); etag != rootETag {
 		t.Errorf("got: `%s', want: `%s'", etag, rootETag)
 	}
-	if l := r.Header.Get("Content-Length"); l != "130" {
-		t.Errorf("got: `%s', want: 130", l)
+	if l := r.Header.Get("Content-Length"); l != "123" {
+		t.Errorf("got: `%s', want: 123", l)
 	}
 	if ct := r.Header.Get("Content-Type"); ct != "application/ld+json" {
 		t.Errorf("got: `%s', want: `application/ld+json'", ct)
@@ -1279,109 +1286,268 @@ func TestHeadFolder(t *testing.T) {
 // We don't need any more HEAD folder test cases.
 // The implementation logic is essentially the same: a HEAD request is also
 // directed to the GetFolder handler.
-// Go's HTTP lib takes care of not including the body in the response.
-
-// @todo: write tests for GetDocument
+// (Go's HTTP lib takes care of not including the body in the response.)
 
 func TestGetDocument(t *testing.T) {
 	mockServer()
-
 	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
-	const content = "My first document."
+	const (
+		testContent      = "Lisp is a perfectly logical language to use." // 😤
+		testMime         = "text/plain; charset=utf-8"
+		testDocument     = "/everyone/would/agree/Fridman Quote"
+		testDocumentETag = "1439461086c3263260ca619a30278741"
+	)
 
-	req, err := http.NewRequest(http.MethodPut, ts.URL+"/storage/Documents/First.txt", bytes.NewReader([]byte(content)))
-	req.Header.Set("Content-Type", "funny/format")
-	if err != nil {
-		t.Error(err)
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+		req.Header.Set("Content-Type", testMime)
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+		}
 	}
 
-	r, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Error(err)
-	}
-	if r.StatusCode != http.StatusCreated {
-		t.Errorf("got: %d, want: %d", r.StatusCode, http.StatusCreated)
-	}
-
-	r, err = http.Get(ts.URL + "/storage/Documents/First.txt")
+	r, err := http.Get(remoteRoot + testDocument)
 	if err != nil {
 		t.Error(err)
 	}
 	if r.StatusCode != http.StatusOK {
-		t.Errorf("got: %d, want: %d", r.StatusCode, http.StatusOK)
-	}
-	if l := r.Header.Get("Content-Length"); l != fmt.Sprintf("%d", len(content)) {
-		t.Errorf("got: %s, want: %d", l, len(content))
-	}
-	if e := r.Header.Get("ETag"); e != "f0d0f717619b09cc081bb0c11d9b9c6b" {
-		t.Errorf("got: `%s, want: f0d0f717619b09cc081bb0c11d9b9c6b", e)
-	}
-	if ct := r.Header.Get("Content-Type"); ct != "funny/format" {
-		t.Errorf("got: `%s', want: funny/format", ct)
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
 	}
 	if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
 		t.Errorf("got: `%s', want: `no-cache'", cc)
 	}
-
+	if l := r.Header.Get("Content-Length"); l != fmt.Sprintf("%d", len(testContent)) {
+		t.Errorf("got: %s, want: %d", l, len(testContent))
+	}
+	if e := r.Header.Get("ETag"); e != testDocumentETag {
+		t.Errorf("got: `%s, want: `%s'", e, testDocumentETag)
+	}
+	if ct := r.Header.Get("Content-Type"); ct != testMime {
+		t.Errorf("got: `%s', want: `%s'", ct, testMime)
+	}
 	bs, err := io.ReadAll(r.Body)
 	if err != nil {
 		t.Error(err)
 	}
-	if len(bs) != len(content) {
-		t.Errorf("mismatched content length; got: %d, want: %d", len(bs), len(content))
+	if string(bs) != testContent {
+		t.Errorf("got: `%s', want: `%s'", bs, testContent)
 	}
-	if string(bs) != content {
-		t.Errorf("got: `%s', want: `%s'", bs, content)
+}
+
+func TestGetDocumentNotFound(t *testing.T) {
+	mockServer()
+	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	const response = `{"data":{"rname":"/inexistent/document"},"description":"The requested document does not exist on the server.","message":"document not found","url":""}
+` // don't forget newline
+
+	r, err := http.Get(remoteRoot + "/inexistent/document")
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusNotFound {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNotFound))
+	}
+	bs, err := io.ReadAll(r.Body)
+	if err != nil {
+		t.Error(err)
+	}
+	if string(bs) != response {
+		t.Errorf("got: `%s', want: `%s'", bs, response)
+	}
+}
+
+func TestGetDocumentIfNonMatchRevMatches(t *testing.T) {
+	mockServer()
+	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	const (
+		testContent = `A class takes a sensible idea: defining data along
+with methods that act on that data, and then drives it off a cliff by
+adding inheritance and subtype polymorphism. It should be no surprise
+that a bunch of class-obsessed aristocratic oldies in the 60s, who
+probably spent all their time deciding which child should inherit most
+of the estate, decided to add a construct named 'class' which revolved
+around inheritance.`
+		testMime         = "text/plain; charset=utf-8"
+		testDocument     = "/gh/jesseduffield/OK"
+		testDocumentETag = "9e57ccd4ec8d848d413e3e363cd48cdc"
+	)
+
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+		req.Header.Set("Content-Type", testMime)
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+		}
+	}
+
+	req, err := http.NewRequest(http.MethodGet, remoteRoot+testDocument, nil)
+	if err != nil {
+		t.Error(err)
+	}
+	// include revision of the document we're about to GET
+	req.Header.Set("If-Non-Match", fmt.Sprintf("03d871638b18f0b459bf8fd12a58f1d8, %s", testDocumentETag))
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusNotModified {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNotModified))
+	}
+}
+
+func TestGetDocumentIfNonMatchRevNoMatch(t *testing.T) {
+	mockServer()
+	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	const (
+		testContent = `A class takes a sensible idea: defining data along
+with methods that act on that data, and then drives it off a cliff by
+adding inheritance and subtype polymorphism. It should be no surprise
+that a bunch of class-obsessed aristocratic oldies in the 60s, who
+probably spent all their time deciding which child should inherit most
+of the estate, decided to add a construct named 'class' which revolved
+around inheritance.`
+		testMime         = "text/plain; charset=utf-8"
+		testDocument     = "/gh/jesseduffield/OK"
+		testDocumentETag = "9e57ccd4ec8d848d413e3e363cd48cdc"
+	)
+
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+		req.Header.Set("Content-Type", testMime)
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+		}
+	}
+
+	req, err := http.NewRequest(http.MethodGet, remoteRoot+testDocument, nil)
+	if err != nil {
+		t.Error(err)
+	}
+	// revision of our document NOT included
+	req.Header.Set("If-Non-Match", "03d871638b18f0b459bf8fd12a58f1d8, cc4c6d3bbf39189be874992479b60e2a, f0d0f717619b09cc081bb0c11d9b9c6b")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusOK {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+	}
+	if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
+		t.Errorf("got: `%s', want: `no-cache'", cc)
+	}
+	if l := r.Header.Get("Content-Length"); l != fmt.Sprintf("%d", len(testContent)) {
+		t.Errorf("got: %s, want: %d", l, len(testContent))
+	}
+	if e := r.Header.Get("ETag"); e != testDocumentETag {
+		t.Errorf("got: `%s, want: `%s'", e, testDocumentETag)
+	}
+	if ct := r.Header.Get("Content-Type"); ct != testMime {
+		t.Errorf("got: `%s', want: `%s'", ct, testMime)
+	}
+	bs, err := io.ReadAll(r.Body)
+	if err != nil {
+		t.Error(err)
+	}
+	if string(bs) != testContent {
+		t.Errorf("got: `%s', want: `%s'", bs, testContent)
 	}
 }
 
 func TestHeadDocument(t *testing.T) {
 	mockServer()
-
 	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
-	const content = "My first document."
+	const (
+		testContent      = "Go is better than everything. In my opinion Go is even better than English."
+		testMime         = "text/plain; charset=us-ascii"
+		testDocument     = "/twitch.tv/ThePrimeagen"
+		testDocumentETag = "d53cc497c102d476599e7853cb3c5601"
+	)
 
-	req, err := http.NewRequest(http.MethodPut, ts.URL+"/storage/Documents/First.txt", bytes.NewReader([]byte(content)))
-	req.Header.Set("Content-Type", "funny/format")
-	if err != nil {
-		t.Error(err)
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+		req.Header.Set("Content-Type", testMime)
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+		}
 	}
 
-	r, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Error(err)
-	}
-	if r.StatusCode != http.StatusCreated {
-		t.Errorf("got: %d, want: %d", r.StatusCode, http.StatusCreated)
-	}
-
-	r, err = http.Head(ts.URL + "/storage/Documents/First.txt")
+	r, err := http.Head(remoteRoot + testDocument)
 	if err != nil {
 		t.Error(err)
 	}
 	if r.StatusCode != http.StatusOK {
 		t.Errorf("got: %d, want: %d", r.StatusCode, http.StatusOK)
 	}
-	if l := r.Header.Get("Content-Length"); l != fmt.Sprintf("%d", len(content)) {
-		t.Errorf("got: %s, want: %d", l, len(content))
+	if l := r.Header.Get("Content-Length"); l != fmt.Sprintf("%d", len(testContent)) {
+		t.Errorf("got: %s, want: %d", l, len(testContent))
 	}
-	if e := r.Header.Get("ETag"); e != "f0d0f717619b09cc081bb0c11d9b9c6b" {
-		t.Errorf("got: `%s, want: f0d0f717619b09cc081bb0c11d9b9c6b", e)
+	if e := r.Header.Get("ETag"); e != testDocumentETag {
+		t.Errorf("got: `%s, want: `%s'", e, testDocumentETag)
 	}
-	if ct := r.Header.Get("Content-Type"); ct != "funny/format" {
-		t.Errorf("got: `%s', want: funny/format", ct)
+	if ct := r.Header.Get("Content-Type"); ct != testMime {
+		t.Errorf("got: `%s', want: `%s'", ct, testMime)
 	}
-
 	bs, err := io.ReadAll(r.Body)
 	if err != nil {
 		t.Error(err)
 	}
 	if len(bs) != 0 {
-		t.Errorf("the response to a head request should have an empty body; got: `%s'", bs)
+		t.Error("the response to a head request should have an empty body")
 	}
 }
 
