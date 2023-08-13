@@ -18,6 +18,8 @@ func ldget[T any](ld LDjson, key string) (T, error) {
 	return z, fmt.Errorf("%s: no such entry in ldjson map", key)
 }
 
+// LDGet retrieves a value of type T from a nested ld+json map.
+// It recursively follows the keys to reach the final value.
 func LDGet[T any](ld LDjson, keys ...string) (t T, err error) {
 	switch any(t).(type) {
 	case float64:
@@ -30,9 +32,7 @@ func LDGet[T any](ld LDjson, keys ...string) (t T, err error) {
 		assert(false, "invalid ldjson type")
 	}
 
-	if len(keys) == 0 {
-		return t, fmt.Errorf("don't know what key to get")
-	}
+	assert(len(keys) > 0, "don't know what key to get")
 
 	for _, key := range keys[:len(keys)-1] {
 		ld, err = ldget[LDjson](ld, key)
