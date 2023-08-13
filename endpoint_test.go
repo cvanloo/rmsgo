@@ -831,7 +831,7 @@ func TestPutDocumentAsFolderFails(t *testing.T) {
 	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodPut, remoteRoot+"/Edward/M/D/Teach/", bytes.NewReader([]byte("HA! Liar. I have to write sentences with multiple dependend clausse in order to repair the damage of your 5 word rhetorical cluster grenade.")))
+	req, err := http.NewRequest(http.MethodPut, remoteRoot+"/Edward/M/D/Teach/", bytes.NewReader([]byte("HA! Liar. I have to write sentences with multiple dependent clauses in order to repair the damage of your 5 word rhetorical cluster grenade.")))
 	if err != nil {
 		t.Error(err)
 	}

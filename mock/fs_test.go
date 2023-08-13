@@ -394,7 +394,7 @@ func TestFile_SeekAndWrite(t *testing.T) {
 
 func TestFile_Stat(t *testing.T) {
 	m := MockFS(
-		WithFile(testFilePath, []byte("Ich fand es schon immer verdächtig, dass die Sonne jeden Morgen im Osten aufgeht!")),
+		WithFile(testFilePath, []byte(testContent)),
 	)
 	fd, err := m.Open(testFilePath)
 	if err != nil {
@@ -421,7 +421,7 @@ func TestFile_Stat(t *testing.T) {
 
 func TestRemoveFile(t *testing.T) {
 	m := MockFS(
-		WithFile(testFilePath, []byte("Ich fand es schon immer verdächtig, dass die Sonne jeden Morgen im Osten aufgeht!")),
+		WithFile(testFilePath, []byte(testContent)),
 	)
 	_, err := m.Open(testFilePath)
 	if err != nil {
@@ -457,7 +457,7 @@ func TestRemoveDir(t *testing.T) {
 
 func TestRemoveDirNonEmpty(t *testing.T) {
 	m := MockFS(
-		WithFile(testFilePath, []byte("Ich fand es schon immer verdächtig, dass die Sonne jeden Morgen im Osten aufgeht!")),
+		WithFile(testFilePath, []byte(testContent)),
 	)
 	err := m.Remove(testFileDir)
 	if err == nil {
@@ -467,7 +467,7 @@ func TestRemoveDirNonEmpty(t *testing.T) {
 
 func TestRemoveAll(t *testing.T) {
 	m := MockFS(
-		WithFile(testFilePath, []byte("Ich fand es schon immer verdächtig, dass die Sonne jeden Morgen im Osten aufgeht!")),
+		WithFile(testFilePath, []byte(testContent)),
 	)
 	_, err := m.Open(testFilePath)
 	if err != nil {
