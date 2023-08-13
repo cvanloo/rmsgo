@@ -300,6 +300,11 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if cond := r.Header.Get("If-Non-Match"); cond == "*" && found {
+		etag, err := n.Version()
+		if err != nil {
+			return writeError(w, err) // internal server error
+		}
+		w.Header().Set("ETag", etag.String())
 		return writeError(w, HttpError{
 			Msg:  fmt.Sprintf("document already exists: %s", rpath),
 			Desc: "The request was rejected because the requested document already exists, but `If-Non-Match: *' was specified.",
@@ -328,6 +333,7 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return writeError(w, err) // internal server error
 		}
+		w.Header().Set("ETag", etag.String())
 		if !etag.Equal(rev) {
 			return writeError(w, HttpError{
 				Msg:  "version mismatch",
@@ -460,6 +466,7 @@ func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 			})
 		}
 		if !etag.Equal(rev) {
+			w.Header().Set("ETag", etag.String())
 			return writeError(w, HttpError{
 				Msg:  "version mismatch",
 				Desc: "The version provided in the If-Match header does not match the document's current version.",
