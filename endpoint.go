@@ -93,6 +93,8 @@ func Serve(w http.ResponseWriter, r *http.Request) error {
 		isFolder = true
 	}
 
+	allowAll(w)
+
 	switch r.Method {
 	case http.MethodHead:
 		fallthrough
