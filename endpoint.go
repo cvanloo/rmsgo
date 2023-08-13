@@ -506,7 +506,6 @@ func writeError(w http.ResponseWriter, err error) error {
 		if encErr != nil {
 			unhandled = errors.Join(unhandled, encErr)
 		}
-		w.WriteHeader(status)
 		return unhandled
 	} else {
 		status, isSentinel := StatusCodes[err]
