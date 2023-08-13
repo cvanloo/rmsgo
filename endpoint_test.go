@@ -3,13 +3,11 @@ package rmsgo
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -375,10 +373,9 @@ func TestPutDocumentIfMatchFail(t *testing.T) {
 		wrongETag    = "3de26fc06d5d1e20ff96a8142cd6fabf"
 
 		testContent1      = "I will travel the distance in your eyes Interstellar Light years from you"
-		testDocumentEtag1 = "33f7b41f98820961b12134677ba3f231"
+		testDocumentETag1 = "33f7b41f98820961b12134677ba3f231"
 
-		testContent2      = "I will travel the distance in your eyes Interstellar Light years from you Supernova We'll fuse when we collide Awaking in the light of all the stars aligned"
-		testDocumentEtag2 = "063c77ac4aa257f9396f1b5cae956004"
+		testContent2 = "I will travel the distance in your eyes Interstellar Light years from you Supernova We'll fuse when we collide Awaking in the light of all the stars aligned"
 	)
 	mockServer()
 	ts := httptest.NewServer(ServeMux{})
@@ -398,8 +395,8 @@ func TestPutDocumentIfMatchFail(t *testing.T) {
 		if r.StatusCode != http.StatusCreated {
 			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
 		}
-		if e := r.Header.Get("ETag"); e != testDocumentEtag1 {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag1)
+		if e := r.Header.Get("ETag"); e != testDocumentETag1 {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag1)
 		}
 	}
 
@@ -416,6 +413,9 @@ func TestPutDocumentIfMatchFail(t *testing.T) {
 		}
 		if r.StatusCode != http.StatusPreconditionFailed {
 			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusPreconditionFailed))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag1 {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag1)
 		}
 	}
 }
@@ -457,7 +457,7 @@ func TestPutDocumentIfNonMatchFail(t *testing.T) {
 		testDocument = "/Lyrics/STARSET.txt"
 
 		testContent1      = "I will travel the distance in your eyes Interstellar Light years from you"
-		testDocumentEtag1 = "33f7b41f98820961b12134677ba3f231"
+		testDocumentETag1 = "33f7b41f98820961b12134677ba3f231"
 
 		testContent2      = "I will travel the distance in your eyes Interstellar Light years from you Supernova We'll fuse when we collide Awaking in the light of all the stars aligned"
 		testDocumentEtag2 = "063c77ac4aa257f9396f1b5cae956004"
@@ -481,8 +481,8 @@ func TestPutDocumentIfNonMatchFail(t *testing.T) {
 		if r.StatusCode != http.StatusCreated {
 			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
 		}
-		if e := r.Header.Get("ETag"); e != testDocumentEtag1 {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag1)
+		if e := r.Header.Get("ETag"); e != testDocumentETag1 {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag1)
 		}
 	}
 
@@ -499,6 +499,9 @@ func TestPutDocumentIfNonMatchFail(t *testing.T) {
 		}
 		if r.StatusCode != http.StatusPreconditionFailed {
 			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusPreconditionFailed))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag1 {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag1)
 		}
 	}
 }
@@ -1531,7 +1534,7 @@ func TestHeadDocument(t *testing.T) {
 		t.Error(err)
 	}
 	if r.StatusCode != http.StatusOK {
-		t.Errorf("got: %d, want: %d", r.StatusCode, http.StatusOK)
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
 	}
 	if l := r.Header.Get("Content-Length"); l != fmt.Sprintf("%d", len(testContent)) {
 		t.Errorf("got: %s, want: %d", l, len(testContent))
@@ -1551,65 +1554,392 @@ func TestHeadDocument(t *testing.T) {
 	}
 }
 
-// @todo: write tests for DELETE document
-
 func TestDeleteDocument(t *testing.T) {
 	mockServer()
-
 	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodPut, ts.URL+"/storage/Documents/First.txt", bytes.NewReader([]byte("My first document.")))
+	const (
+		testMime                = "text/plain; charset=utf-8"
+		testCommonAncestor      = "/home/"
+		testCommonAncestorETag1 = "59d054586b4316a31fcd76b434565d0e"
+		testCommonAncestorETag2 = "bdf46e2f1803235eb92ac0f939101d28"
+
+		testRootETag1 = "ed8ca43e261c8d2cf6dc7fb505859827"
+		testRootETag2 = "85e25d4cf67c9d01290b1ca02e6bf60f"
+
+		testContent1      = "Rien n'est plus dangereux qu'une idée, quand on n'a qu'une idée"
+		testDocument1     = "/home/Chartier/idée"
+		testDocumentETag1 = "50156bf5e641d8d33cd7929e2a2146bd"
+		testDocumentDir1  = "/home/Chartier/"
+
+		testContent2      = "Did you know that unsigned integers are faster than signed integers because your CPU doesn't have to autograph all of them as they go by?"
+		testDocument2     = "/home/gamozo/unsigned"
+		testDocumentETag2 = "456599fd6afcb9e611b0914147dd5550"
+	)
+
+	// create document
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument1, bytes.NewReader([]byte(testContent1)))
+		req.Header.Set("Content-Type", testMime)
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag1 {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag1)
+		}
+	}
+
+	// create another document with a different parent
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument2, bytes.NewReader([]byte(testContent2)))
+		req.Header.Set("Content-Type", testMime)
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag2 {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag2)
+		}
+	}
+
+	// check that documents exists
+	{
+		r, err := http.Head(remoteRoot + testDocument1)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		r, err = http.Head(remoteRoot + testDocument2)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+	}
+
+	// verify common ancestor etag
+	{
+		r, err := http.Head(remoteRoot + testCommonAncestor)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if e := r.Header.Get("ETag"); e != testCommonAncestorETag1 {
+			t.Errorf("got: `%s', want: `%s'", e, testCommonAncestorETag1)
+		}
+	}
+
+	// verify root etag
+	{
+		r, err := http.Head(remoteRoot + "/")
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if e := r.Header.Get("ETag"); e != testRootETag1 {
+			t.Errorf("got: `%s', want: `%s'", e, testRootETag1)
+		}
+	}
+
+	// delete first document
+	{
+		req, err := http.NewRequest(http.MethodDelete, remoteRoot+testDocument1, nil)
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag1 {
+			t.Errorf("got: `%s, want: `%s'", e, testDocumentETag1)
+		}
+	}
+
+	// check that first document does not exist anymore
+	{
+		r, err := http.Head(remoteRoot + testDocument1)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusNotFound {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNotFound))
+		}
+	}
+
+	// check that empty parent got removed as well
+	{
+		r, err := http.Head(remoteRoot + testDocumentDir1)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusNotFound {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNotFound))
+		}
+	}
+
+	// check that common ancestor still exists
+	{
+		r, err := http.Head(remoteRoot + testCommonAncestor)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+	}
+
+	// check that second document still exists
+	{
+		r, err := http.Head(remoteRoot + testDocument2)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+	}
+
+	// check that common ancestor has an updated etag
+	{
+		r, err := http.Head(remoteRoot + testCommonAncestor)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if e := r.Header.Get("ETag"); e != testCommonAncestorETag2 {
+			t.Errorf("got: `%s', want: `%s'", e, testCommonAncestorETag2)
+		}
+	}
+
+	// check that root has an updated etag
+	{
+		r, err := http.Head(remoteRoot + "/")
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if e := r.Header.Get("ETag"); e != testRootETag2 {
+			t.Errorf("got: `%s', want: `%s'", e, testRootETag2)
+		}
+	}
+}
+
+func TestDeleteDocumentNotFound(t *testing.T) {
+	mockServer()
+	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodDelete, remoteRoot+"/nonexistent/document", nil)
 	if err != nil {
 		t.Error(err)
 	}
-
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusCreated {
-		t.Errorf("got: %d, want: %d", r.StatusCode, http.StatusCreated)
+	if r.StatusCode != http.StatusNotFound {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNotFound))
 	}
-	firstETag := r.Header.Get("ETag")
-	if firstETag != "cccbdca11c50776583965bf7631964d6" {
-		t.Errorf("got: `%s', want: `cccbdca11c50776583965bf7631964d6'", firstETag)
+}
+
+func TestDeleteDocumentToFolder(t *testing.T) {
+	mockServer()
+	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	const (
+		testMime         = "text/plain; charset=utf-8"
+		testContent      = "Did you know that unsigned integers are faster than signed integers because your CPU doesn't have to autograph all of them as they go by?"
+		testDocument     = "/home/gamozo/unsigned"
+		testDocumentDir  = "/home/gamozo/"
+		testDocumentETag = "456599fd6afcb9e611b0914147dd5550"
+	)
+
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+		req.Header.Set("Content-Type", testMime)
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+		}
 	}
 
-	n, err := Retrieve("/Documents/First.txt")
+	req, err := http.NewRequest(http.MethodDelete, remoteRoot+testDocumentDir, nil)
 	if err != nil {
 		t.Error(err)
 	}
-
-	_, err = FS.Stat(n.sname)
+	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
 	}
+	if r.StatusCode != http.StatusBadRequest {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusBadRequest))
+	}
+}
 
-	req, err = http.NewRequest(http.MethodDelete, ts.URL+"/storage/Documents/First.txt", nil)
-	if err != nil {
-		t.Error(err)
+func TestDeleteDocumentIfMatch(t *testing.T) {
+	mockServer()
+	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	const (
+		testMime         = "text/plain; charset=utf-8"
+		testContent      = "Asking a question should not change the answer, and nor should asking it twice!"
+		testDocument     = "/home/Henney/Asking Questions"
+		testDocumentETag = "23527eb0b17c95022684c5b878a4c726"
+	)
+
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+		req.Header.Set("Content-Type", testMime)
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+		}
 	}
 
-	r, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Error(err)
+	// delete document, pass the correct version in if-match
+	{
+		req, err := http.NewRequest(http.MethodDelete, remoteRoot+testDocument, nil)
+		if err != nil {
+			t.Error(err)
+		}
+		// rev matches the document's current version
+		req.Header.Set("If-Match", testDocumentETag)
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+		}
 	}
 
-	if r.StatusCode != http.StatusOK {
-		t.Errorf("got: `%d', want: `%d'", r.StatusCode, http.StatusOK)
+	// check that document really got deleted
+	{
+		r, err := http.Head(remoteRoot + testDocument)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusNotFound {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNotFound))
+		}
 	}
-	if e := r.Header.Get("ETag"); e != firstETag {
-		t.Errorf("got: `%s', want: `%s'", e, firstETag)
+}
+
+func TestDeleteDocumentIfMatchFail(t *testing.T) {
+	mockServer()
+	ts := httptest.NewServer(ServeMux{})
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	const (
+		testMime         = "text/plain; charset=utf-8"
+		testContent      = "Tetris is an inventory management survival horror game, from the Soviet Union in 1984."
+		testDocument     = "/yt/suckerpinch/Harder Drive"
+		testDocumentETag = "59c0c4a04a46df78d9873e212ef3f57f"
+	)
+
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+		req.Header.Set("Content-Type", testMime)
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+		}
 	}
 
-	_, err = FS.Stat(n.sname)
-	if !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("got: `%v', want: `%v'", err, os.ErrNotExist)
+	// delete document, pass wrong version in if-match
+	{
+		req, err := http.NewRequest(http.MethodDelete, remoteRoot+testDocument, nil)
+		if err != nil {
+			t.Error(err)
+		}
+		// rev does NOT match the document's current version
+		req.Header.Set("If-Match", "456599fd6afcb9e611b0914147dd5550")
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusPreconditionFailed {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusPreconditionFailed))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+		}
 	}
 
-	_, err = Retrieve("/Documents/")
-	if err != ErrNotExist {
-		t.Errorf("got: `%v', want: `%v'", err, ErrNotExist)
+	// check that document still exists
+	{
+		r, err := http.Head(remoteRoot + testDocument)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
 	}
 }
