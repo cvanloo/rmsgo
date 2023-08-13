@@ -1057,6 +1057,9 @@ func TestGetFolder(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	if r.StatusCode != http.StatusOK {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+	}
 	if ct := r.Header.Get("Content-Type"); ct != "application/ld+json" {
 		t.Errorf("got: `%s', want: `application/ld+json'", ct)
 	}
@@ -1094,6 +1097,9 @@ func TestGetFolderEmpty(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	if r.StatusCode != http.StatusOK {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+	}
 	if ct := r.Header.Get("Content-Type"); ct != "application/ld+json" {
 		t.Errorf("got: `%s', want: `application/ld+json'", ct)
 	}
@@ -1127,13 +1133,12 @@ func TestGetFolderNotFound(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	if r.StatusCode != http.StatusNotFound {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNotFound))
+	}
 	if ct := r.Header.Get("Content-Type"); ct != "application/ld+json" {
 		t.Errorf("got: `%s', want: `application/ld+json'", ct)
 	}
-	// @todo: should error responses also include a Cache-Control header?
-	//if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
-	//	t.Errorf("got: `%s', want: `no-cache'", cc)
-	//}
 	bs, err := io.ReadAll(r.Body)
 	if err != nil {
 		t.Error(err)
@@ -1261,6 +1266,48 @@ func TestGetFolderIfNonMatchRevNoMatch(t *testing.T) {
 	}
 	if string(bs) != responseBody {
 		t.Errorf("got: `%s', want: `%s'", bs, responseBody)
+	}
+}
+
+func TestGetFolderThatIsADocumentFails(t *testing.T) {
+	mockServer()
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	const (
+		testContent      = "Since I am innocent of this crime, sir, I find it decidedly inconvenient that the gun was never found."
+		testDocument     = "/Quotes/Movies/Shawshank Redemption"
+		testDocumentETag = "2939b3af2cf45877eb61987397486084"
+
+		testDirThatActuallyIsADocument = "/Quotes/Movies/Shawshank Redemption/"
+	)
+
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+		}
+	}
+
+	r, err := http.Get(remoteRoot + testDirThatActuallyIsADocument)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusBadRequest {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusBadRequest))
 	}
 }
 
@@ -1539,6 +1586,48 @@ around inheritance.`
 	}
 	if string(bs) != testContent {
 		t.Errorf("got: `%s', want: `%s'", bs, testContent)
+	}
+}
+
+func TestGetDocumentThatIsAFolderFails(t *testing.T) {
+	mockServer()
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	const (
+		testContent      = "Since I am innocent of this crime, sir, I find it decidedly inconvenient that the gun was never found."
+		testDocument     = "/Quotes/Movies/Shawshank Redemption"
+		testDocumentETag = "2939b3af2cf45877eb61987397486084"
+
+		testDocThatActuallyIsAFolder = "/Quotes/Movies"
+	)
+
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+		}
+	}
+
+	r, err := http.Get(remoteRoot + testDocThatActuallyIsAFolder)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusBadRequest {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusBadRequest))
 	}
 }
 

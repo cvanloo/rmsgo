@@ -20,6 +20,10 @@ import (
 //   @todo: authorization
 //   @todo: WebFinger
 
+// @fixme: go doc http.ResponseWriter mentions that Content-Length is only set
+//   automatically for responses under a few KBs.
+//   What if there is a large document? Do we need to set the header manually?
+
 func init() {
 	if !isdelve.Enabled {
 		FS = &RealFileSystem{}
@@ -113,6 +117,16 @@ func GetFolder(w http.ResponseWriter, r *http.Request) error {
 			Cause: ErrNotFound,
 		})
 	}
+	if !n.isFolder {
+		return writeError(w, HttpError{
+			Msg:  "requested resource is not a folder",
+			Desc: "A request was made to retrieve a folder, but a document with the same path was found.",
+			Data: LDjson{
+				"rname": rpath,
+			},
+			Cause: ErrBadRequest,
+		})
+	}
 
 	etag, err := n.Version()
 	if err != nil {
@@ -183,6 +197,16 @@ func GetDocument(w http.ResponseWriter, r *http.Request) error {
 				"rname": rpath,
 			},
 			Cause: ErrNotFound,
+		})
+	}
+	if n.isFolder {
+		return writeError(w, HttpError{
+			Msg:  "requested resource is not a document",
+			Desc: "A request was made to retrieve a document, but a folder with the same path was found.",
+			Data: LDjson{
+				"rname": rpath,
+			},
+			Cause: ErrBadRequest,
 		})
 	}
 
@@ -406,6 +430,16 @@ func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 				"rname": rpath,
 			},
 			Cause: ErrNotFound,
+		})
+	}
+	if n.isFolder {
+		return writeError(w, HttpError{
+			Msg:  "requested resource is not a document",
+			Desc: "A request was made to retrieve a document, but a folder with the same path was found.",
+			Data: LDjson{
+				"rname": rpath,
+			},
+			Cause: ErrBadRequest,
 		})
 	}
 
