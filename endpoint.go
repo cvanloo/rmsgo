@@ -41,7 +41,7 @@ func serve(w http.ResponseWriter, r *http.Request) error {
 		isFolder = true
 	}
 
-	allowAll(w)
+	cors(r, w)
 
 	switch r.Method {
 	case http.MethodHead:
@@ -486,6 +486,29 @@ func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 
 	hs := w.Header()
 	hs.Set("ETag", etag.String())
+	return nil
+}
+
+func cors(r *http.Request, w http.ResponseWriter) error {
+	hs := w.Header()
+	origin := r.Header.Get("Origin")
+
+	hs.Set("Vary", "Origin")
+
+	if origin == "" {
+		return nil
+	}
+
+	if !(allowAllOrigins || allowOriginFunc(r, origin)) {
+		return nil
+	}
+
+	if allowAllOrigins {
+		hs.Set("Access-Control-Allow-Origin", "*")
+	} else {
+		hs.Set("Access-Control-Allow-Origin", origin)
+	}
+
 	return nil
 }
 

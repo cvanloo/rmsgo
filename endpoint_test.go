@@ -14,6 +14,8 @@ import (
 	. "github.com/cvanloo/rmsgo.git/mock"
 )
 
+// @todo: test CORS
+
 func mockServer() {
 	const (
 		rroot = "/storage/"

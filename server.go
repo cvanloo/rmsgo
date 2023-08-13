@@ -15,12 +15,28 @@ type (
 	ErrorHandler func(err error)
 
 	Middleware func(next http.Handler) http.Handler
+
+	// AllowOrigin decides whether an origin is allowed (returns true) or
+	// forbidden (returns false).
+	AllowOrigin func(r *http.Request, origin string) bool
 )
 
 const rmsTimeFormat = time.RFC1123
 
 var (
 	rroot, sroot string
+
+	allowAllOrigins bool = true
+	allowedOrigins  []string
+
+	allowOriginFunc AllowOrigin = func(r *http.Request, origin string) bool {
+		for _, o := range allowedOrigins {
+			if o == origin {
+				return true
+			}
+		}
+		return false
+	}
 
 	middleware Middleware = func(next http.Handler) http.Handler {
 		return next
@@ -70,6 +86,21 @@ func UseErrorHandler(h ErrorHandler) {
 
 func UseMiddleware(m Middleware) {
 	middleware = m
+}
+
+// AllowOrigins configures a list of allowed origins.
+// By default, i.e if AllowOrigins is never called, all origins are allowed.
+func AllowOrigins(origins []string) {
+	allowAllOrigins = false
+	allowedOrigins = origins
+}
+
+// AllowOriginFunc configures the remote storage server to use f to decide
+// whether an origin is allowed or not.
+// If this option is set up, the list of origins set by AllowOrigins is ignored.
+func AllowOriginFunc(f AllowOrigin) {
+	allowAllOrigins = false
+	allowOriginFunc = f
 }
 
 // Handler returns an http.Handler which may be passed directly to a
