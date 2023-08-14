@@ -32,14 +32,12 @@ func init() {
 
 // serve responds to a remoteStorage request.
 func serve(w http.ResponseWriter, r *http.Request) error {
-	path := r.URL.Path
+	path := r.URL.Path // @todo: is this already cleaned?
 	if !strings.HasPrefix(path, rroot+"/") {
 		return writeError(w, ErrNotFound)
 	}
-	isFolder := false
-	if path[len(path)-1] == '/' {
-		isFolder = true
-	}
+
+	isFolder := path[len(path)-1] == '/'
 
 	switch r.Method {
 	case http.MethodHead:
@@ -75,27 +73,6 @@ func serve(w http.ResponseWriter, r *http.Request) error {
 	return writeError(w, ErrMethodNotAllowed)
 }
 
-/*
-const userKey = "AUTHENTICATED_USER"
-
-// @todo: interceptor for authentication/authorization
-func authenticator(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// @todo: logic to authenticate user
-		user, err := "???", ErrUnauthorized
-		if err != nil {
-			writeError(w, err) // @fixme: error ignored
-			return
-		}
-
-		nctx := context.WithValue(r.Context(), userKey, user)
-		nr := r.WithContext(nctx)
-		next.ServeHTTP(w, nr)
-	})
-}
-*/
-
-// @todo: OPTIONS/cors
 // @todo: https://datatracker.ietf.org/doc/html/draft-dejong-remotestorage-21#section-6
 // keep multiple versions of files around, option to restore deleted files
 // > A provider MAY offer version rollback functionality to its users,

@@ -26,6 +26,14 @@ func preflight(w http.ResponseWriter, r *http.Request) {
 		isFolder = true
 	}
 
+	n, err := Retrieve(path)
+	if err != nil { // not found
+		return
+	}
+	if n.isFolder != isFolder { // malformed request
+		return
+	}
+
 	var allowedMethods []string // @fixme: HEAD implied by GET?
 	if isFolder {
 		allowedMethods = []string{"GET", "PUT", "DELETE"}
@@ -96,7 +104,7 @@ func cors(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !(allowAllOrigins || allowOriginFunc(r, origin)) {
+	if !(allowAllOrigins || allowOrigin(r, origin)) {
 		return
 	}
 

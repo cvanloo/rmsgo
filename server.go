@@ -2,23 +2,29 @@ package rmsgo
 
 import (
 	"fmt"
-	. "github.com/cvanloo/rmsgo.git/mock"
 	"log"
 	"net/http"
 	"path/filepath"
 	"time"
+
+	. "github.com/cvanloo/rmsgo.git/mock"
 )
 
 type (
 	// Any errors that the remoteStorage server doesn't know how to handle itself
-	// are passed to the ErrorHandler.
-	ErrorHandler func(err error)
+	// are passed to the ErrorHandlerFunc.
+	ErrorHandlerFunc func(err error)
 
-	Middleware func(next http.Handler) http.Handler
+	MiddlewareFunc func(next http.Handler) http.Handler
 
-	// AllowOrigin decides whether an origin is allowed (returns true) or
+	// AllowOriginFunc decides whether an origin is allowed (returns true) or
 	// forbidden (returns false).
-	AllowOrigin func(r *http.Request, origin string) bool
+	AllowOriginFunc func(r *http.Request, origin string) bool
+
+	// AuthenticateFunc authenticates a request (usually with the bearer token).
+	// If the request is correctly authenticated, a User and true must be
+	// returned.
+	AuthenticateFunc func(r *http.Request, bearer string) (User, bool)
 )
 
 const rmsTimeFormat = time.RFC1123
@@ -29,7 +35,7 @@ var (
 	allowAllOrigins bool = true
 	allowedOrigins  []string
 
-	allowOriginFunc AllowOrigin = func(r *http.Request, origin string) bool {
+	allowOrigin AllowOriginFunc = func(r *http.Request, origin string) bool {
 		for _, o := range allowedOrigins {
 			if o == origin {
 				return true
@@ -38,12 +44,16 @@ var (
 		return false
 	}
 
-	middleware Middleware = func(next http.Handler) http.Handler {
+	middleware MiddlewareFunc = func(next http.Handler) http.Handler {
 		return next
 	}
 
-	unhandled ErrorHandler = func(err error) {
+	unhandled ErrorHandlerFunc = func(err error) {
 		log.Printf("rmsgo: unhandled error: %v\n", err)
+	}
+
+	authenticate AuthenticateFunc = func(r *http.Request, bearer string) (User, bool) {
+		return anyUser{}, true
 	}
 )
 
@@ -80,12 +90,16 @@ func Sroot() string {
 	return sroot
 }
 
-func UseErrorHandler(h ErrorHandler) {
+func UseErrorHandler(h ErrorHandlerFunc) {
 	unhandled = h
 }
 
-func UseMiddleware(m Middleware) {
+func UseMiddleware(m MiddlewareFunc) {
 	middleware = m
+}
+
+func UseAuthentication(a AuthenticateFunc) {
+	authenticate = a
 }
 
 // AllowOrigins configures a list of allowed origins.
@@ -95,19 +109,15 @@ func AllowOrigins(origins []string) {
 	allowedOrigins = origins
 }
 
-// AllowOriginFunc configures the remote storage server to use f to decide
+// UseAllowOrigin configures the remote storage server to use f to decide
 // whether an origin is allowed or not.
 // If this option is set up, the list of origins set by AllowOrigins is ignored.
-func AllowOriginFunc(f AllowOrigin) {
+func UseAllowOrigin(f AllowOriginFunc) {
 	allowAllOrigins = false
-	allowOriginFunc = f
+	allowOrigin = f
 }
 
-// Handler returns an http.Handler which may be passed directly to a
-// http.ServeMux.Handle or http.ListenAndServe/TLS.
-// Usually you would want to use Register instead.
-// If using Handler directly, make sure that it is accessible at Rroot+'/' or '/'.
-func Handler() http.Handler {
+func handleRMS() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		err := serve(w, r)
 		if err != nil {
@@ -119,5 +129,5 @@ func Handler() http.Handler {
 // Register the remote storage server (with middleware if configured) to the
 // mux using Rroot + '/' as pattern.
 func Register(mux *http.ServeMux) {
-	mux.Handle(rroot+"/", middleware(handleCORS(Handler())))
+	mux.Handle(rroot+"/", middleware(handleCORS(handleAuthorization(handleRMS()))))
 }
