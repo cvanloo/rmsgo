@@ -23,7 +23,7 @@ type (
 
 	// AuthenticateFunc authenticates a request (usually with the bearer token).
 	// If the request is correctly authenticated, a User and true must be
-	// returned.
+	// returned, otherwise the returned values must be nil and false.
 	AuthenticateFunc func(r *http.Request, bearer string) (User, bool)
 )
 
@@ -52,10 +52,42 @@ var (
 		log.Printf("rmsgo: unhandled error: %v\n", err)
 	}
 
+	defaultUser User = ReadOnlyUser{}
+
 	authenticate AuthenticateFunc = func(r *http.Request, bearer string) (User, bool) {
-		return anyUser{}, true
+		return defaultUser, true
 	}
 )
+
+func resetConfig() {
+	rroot, sroot = "", ""
+
+	allowAllOrigins = true
+	allowedOrigins = []string{}
+
+	allowOrigin = func(r *http.Request, origin string) bool {
+		for _, o := range allowedOrigins {
+			if o == origin {
+				return true
+			}
+		}
+		return false
+	}
+
+	middleware = func(next http.Handler) http.Handler {
+		return next
+	}
+
+	unhandled = func(err error) {
+		log.Printf("rmsgo: unhandled error: %v\n", err)
+	}
+
+	defaultUser = ReadOnlyUser{}
+
+	authenticate = func(r *http.Request, bearer string) (User, bool) {
+		return defaultUser, true
+	}
+}
 
 // Setup initializes the remote storage server.
 // remoteRoot is the URL path below which remote storage is accessible, and
@@ -90,21 +122,37 @@ func Sroot() string {
 	return sroot
 }
 
+// UseErrorHandler configures the error handler to use.
 func UseErrorHandler(h ErrorHandlerFunc) {
 	unhandled = h
 }
 
+// UseMiddleware configures middleware (e.g., for logging) in front of the
+// remote storage server.
+// The middleware is responsible for passing the request on to the rms server
+// using next.ServeHTTP(w, r).
 func UseMiddleware(m MiddlewareFunc) {
 	middleware = m
 }
 
+// AllowAnyReadWrite allows even unauthenticated requests to create, read, and
+// delete any documents on the server.
+// This option has no effect if UseAuthentication is used.
+// Per default, i.e if no other option is configured, any GET and HEAD requests
+// are allowed.
+func AllowAnyReadWrite() {
+	defaultUser = ReadWriteUser{}
+}
+
+// UseAuthentication configures the function to use for authenticating
+// requests.
 func UseAuthentication(a AuthenticateFunc) {
 	authenticate = a
 }
 
-// AllowOrigins configures a list of allowed origins.
-// By default, i.e if AllowOrigins is never called, all origins are allowed.
-func AllowOrigins(origins []string) {
+// UseAllowedOrigins configures a list of allowed origins.
+// By default, i.e if UseAllowedOrigins is never called, all origins are allowed.
+func UseAllowedOrigins(origins []string) {
 	allowAllOrigins = false
 	allowedOrigins = origins
 }

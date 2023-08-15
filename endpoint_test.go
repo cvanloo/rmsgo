@@ -21,10 +21,12 @@ func mockServer() {
 		rroot = "/storage/"
 		sroot = "/tmp/rms/storage/"
 	)
+	resetConfig()
 	Mock(
 		WithDirectory(sroot),
 	)
 	must(Setup(rroot, sroot))
+	AllowAnyReadWrite()
 	Reset()
 }
 
@@ -2082,6 +2084,825 @@ func TestDeleteDocumentIfMatchFail(t *testing.T) {
 	// check that document still exists
 	{
 		r, err := http.Head(remoteRoot + testDocument)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+	}
+}
+
+func TestUnauthorizedCanReadPublicDocument(t *testing.T) {
+	mockServer()
+	UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+		if bearer == "PUTTER" {
+			return ReadWriteUser{}, true
+		}
+		return nil, false
+	})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	const (
+		mime           = "text/plain; charset=utf-8"
+		publicDocument = "/public/somewhere/somedoc.txt"
+		content        = "A person who has not done one half his day's work by ten o'clock, runs a chance of leaving the other half undone."
+		etag           = "56371d17bb32d583e4131eacfdda53eb"
+	)
+
+	// PUT document with authorization
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+publicDocument, bytes.NewReader([]byte(content)))
+		req.Header.Set("Content-Type", mime)
+		req.Header.Set("Authorization", "Bearer PUTTER")
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != etag {
+			t.Errorf("got: `%s', want: `%s'", e, etag)
+		}
+	}
+
+	// GET public document (no authorization)
+	{
+		r, err := http.Get(remoteRoot + publicDocument)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if e := r.Header.Get("ETag"); e != etag {
+			t.Errorf("got: `%s', want: `%s'", e, etag)
+		}
+		bs, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+		}
+		if string(bs) != content {
+			t.Errorf("got: `%s', want: `%s'", bs, content)
+		}
+	}
+
+	// HEAD public document (no authorization)
+	{
+		r, err := http.Head(remoteRoot + publicDocument)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if e := r.Header.Get("ETag"); e != etag {
+			t.Errorf("got: `%s', want: `%s'", e, etag)
+		}
+	}
+
+	// PUT public document (no authorization)
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+publicDocument, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room.")))
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusUnauthorized {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		}
+	}
+
+	// DELETE public document (no authorization)
+	{
+		req, err := http.NewRequest(http.MethodDelete, remoteRoot+publicDocument, nil)
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusUnauthorized {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		}
+	}
+}
+
+func TestUnauthorizedCannotAccessPublicFolder(t *testing.T) {
+	mockServer()
+	UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+		if bearer == "PUTTER" {
+			return ReadWriteUser{}, true
+		}
+		return nil, false
+	})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	const (
+		mime              = "text/plain; charset=utf-8"
+		publicDocument    = "/public/Napoleon/quotes.txt"
+		publicDocumentDir = "/public/Napoleon/"
+		content           = "You can make a stop during the ascent, but not during the descent."
+		etag              = "12442797aace31d1efab9efd626c96bc"
+	)
+
+	// PUT document with authorization
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+publicDocument, bytes.NewReader([]byte(content)))
+		req.Header.Set("Content-Type", mime)
+		req.Header.Set("Authorization", "Bearer PUTTER")
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != etag {
+			t.Errorf("got: `%s', want: `%s'", e, etag)
+		}
+	}
+
+	// GET document's parent (no authorization)
+	{
+		r, err := http.Get(remoteRoot + publicDocumentDir)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusUnauthorized {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		}
+	}
+
+	// HEAD document's parent (no authorization)
+	{
+		r, err := http.Head(remoteRoot + publicDocumentDir)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusUnauthorized {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		}
+	}
+}
+
+func TestUnauthorizedCannotAccessNonPublicDocument(t *testing.T) {
+	mockServer()
+	UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+		if bearer == "PUTTER" {
+			return ReadWriteUser{}, true
+		}
+		return nil, false
+	})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	const (
+		mime              = "text/plain; charset=utf-8"
+		nonPublicDocument = "/non-public/Rebel/Nikiforova.txt"
+		content           = "May every state's flag burn, leaving only ashes and the black banner as its negation. Rebel, rebel until all organs of power are eliminated."
+		etag              = "a19f7c5dcf8daaba9f1411a02d6b99e1"
+	)
+
+	// PUT document with authorization
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+nonPublicDocument, bytes.NewReader([]byte(content)))
+		req.Header.Set("Content-Type", mime)
+		req.Header.Set("Authorization", "Bearer PUTTER")
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != etag {
+			t.Errorf("got: `%s', want: `%s'", e, etag)
+		}
+	}
+
+	// GET document (no authorization)
+	{
+		r, err := http.Get(remoteRoot + nonPublicDocument)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusUnauthorized {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		}
+	}
+
+	// HEAD document (no authorization)
+	{
+		r, err := http.Head(remoteRoot + nonPublicDocument)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusUnauthorized {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		}
+	}
+
+	// PUT document (no authorization)
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+nonPublicDocument, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room.")))
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusUnauthorized {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		}
+	}
+
+	// DELETE document (no authorization)
+	{
+		req, err := http.NewRequest(http.MethodDelete, remoteRoot+nonPublicDocument, nil)
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusUnauthorized {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		}
+	}
+}
+
+func TestUnauthorizedCannotAccessNonPublicFolder(t *testing.T) {
+	mockServer()
+	UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+		if bearer == "PUTTER" {
+			return ReadWriteUser{}, true
+		}
+		return nil, false
+	})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	const (
+		mime                 = "text/plain; charset=utf-8"
+		nonPublicDocument    = "/non-public/Napoleon/Quotes.txt"
+		nonPublicDocumentDir = "/non-public/Napoleon/"
+		content              = "Death is nothing, but to live defeated and inglorious is to die daily."
+		etag                 = "28c579e7f6c8906fc24b8bd0b8087013"
+	)
+
+	// PUT document with authorization
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+nonPublicDocument, bytes.NewReader([]byte(content)))
+		req.Header.Set("Content-Type", mime)
+		req.Header.Set("Authorization", "Bearer PUTTER")
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != etag {
+			t.Errorf("got: `%s', want: `%s'", e, etag)
+		}
+	}
+
+	// GET document's parent (no authorization)
+	{
+		r, err := http.Get(remoteRoot + nonPublicDocumentDir)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusUnauthorized {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		}
+	}
+
+	// HEAD document's parent (no authorization)
+	{
+		r, err := http.Head(remoteRoot + nonPublicDocumentDir)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusUnauthorized {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		}
+	}
+}
+
+func TestAuthorizationRead(t *testing.T) {
+	mockServer()
+	UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+		if bearer == "PUTTER" {
+			return ReadWriteUser{}, true
+		}
+		if bearer == "READER" {
+			return ReadOnlyUser{}, true
+		}
+		return nil, false
+	})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	const (
+		mime     = "text/plain; charset=utf-8"
+		document = "/Pythagoras/Quotes.txt"
+		content  = "Silence is the loudest answer."
+		etag     = "476012c1b4644cc16a59db9315b280bc"
+	)
+
+	// PUT document with authorization
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte(content)))
+		req.Header.Set("Content-Type", mime)
+		req.Header.Set("Authorization", "Bearer PUTTER")
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != etag {
+			t.Errorf("got: `%s', want: `%s'", e, etag)
+		}
+	}
+
+	// GET document (with authorization)
+	{
+		req, err := http.NewRequest(http.MethodGet, remoteRoot+document, nil)
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Authorization", "Bearer READER")
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if e := r.Header.Get("ETag"); e != etag {
+			t.Errorf("got: `%s', want: `%s'", e, etag)
+		}
+		bs, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+		}
+		if string(bs) != content {
+			t.Errorf("got: `%s', want: `%s'", bs, content)
+		}
+	}
+
+	// HEAD document (with authorization)
+	{
+		req, err := http.NewRequest(http.MethodHead, remoteRoot+document, nil)
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Authorization", "Bearer READER")
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if e := r.Header.Get("ETag"); e != etag {
+			t.Errorf("got: `%s', want: `%s'", e, etag)
+		}
+	}
+
+	// PUT document (with authorization)
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room.")))
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Authorization", "Bearer READER")
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusUnauthorized {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		}
+	}
+
+	// DELETE document (with authorization)
+	{
+		req, err := http.NewRequest(http.MethodDelete, remoteRoot+document, nil)
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Authorization", "Bearer READER")
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusUnauthorized {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		}
+	}
+}
+
+func TestAuthorizationReadPublic(t *testing.T) {
+	mockServer()
+	UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+		if bearer == "PUTTER" {
+			return ReadWriteUser{}, true
+		}
+		if bearer == "READER" {
+			return ReadOnlyUser{}, true
+		}
+		return nil, false
+	})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	const (
+		mime     = "text/plain; charset=utf-8"
+		document = "/public/Pythagoras/Quotes.txt"
+		content  = "Learn silence. With the quiet serenity of a meditative mind, listen, absorb, transcribe, and transform."
+		etag     = "6681e4aec13ebde1e542809292232218"
+	)
+
+	// PUT document with authorization
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte(content)))
+		req.Header.Set("Content-Type", mime)
+		req.Header.Set("Authorization", "Bearer PUTTER")
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != etag {
+			t.Errorf("got: `%s', want: `%s'", e, etag)
+		}
+	}
+
+	// GET public document (with authorization)
+	{
+		req, err := http.NewRequest(http.MethodGet, remoteRoot+document, nil)
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Authorization", "Bearer READER")
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if e := r.Header.Get("ETag"); e != etag {
+			t.Errorf("got: `%s', want: `%s'", e, etag)
+		}
+		bs, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+		}
+		if string(bs) != content {
+			t.Errorf("got: `%s', want: `%s'", bs, content)
+		}
+	}
+
+	// HEAD public document (with authorization)
+	{
+		req, err := http.NewRequest(http.MethodHead, remoteRoot+document, nil)
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Authorization", "Bearer READER")
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if e := r.Header.Get("ETag"); e != etag {
+			t.Errorf("got: `%s', want: `%s'", e, etag)
+		}
+	}
+
+	// PUT public document (with authorization)
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room.")))
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Authorization", "Bearer READER")
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusUnauthorized {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		}
+	}
+
+	// DELETE public document (with authorization)
+	{
+		req, err := http.NewRequest(http.MethodDelete, remoteRoot+document, nil)
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Authorization", "Bearer READER")
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusUnauthorized {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		}
+	}
+}
+
+func TestAuthorizationReadWrite(t *testing.T) {
+	mockServer()
+	UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+		if bearer == "PUTTER" {
+			return ReadWriteUser{}, true
+		}
+		if bearer == "READERWRITER" {
+			return ReadWriteUser{}, true
+		}
+		return nil, false
+	})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	const (
+		mime     = "text/plain; charset=utf-8"
+		document = "/Pythagoras/Quotes.txt"
+		content  = "A man is never as big as when he is on his knees to help a child."
+		etag     = "d8d529c108d78c12c7356ab9f8ac3af2"
+	)
+
+	// PUT document with authorization
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte(content)))
+		req.Header.Set("Content-Type", mime)
+		req.Header.Set("Authorization", "Bearer PUTTER")
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != etag {
+			t.Errorf("got: `%s', want: `%s'", e, etag)
+		}
+	}
+
+	// GET document (with authorization)
+	{
+		req, err := http.NewRequest(http.MethodGet, remoteRoot+document, nil)
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Authorization", "Bearer READERWRITER")
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if e := r.Header.Get("ETag"); e != etag {
+			t.Errorf("got: `%s', want: `%s'", e, etag)
+		}
+		bs, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+		}
+		if string(bs) != content {
+			t.Errorf("got: `%s', want: `%s'", bs, content)
+		}
+	}
+
+	// HEAD document (with authorization)
+	{
+		req, err := http.NewRequest(http.MethodHead, remoteRoot+document, nil)
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Authorization", "Bearer READERWRITER")
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if e := r.Header.Get("ETag"); e != etag {
+			t.Errorf("got: `%s', want: `%s'", e, etag)
+		}
+	}
+
+	// PUT document (with authorization)
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room.")))
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Authorization", "Bearer READERWRITER")
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+	}
+
+	// DELETE document (with authorization)
+	{
+		req, err := http.NewRequest(http.MethodDelete, remoteRoot+document, nil)
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Authorization", "Bearer READERWRITER")
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+	}
+}
+
+func TestAuthorizationReadWritePublic(t *testing.T) {
+	mockServer()
+	UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+		if bearer == "PUTTER" {
+			return ReadWriteUser{}, true
+		}
+		if bearer == "READERWRITER" {
+			return ReadWriteUser{}, true
+		}
+		return nil, false
+	})
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + rroot
+	defer ts.Close()
+
+	const (
+		mime     = "text/plain; charset=utf-8"
+		document = "/public/Pythagoras/Quotes.txt"
+		content  = "Be silent, or let thy words be worth more than silence"
+		etag     = "e619d8ed176ca9848f0b978a9f8712fc"
+	)
+
+	// PUT document with authorization
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte(content)))
+		req.Header.Set("Content-Type", mime)
+		req.Header.Set("Authorization", "Bearer PUTTER")
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != etag {
+			t.Errorf("got: `%s', want: `%s'", e, etag)
+		}
+	}
+
+	// GET public document (with authorization)
+	{
+		req, err := http.NewRequest(http.MethodGet, remoteRoot+document, nil)
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Authorization", "Bearer READERWRITER")
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if e := r.Header.Get("ETag"); e != etag {
+			t.Errorf("got: `%s', want: `%s'", e, etag)
+		}
+		bs, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+		}
+		if string(bs) != content {
+			t.Errorf("got: `%s', want: `%s'", bs, content)
+		}
+	}
+
+	// HEAD public document (with authorization)
+	{
+		req, err := http.NewRequest(http.MethodHead, remoteRoot+document, nil)
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Authorization", "Bearer READERWRITER")
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if e := r.Header.Get("ETag"); e != etag {
+			t.Errorf("got: `%s', want: `%s'", e, etag)
+		}
+	}
+
+	// PUT public document (with authorization)
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room.")))
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Authorization", "Bearer READERWRITER")
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+	}
+
+	// DELETE public document (with authorization)
+	{
+		req, err := http.NewRequest(http.MethodDelete, remoteRoot+document, nil)
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Authorization", "Bearer READERWRITER")
+		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}

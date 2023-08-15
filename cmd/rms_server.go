@@ -48,6 +48,7 @@ func main() {
 		log.Fatalf("remote storage: unhandled error: %v", err)
 	})
 	rmsgo.UseMiddleware(logger)
+	rmsgo.AllowAnyReadWrite()
 
 	mux := http.NewServeMux()
 	rmsgo.Register(mux)

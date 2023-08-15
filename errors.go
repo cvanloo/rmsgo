@@ -44,11 +44,9 @@ var StatusCodes = map[error]int{
 	ErrBadRequest:          400,
 }
 
-// HttpError is an error handled by the remoteStorage server itself.
-// Errors of other types or that don't wrap an HttpError are looked at as
-// internal server errors and passed to the library user for handling.
-// If no entry for Cause can be found in StatusCodes, Cause is also passed to
-// the library user for further handling.
+// HttpError contains detailed error information, intended to be shown to users.
+// No sensitive data should be contained by any of its fields (with Cause being
+// the only exception).
 type HttpError struct {
 	// Msg is a human readable error message.
 	Msg string
@@ -59,7 +57,7 @@ type HttpError struct {
 	// Additonal Data related to the error.
 	Data LDjson
 	// Underlying error that caused the exception.
-	// Cause is used to look up a response status code in StatusCodes.
+	// Cause is used to look up a response status in StatusCodes.
 	// If not contained in StatusCodes, ErrServerError is used instead, and the
 	// Cause is passed to the library user for further handling.
 	Cause error

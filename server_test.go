@@ -56,6 +56,11 @@ func ExampleSetup() {
 			})
 		})
 	})
+	rmsgo.UseAuthentication(func(r *http.Request, bearer string) (rmsgo.User, bool) {
+		// [!] TODO: Your authentication logic here...
+		//       Return one of your own users.
+		return rmsgo.ReadWriteUser{}, true
+	})
 
 	mux := http.NewServeMux()
 	rmsgo.Register(mux)

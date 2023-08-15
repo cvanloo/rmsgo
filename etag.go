@@ -13,9 +13,19 @@ import (
 	"golang.org/x/exp/maps"
 )
 
+func init() {
+	var err error
+	hostname, err = os.Hostname()
+	if err != nil {
+		log.Fatalf("failed to read hostname: %v", err)
+	}
+}
+
 // ETag is a short and unique identifier assigned to a specific version of a
 // remoteStorage resource.
 type ETag []byte
+
+var hostname string
 
 // String creates a string from an Etag e.
 // To go the opposite way an obtain an ETag from a string, use ParseETag.
@@ -43,16 +53,6 @@ func (e ETag) Equal(other ETag) bool {
 		}
 	}
 	return true
-}
-
-var hostname string
-
-func init() {
-	var err error
-	hostname, err = os.Hostname()
-	if err != nil {
-		log.Fatalf("failed to read hostname: %v", err)
-	}
 }
 
 func calculateETag(n *node) error {
