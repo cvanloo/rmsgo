@@ -2,7 +2,6 @@ package rmsgo
 
 import (
 	"context"
-	"math"
 	"net/http"
 	"strings"
 )
@@ -10,7 +9,8 @@ import (
 type (
 	User interface {
 		Permission(name string) Level
-		Quota() int64
+		// @todo: Root() string // get user's storage root?
+		// @todo: Quota() int64 ?
 	}
 
 	// ReadOnlyUser is a User with read access to any folder.
@@ -35,16 +35,8 @@ func (ReadOnlyUser) Permission(name string) Level {
 	return LevelRead
 }
 
-func (ReadOnlyUser) Quota() int64 {
-	return math.MaxInt64
-}
-
 func (ReadWriteUser) Permission(name string) Level {
 	return LevelReadWrite
-}
-
-func (ReadWriteUser) Quota() int64 {
-	return math.MaxInt64
 }
 
 func UserFromContext(ctx context.Context) (User, bool) {
