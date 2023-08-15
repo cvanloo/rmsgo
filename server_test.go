@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/cvanloo/rmsgo.git"
+	"github.com/cvanloo/rmsgo"
 )
 
 func ExampleRegister() {

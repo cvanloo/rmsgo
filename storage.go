@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cvanloo/rmsgo.git/isdelve"
-	. "github.com/cvanloo/rmsgo.git/mock"
+	"github.com/cvanloo/rmsgo/isdelve"
+	. "github.com/cvanloo/rmsgo/mock"
 	"github.com/google/uuid"
 	"golang.org/x/exp/maps"
 )

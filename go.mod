@@ -1,4 +1,4 @@
-module github.com/cvanloo/rmsgo.git
+module github.com/cvanloo/rmsgo
 
 go 1.21
 

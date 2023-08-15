@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/cvanloo/rmsgo.git/mock"
+	. "github.com/cvanloo/rmsgo/mock"
 )
 
 // @todo: test CORS

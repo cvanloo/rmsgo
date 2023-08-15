@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cvanloo/rmsgo.git/isdelve"
-	. "github.com/cvanloo/rmsgo.git/mock"
+	"github.com/cvanloo/rmsgo/isdelve"
+	. "github.com/cvanloo/rmsgo/mock"
 )
 
 // @fixme: go doc http.ResponseWriter mentions that Content-Length is only set

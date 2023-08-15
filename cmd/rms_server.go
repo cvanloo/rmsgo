@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/cvanloo/rmsgo.git"
-	"github.com/cvanloo/rmsgo.git/mock"
+	"github.com/cvanloo/rmsgo"
+	"github.com/cvanloo/rmsgo/mock"
 )
 
 const (

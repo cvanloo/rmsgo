@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	. "github.com/cvanloo/rmsgo.git/mock"
+	. "github.com/cvanloo/rmsgo/mock"
 )
 
 type (

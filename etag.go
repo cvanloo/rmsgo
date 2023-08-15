@@ -9,7 +9,7 @@ import (
 	"os"
 	"sort"
 
-	. "github.com/cvanloo/rmsgo.git/mock"
+	. "github.com/cvanloo/rmsgo/mock"
 	"golang.org/x/exp/maps"
 )
 
