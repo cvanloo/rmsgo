@@ -29,7 +29,7 @@ func init() {
 }
 
 func serve(w http.ResponseWriter, r *http.Request) error {
-	path := r.URL.Path // @todo: is this already cleaned?
+	path := r.URL.Path
 	isFolder := path[len(path)-1] == '/'
 
 	switch r.Method {
@@ -288,7 +288,6 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 
 	mime := r.Header.Get("Content-Type")
 
-	// @todo: merge Create and Update into one function?
 	if found {
 		fd, err := FS.Create(n.sname)
 		if err != nil {

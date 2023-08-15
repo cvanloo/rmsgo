@@ -685,11 +685,6 @@ func TestPutDocumentUpdatesAncestorETags(t *testing.T) {
 		if e := r.Header.Get("ETag"); e != testDocumentDirETag1 {
 			t.Errorf("got: `%s', want: `%s'", e, testDocumentDirETag1)
 		}
-		// @todo: maybe we want to validate this as well?
-		//bs, err := io.ReadAll(r.Body)
-		//if err != nil {
-		//	t.Error(err)
-		//}
 	}
 
 	// Get root folder ETag
@@ -707,11 +702,6 @@ func TestPutDocumentUpdatesAncestorETags(t *testing.T) {
 		if e := r.Header.Get("ETag"); e != testRootETag1 {
 			t.Errorf("got: `%s', want: `%s'", e, testRootETag1)
 		}
-		// @todo: maybe we want to validate this as well?
-		//bs, err := io.ReadAll(r.Body)
-		//if err != nil {
-		//	t.Error(err)
-		//}
 	}
 
 	// PUT second document
@@ -748,11 +738,6 @@ func TestPutDocumentUpdatesAncestorETags(t *testing.T) {
 		if e := r.Header.Get("ETag"); e != testDocumentDirETag2 {
 			t.Errorf("got: `%s', want: `%s'", e, testDocumentDirETag2)
 		}
-		// @todo: maybe we want to validate this as well?
-		//bs, err := io.ReadAll(r.Body)
-		//if err != nil {
-		//	t.Error(err)
-		//}
 	}
 
 	// Get root folder ETag
@@ -770,11 +755,6 @@ func TestPutDocumentUpdatesAncestorETags(t *testing.T) {
 		if e := r.Header.Get("ETag"); e != testRootETag2 {
 			t.Errorf("got: `%s', want: `%s'", e, testRootETag2)
 		}
-		// @todo: maybe we want to validate this as well?
-		//bs, err := io.ReadAll(r.Body)
-		//if err != nil {
-		//	t.Error(err)
-		//}
 	}
 }
 
