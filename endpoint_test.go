@@ -2524,8 +2524,8 @@ func TestAuthorizationRead(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusUnauthorized {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		if r.StatusCode != http.StatusForbidden {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
 		}
 	}
 
@@ -2540,8 +2540,8 @@ func TestAuthorizationRead(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusUnauthorized {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		if r.StatusCode != http.StatusForbidden {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
 		}
 	}
 }
@@ -2646,8 +2646,8 @@ func TestAuthorizationReadPublic(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusUnauthorized {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		if r.StatusCode != http.StatusForbidden {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
 		}
 	}
 
@@ -2662,8 +2662,8 @@ func TestAuthorizationReadPublic(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusUnauthorized {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		if r.StatusCode != http.StatusForbidden {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
 		}
 	}
 }

@@ -66,7 +66,11 @@ func handleAuthorization(next http.Handler) http.Handler {
 		if isAuthorized {
 			next.ServeHTTP(w, r)
 		} else {
-			w.WriteHeader(http.StatusUnauthorized)
+			if isAuthenticated {
+				w.WriteHeader(http.StatusForbidden)
+			} else {
+				w.WriteHeader(http.StatusUnauthorized)
+			}
 		}
 	})
 }
