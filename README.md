@@ -44,7 +44,6 @@ func main() {
     }
 
     // Restore server state
-    rmsgo.Reset()
     err = rmsgo.Load(persistFile)
     if err != nil {
         log.Fatal(err)

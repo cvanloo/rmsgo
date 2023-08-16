@@ -21,7 +21,6 @@ func ExampleRegister() {
 	persistFile := &bytes.Buffer{}
 
 	// Restore server state at startup
-	rmsgo.Reset()
 	err := rmsgo.Load(persistFile)
 	if err != nil {
 		log.Fatal(err)
@@ -57,7 +56,6 @@ func ExampleRegister_usingDefaultServeMux() {
 	persistFile := &bytes.Buffer{}
 
 	// Restore server state at startup
-	rmsgo.Reset()
 	err := rmsgo.Load(persistFile)
 	if err != nil {
 		log.Fatal(err)
