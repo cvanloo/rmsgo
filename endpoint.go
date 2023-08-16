@@ -67,7 +67,7 @@ func serve(w http.ResponseWriter, r *http.Request) error {
 }
 
 func GetFolder(w http.ResponseWriter, r *http.Request) error {
-	rpath := strings.TrimPrefix(r.URL.Path, rroot)
+	rpath := strings.TrimPrefix(r.URL.Path, g.rroot)
 
 	n, err := Retrieve(rpath)
 	if err != nil {
@@ -131,7 +131,7 @@ func GetFolder(w http.ResponseWriter, r *http.Request) error {
 		if !child.isFolder {
 			desc["Content-Type"] = child.mime
 			desc["Content-Length"] = child.length
-			desc["Last-Modified"] = child.lastMod.Format(rmsTimeFormat)
+			desc["Last-Modified"] = child.lastMod.Format(timeFormat)
 		}
 		items[child.name] = desc
 	}
@@ -149,7 +149,7 @@ func GetFolder(w http.ResponseWriter, r *http.Request) error {
 }
 
 func GetDocument(w http.ResponseWriter, r *http.Request) error {
-	rpath := strings.TrimPrefix(r.URL.Path, rroot)
+	rpath := strings.TrimPrefix(r.URL.Path, g.rroot)
 
 	n, err := Retrieve(rpath)
 	if err != nil {
@@ -216,7 +216,7 @@ func GetDocument(w http.ResponseWriter, r *http.Request) error {
 }
 
 func PutDocument(w http.ResponseWriter, r *http.Request) error {
-	rpath := strings.TrimPrefix(r.URL.Path, rroot)
+	rpath := strings.TrimPrefix(r.URL.Path, g.rroot)
 
 	n, err := Retrieve(rpath)
 	found := !errors.Is(err, ErrNotExist)
@@ -323,7 +323,7 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return WriteError(w, err) // internal server error
 		}
-		sname := filepath.Join(sroot, u.String())
+		sname := filepath.Join(g.sroot, u.String())
 
 		fd, err := FS.Create(sname)
 		if err != nil {
@@ -381,7 +381,7 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 }
 
 func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
-	rpath := strings.TrimPrefix(r.URL.Path, rroot)
+	rpath := strings.TrimPrefix(r.URL.Path, g.rroot)
 
 	n, err := Retrieve(rpath)
 	if err != nil {

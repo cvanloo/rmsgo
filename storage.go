@@ -257,7 +257,7 @@ func Migrate(root string) (errs []error) {
 			errs = append(errs, err)
 			return nil
 		}
-		sname := filepath.Join(sroot, u.String())
+		sname := filepath.Join(g.sroot, u.String())
 
 		rmsFD, err := FS.Create(sname)
 		if err != nil {
