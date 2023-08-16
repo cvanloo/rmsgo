@@ -76,7 +76,7 @@ func calculateETag(n *node) error {
 		} else {
 			io.WriteString(hash, cn.name)
 			io.WriteString(hash, cn.mime)
-			io.WriteString(hash, cn.lastMod.Format(rmsTimeFormat))
+			io.WriteString(hash, cn.lastMod.Format(timeFormat))
 
 			fd, err := FS.Open(cn.sname)
 			if err != nil {

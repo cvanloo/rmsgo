@@ -40,17 +40,16 @@ func main() {
 		mock.WithDirectory("/tmp/rms/storage/"),
 	)
 
-	err := rmsgo.Setup(RemoteRoot, StorageRoot)
+	opts, err := rmsgo.Configure(RemoteRoot, StorageRoot)
 	if err != nil {
 		log.Fatal(err)
 	}
-	rmsgo.UseErrorHandler(func(err error) {
+	opts.UseErrorHandler(func(err error) {
 		log.Fatalf("remote storage: unhandled error: %v", err)
 	})
-	rmsgo.UseMiddleware(logger)
-	rmsgo.AllowAnyReadWrite()
+	opts.UseMiddleware(logger)
+	opts.AllowAnyReadWrite()
 
-	mux := http.NewServeMux()
-	rmsgo.Register(mux)
-	http.ListenAndServe(":8080", mux) // @todo: use TLS
+	rmsgo.Register(nil)
+	http.ListenAndServe(":8080", nil) // @todo: use TLS
 }

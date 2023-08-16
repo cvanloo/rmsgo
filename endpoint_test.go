@@ -21,12 +21,11 @@ func mockServer() {
 		rroot = "/storage/"
 		sroot = "/tmp/rms/storage/"
 	)
-	resetConfig()
 	Mock(
 		WithDirectory(sroot),
 	)
-	must(Setup(rroot, sroot))
-	AllowAnyReadWrite()
+	opts := mustVal(Configure(rroot, sroot))
+	opts.AllowAnyReadWrite()
 	Reset()
 }
 
@@ -39,7 +38,7 @@ func ExampleGetFolder() {
 	defer ts.Close()
 
 	// server url + remote root
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 
 	// GET the currently empty root folder
 	{
@@ -160,7 +159,7 @@ func TestPutDocument(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
@@ -222,7 +221,7 @@ func TestPutDocumentSame(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	{
@@ -335,7 +334,7 @@ func TestPutDocumentIfMatchSuccess(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	{
@@ -391,7 +390,7 @@ func TestPutDocumentIfMatchFail(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	{
@@ -444,7 +443,7 @@ func TestPutDocumentIfNonMatchSuccess(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
@@ -480,7 +479,7 @@ func TestPutDocumentIfNonMatchFail(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	{
@@ -537,7 +536,7 @@ func TestPutDocumentSilentlyCreateAncestors(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
@@ -616,7 +615,7 @@ func TestPutDocumentSilentlyCreateAncestors(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	tme, err := time.Parse(rmsTimeFormat, modt)
+	tme, err := time.Parse(timeFormat, modt)
 	if err != nil {
 		t.Error(err)
 	}
@@ -648,7 +647,7 @@ func TestPutDocumentUpdatesAncestorETags(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	// PUT first document
@@ -776,7 +775,7 @@ func TestPutDocumentAutodetectContentType(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	{
@@ -832,7 +831,7 @@ func TestPutDocumentAsFolderFails(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	req, err := http.NewRequest(http.MethodPut, remoteRoot+"/Edward/M/D/Teach/", bytes.NewReader([]byte("HA! Liar. I have to write sentences with multiple dependent clauses in order to repair the damage of your 5 word rhetorical cluster grenade.")))
@@ -866,7 +865,7 @@ func TestPutDocumentClashesWithFolderFails(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	// PUT first document
@@ -939,7 +938,7 @@ func TestPutDocumentAncestorFolderClashesWithDocumentFails(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	// PUT first document
@@ -1000,7 +999,7 @@ func TestGetFolder(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (
@@ -1067,7 +1066,7 @@ func TestGetFolderEmpty(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (
@@ -1107,7 +1106,7 @@ func TestGetFolderNotFound(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const responseBody = `{"data":{"rname":"/nonexistent/"},"description":"The requested folder does not exist on the server.","message":"folder not found","url":""}
@@ -1137,7 +1136,7 @@ func TestGetFolderIfNonMatchRevMatches(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (
@@ -1188,7 +1187,7 @@ func TestGetFolderIfNonMatchRevNoMatch(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (
@@ -1258,7 +1257,7 @@ func TestGetFolderThatIsADocumentFails(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (
@@ -1300,7 +1299,7 @@ func TestHeadFolder(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (
@@ -1363,7 +1362,7 @@ func TestGetDocument(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (
@@ -1424,7 +1423,7 @@ func TestGetDocumentNotFound(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const response = `{"data":{"rname":"/inexistent/document"},"description":"The requested document does not exist on the server.","message":"document not found","url":""}
@@ -1451,7 +1450,7 @@ func TestGetDocumentIfNonMatchRevMatches(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (
@@ -1505,7 +1504,7 @@ func TestGetDocumentIfNonMatchRevNoMatch(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (
@@ -1578,7 +1577,7 @@ func TestGetDocumentThatIsAFolderFails(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (
@@ -1620,7 +1619,7 @@ func TestHeadDocument(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (
@@ -1678,7 +1677,7 @@ func TestDeleteDocument(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (
@@ -1880,7 +1879,7 @@ func TestDeleteDocumentNotFound(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	req, err := http.NewRequest(http.MethodDelete, remoteRoot+"/nonexistent/document", nil)
@@ -1901,7 +1900,7 @@ func TestDeleteDocumentToFolder(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (
@@ -1948,7 +1947,7 @@ func TestDeleteDocumentIfMatch(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (
@@ -2013,7 +2012,7 @@ func TestDeleteDocumentIfMatchFail(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (
@@ -2075,7 +2074,7 @@ func TestDeleteDocumentIfMatchFail(t *testing.T) {
 
 func TestUnauthorizedCanReadPublicDocument(t *testing.T) {
 	mockServer()
-	UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
 			return ReadWriteUser{}, true
 		}
@@ -2084,7 +2083,7 @@ func TestUnauthorizedCanReadPublicDocument(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (
@@ -2182,7 +2181,7 @@ func TestUnauthorizedCanReadPublicDocument(t *testing.T) {
 
 func TestUnauthorizedCannotAccessPublicFolder(t *testing.T) {
 	mockServer()
-	UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
 			return ReadWriteUser{}, true
 		}
@@ -2191,7 +2190,7 @@ func TestUnauthorizedCannotAccessPublicFolder(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (
@@ -2247,7 +2246,7 @@ func TestUnauthorizedCannotAccessPublicFolder(t *testing.T) {
 
 func TestUnauthorizedCannotAccessNonPublicDocument(t *testing.T) {
 	mockServer()
-	UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
 			return ReadWriteUser{}, true
 		}
@@ -2256,7 +2255,7 @@ func TestUnauthorizedCannotAccessNonPublicDocument(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (
@@ -2341,7 +2340,7 @@ func TestUnauthorizedCannotAccessNonPublicDocument(t *testing.T) {
 
 func TestUnauthorizedCannotAccessNonPublicFolder(t *testing.T) {
 	mockServer()
-	UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
 			return ReadWriteUser{}, true
 		}
@@ -2350,7 +2349,7 @@ func TestUnauthorizedCannotAccessNonPublicFolder(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (
@@ -2406,7 +2405,7 @@ func TestUnauthorizedCannotAccessNonPublicFolder(t *testing.T) {
 
 func TestAuthorizationRead(t *testing.T) {
 	mockServer()
-	UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
 			return ReadWriteUser{}, true
 		}
@@ -2418,7 +2417,7 @@ func TestAuthorizationRead(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (
@@ -2528,7 +2527,7 @@ func TestAuthorizationRead(t *testing.T) {
 
 func TestAuthorizationReadPublic(t *testing.T) {
 	mockServer()
-	UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
 			return ReadWriteUser{}, true
 		}
@@ -2540,7 +2539,7 @@ func TestAuthorizationReadPublic(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (
@@ -2650,7 +2649,7 @@ func TestAuthorizationReadPublic(t *testing.T) {
 
 func TestAuthorizationReadWrite(t *testing.T) {
 	mockServer()
-	UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
 			return ReadWriteUser{}, true
 		}
@@ -2662,7 +2661,7 @@ func TestAuthorizationReadWrite(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (
@@ -2772,7 +2771,7 @@ func TestAuthorizationReadWrite(t *testing.T) {
 
 func TestAuthorizationReadWritePublic(t *testing.T) {
 	mockServer()
-	UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
 			return ReadWriteUser{}, true
 		}
@@ -2784,7 +2783,7 @@ func TestAuthorizationReadWritePublic(t *testing.T) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + rroot
+	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
 	const (

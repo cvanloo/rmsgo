@@ -12,7 +12,7 @@ import (
 )
 
 var genpath = func() string {
-	return filepath.Join(sroot, mustVal(UUID()).String())
+	return filepath.Join(g.sroot, mustVal(UUID()).String())
 }
 
 func TestAddDocument(t *testing.T) {
@@ -823,7 +823,7 @@ func TestMigrate(t *testing.T) {
 		rroot = "/storage/"
 		sroot = "/tmp/rms/storage/"
 	)
-	must(Setup(rroot, sroot))
+	mustVal(Configure(rroot, sroot))
 	Mock(
 		WithDirectory(sroot),
 		WithFile("/somewhere/Documents/hello.txt", []byte("Hello, World!")),
@@ -936,7 +936,7 @@ func ExamplePersist() {
 		panicIf(err)
 	}
 
-	fd, err := FS.Create(sroot + "/marshalled.xml")
+	fd, err := FS.Create(g.sroot + "/marshalled.xml")
 	panicIf(err)
 	defer fd.Close()
 	err = Persist(fd)

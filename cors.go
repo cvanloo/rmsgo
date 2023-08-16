@@ -84,7 +84,7 @@ func preflight(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if allowAllOrigins {
+	if g.allowAllOrigins {
 		hs.Set("Access-Control-Allow-Origin", "*")
 	} else {
 		hs.Set("Access-Control-Allow-Origin", origin)
@@ -104,11 +104,11 @@ func cors(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !(allowAllOrigins || allowOrigin(r, origin)) {
+	if !(g.allowAllOrigins || g.allowOrigin(r, origin)) {
 		return
 	}
 
-	if allowAllOrigins {
+	if g.allowAllOrigins {
 		hs.Set("Access-Control-Allow-Origin", "*")
 	} else {
 		hs.Set("Access-Control-Allow-Origin", origin)

@@ -48,7 +48,7 @@ func handleAuthorization(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		bearer := r.Header.Get("Authorization")
 		bearer = strings.TrimPrefix(bearer, "Bearer ")
-		user, isAuthenticated := authenticate(r, bearer)
+		user, isAuthenticated := g.authenticate(r, bearer)
 		if isAuthenticated {
 			nc := context.WithValue(r.Context(), userKey, user)
 			r = r.WithContext(nc)
@@ -87,7 +87,7 @@ func isAuthorized(r *http.Request, user User) bool {
 }
 
 func parsePath(path string) (rname string, isPublic, isFolder bool) {
-	rname = strings.TrimPrefix(path, rroot)
+	rname = strings.TrimPrefix(path, g.rroot)
 	isPublic = strings.HasPrefix(rname, "/public/")
 	// additional if-check necessary, because path could be named
 	// '/publicsomethingelse' in which case the public should not be trimmed
