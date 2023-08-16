@@ -13,30 +13,52 @@ go get -u github.com/cvanloo/rmsgo
 ```go
 package main
 
-import "github.com/cvanloo/rmsgo"
+import (
+    "os"
+    "github.com/cvanloo/rmsgo"
+)
 
 const (
+    PersistFile = "/var/rms/persist"
     RemoteRoot  = "/storage/"
     StorageRoot = "/var/rms/storage/"
 )
 
 func main() {
-    err := rmsgo.Setup(RemoteRoot, StorageRoot)
+    opts, err := rmsgo.Configure(RemoteRoot, StorageRoot)
     if err != nil {
         log.Fatal(err)
     }
-    rmsgo.UseErrorHandler(func(err error) {
+    opts.UseErrorHandler(func(err error) {
         log.Fatalf("remote storage: unhandled error: %v", err)
     })
-    rmsgo.UseAuthentication(func(r *http.Request, bearer string) (rmsgo.User, bool) {
+    opts.UseAuthentication(func(r *http.Request, bearer string) (rmsgo.User, bool) {
         // [!] TODO: Your authentication logic here...
         //       Return one of your own users.
         return rmsgo.ReadWriteUser{}, true
     })
 
-    mux := http.NewServeMux()
-    rmsgo.Register(mux)
-    http.ListenAndServe(":8080", mux) // [!] TODO: Use TLS
+    persistFile, err := os.Open(PersistFile)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // Restore server state
+    rmsgo.Reset()
+    err = rmsgo.Load(persistFile)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // Register remote storage endpoints to the http.DefaultServeMux
+    rmsgo.Register(nil)
+    http.ListenAndServe(":8080", nil) // [!] TODO: Use TLS
+
+    // At shutdown: persist server state
+    err = rmsgo.Persist(persistFile)
+    if err != nil {
+        log.Fatal(err)
+    }
 }
 ```
 
@@ -67,19 +89,18 @@ func logger(next http.Handler) http.Handler {
 }
 
 func main() {
-    err := rmsgo.Setup(RemoteRoot, StorageRoot)
+    opts, err := rmsgo.Configure(RemoteRoot, StorageRoot)
     if err != nil {
         log.Fatal(err)
     }
 
     // [!] Register custom middleware
-    rmsgo.UseMiddleware(logger)
+    opts.UseMiddleware(logger)
 
     // [!] Other configuration...
 
-    mux := http.NewServeMux()
-    rmsgo.Register(mux)
-    http.ListenAndServe(":8080", mux) // [!] TODO: Use TLS
+    rmsgo.Register(nil)
+    http.ListenAndServe(":8080", nil) // [!] TODO: Use TLS
 }
 ```
 
