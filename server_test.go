@@ -1,6 +1,7 @@
 package rmsgo_test
 
 import (
+	"bytes"
 	"log"
 	"net/http"
 	"time"
@@ -16,7 +17,17 @@ func ExampleRegister() {
 		storageRoot = "/var/rms/storage/"
 	)
 
-	_, err := rmsgo.Configure(remoteRoot, storageRoot)
+	// [!] TODO: Use a real file
+	persistFile := &bytes.Buffer{}
+
+	// Restore server state at startup
+	rmsgo.Reset()
+	err := rmsgo.Load(persistFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_, err = rmsgo.Configure(remoteRoot, storageRoot)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -26,6 +37,12 @@ func ExampleRegister() {
 
 	rmsgo.Register(mux)
 	http.ListenAndServe(":8080", mux) // [!] TODO: Use TLS
+
+	// Persist server state at shutdown
+	err = rmsgo.Persist(persistFile)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 // Alternatively, the endpoints can be registered to the http.DefaultServeMux
@@ -36,13 +53,29 @@ func ExampleRegister_usingDefaultServeMux() {
 		storageRoot = "/var/rms/storage/"
 	)
 
-	_, err := rmsgo.Configure(remoteRoot, storageRoot)
+	// [!] TODO: Use a real file
+	persistFile := &bytes.Buffer{}
+
+	// Restore server state at startup
+	rmsgo.Reset()
+	err := rmsgo.Load(persistFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_, err = rmsgo.Configure(remoteRoot, storageRoot)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	rmsgo.Register(nil)
 	http.ListenAndServe(":8080", nil) // [!] TODO: Use TLS
+
+	// Persist server state at shutdown
+	err = rmsgo.Persist(persistFile)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 // Configure returns a reference to an options object.
