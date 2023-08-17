@@ -168,10 +168,6 @@ func Configure(remoteRoot, storageRoot string) (*Options, error) {
 	return g, nil
 }
 
-func Logger() *slog.Logger {
-	return logger
-}
-
 // Register the remote storage server (with middleware if configured) to the
 // mux using Rroot + '/' as pattern.
 // If mux is nil, http.DefaultServeMux is used.
@@ -179,5 +175,5 @@ func Register(mux *http.ServeMux) {
 	if mux == nil {
 		mux = http.DefaultServeMux
 	}
-	mux.Handle(g.rroot+"/", g.middleware(handleCORS(handleAuthorization(handleRMS()))))
+	mux.Handle(g.rroot+"/", g.middleware(logRequest(handleCORS(handleAuthorization(handleRMS())))))
 }

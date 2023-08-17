@@ -27,18 +27,23 @@ var _ Timer = (*TimeLogger)(nil)
 
 func (tl TimeLogger) Now() time.Time {
 	now := tl.Timer.Now()
-	tl.Log.Debug("Timer", "result", now)
+	tl.Log.Debug("Timer", "now", now)
 	return now
 }
 
+type TimeResult struct {
+	LogDTO
+	Result time.Time `json:"now"`
+}
+
 type ReplayTime struct {
-	Queue[time.Time]
+	Queue[TimeResult]
 }
 
 var _ Timer = (*ReplayTime)(nil)
 
 func (rt *ReplayTime) Now() time.Time {
-	return rt.Dequeue()
+	return rt.Dequeue().Result
 }
 
 type TimeMock struct {

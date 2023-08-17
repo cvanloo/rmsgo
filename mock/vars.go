@@ -2,6 +2,7 @@ package mock
 
 import (
 	"os"
+	"time"
 
 	"golang.org/x/exp/slog"
 )
@@ -23,4 +24,10 @@ func Mock(fsOpts ...FSOption) {
 	UUID = &UUIDMock{}
 	ETag = &RealVersioner{} // not mocked per default
 	FS = MockFS(fsOpts...)
+}
+
+type LogDTO struct {
+	Time  time.Time `json:"time"`
+	Level string    `json:"level"`
+	Msg   string    `json:"msg"`
 }

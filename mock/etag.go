@@ -26,13 +26,14 @@ var _ Versioner = (*VersionLogger)(nil)
 
 func (vl VersionLogger) Version(n etag.Node) (etag.ETag, error) {
 	etag, err := vl.Versioner.Version(n)
-	vl.Log.Debug("Versioner", "result", etag, "error", err)
+	vl.Log.Debug("Versioner", "etag", etag.String(), "error", err)
 	return etag, err
 }
 
 type VersionResult struct {
-	Result etag.ETag
-	Err    error
+	LogDTO
+	Result etag.ETag `json:"etag"`
+	Err    error     `json:"error"`
 }
 
 type ReplayVersion struct {

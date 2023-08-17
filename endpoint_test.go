@@ -2,7 +2,6 @@ package rmsgo
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,7 +12,6 @@ import (
 	"time"
 
 	. "github.com/cvanloo/rmsgo/mock"
-	"github.com/google/uuid"
 )
 
 // @todo: test CORS
@@ -2907,67 +2905,73 @@ func TestReplay(t *testing.T) {
 	opts.AllowAnyReadWrite()
 	Reset()
 
-	// {"time":"2023-08-17T18:56:43.356269992+02:00","level":"DEBUG","msg":"UUIDer","result":"f319359f-58a2-470c-b309-1cf2e91feea2","error":null}
-	// {"time":"2023-08-17T18:56:43.356419445+02:00","level":"DEBUG","msg":"Timer","result":"2023-08-17T18:56:43.356417441+02:00"}
-	// {"time":"2023-08-17T18:56:43.356473216+02:00","level":"DEBUG","msg":"Versioner","result":"zRUldnf4gvrlP8zQw0IdKw==","error":null}
-
-	times := []time.Time{}
+	times := []TimeResult{}
 	uuids := []UUIDResult{}
 	versions := []VersionResult{}
+	requests := []RequestDTO{}
 
-	var logs struct {
-		Logs []LogDTO `json:"logs"`
-	}
-	err := json.Unmarshal([]byte(logOutput), &logs)
+	rawObjects := []json.RawMessage{}
+	err := json.Unmarshal([]byte(logOutput), &rawObjects)
 	if err != nil {
 		t.Error(err)
 	}
-	for _, l := range logs.Logs {
-		switch l.Msg {
-		case "Versioner":
-			b, err := base64.StdEncoding.DecodeString(l.Result)
-			if err != nil {
-				t.Fatal(err)
-			}
-			versions = append(versions, VersionResult{
-				Result: b,
-				Err:    l.Err,
-			})
-		case "Timer":
-			pt, err := time.Parse("2006-01-02T15:04:05-07:00", l.Result)
-			if err != nil {
-				t.Fatal(err)
-			}
-			times = append(times, pt)
-		case "UUIDer":
-			uuids = append(uuids, UUIDResult{
-				Result: uuid.UUID([]byte(l.Result)[:16]),
-				Err:    l.Err,
-			})
+	for _, raw := range rawObjects {
+		var uuidObj UUIDResult
+		if err := json.Unmarshal(raw, &uuidObj); err != nil {
+			uuids = append(uuids, uuidObj)
+			continue
 		}
+		var versObj VersionResult
+		if err := json.Unmarshal(raw, &versObj); err != nil {
+			versions = append(versions, versObj)
+			continue
+		}
+		var timeObj TimeResult
+		if err := json.Unmarshal(raw, &timeObj); err != nil {
+			times = append(times, timeObj)
+			continue
+		}
+		var requestObj RequestDTO
+		if err := json.Unmarshal(raw, &requestObj); err != nil {
+			requests = append(requests, requestObj)
+			continue
+		}
+		t.Fatalf("could not parse log statement: %s", raw)
 	}
 
 	Time = &ReplayTime{Queue: times}
 	UUID = &ReplayUUID{Queue: uuids}
 	ETag = &ReplayVersion{Queue: versions}
 
-	log.Println(ETag.Version(nil))
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
 
-	//mux := http.NewServeMux()
-	//Register(mux)
-	//ts := httptest.NewServer(mux)
-	//remoteRoot := ts.URL + g.rroot
-	//defer ts.Close()
+	for _, reqData := range requests {
+		req, err := http.NewRequest(reqData.Method, reqData.Uri, nil)
+		req.Header = reqData.Headers
+		if err != nil {
+			t.Error(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		log.Println(r)
+	}
 }
 
-const logOutput = `{"logs":[{"time":"2023-08-17T18:56:43.356269992+02:00","level":"DEBUG","msg":"UUIDer","result":"f319359f-58a2-470c-b309-1cf2e91feea2","error":null},
-{"time":"2023-08-17T18:56:43.356419445+02:00","level":"DEBUG","msg":"Timer","result":"2023-08-17T18:56:43.356417441+02:00"},
-{"time":"2023-08-17T18:56:43.356473216+02:00","level":"DEBUG","msg":"Versioner","result":"zRUldnf4gvrlP8zQw0IdKw==","error":null}]}`
+const logOutput = `[
+	{"time":"2023-08-17T20:03:12.25393486+02:00","level":"DEBUG","msg":"Timer","now":"2023-08-17T20:03:12.253932255+02:00"},
+	{"time":"2023-08-17T20:03:12.253799534+02:00","level":"DEBUG","msg":"UUIDer","uuid":"2959c687-d719-4a9f-b35f-b356a475f0f2","error":null},
+	{"time":"2023-08-17T20:03:12.253990635+02:00","level":"DEBUG","msg":"Versioner","etag":"0eced0c10637bc4a8d010035a445f60d","error":null},
+	{"time":"2023-08-17T20:03:12.254004732+02:00","level":"INFO","msg":"Request","method":"PUT","uri":"/storage/Documents/hello.txt","headers":{"Accept":["*/*"],"Content-Length":["13"],"Content-Type":["text/plain"],"User-Agent":["curl/8.2.1"]},"duration":226368,"status":201,"size":0}
+]`
 
-type LogDTO struct {
-	Time   time.Time `json:"time"`
-	Level  string    `json:"level"`
-	Msg    string    `json:"msg"`
-	Result string    `json:"result"`
-	Err    error     `json:"error"`
+type RequestDTO struct {
+	LogDTO
+	Method  string              `json:"method"`
+	Uri     string              `json:"uri"`
+	Headers map[string][]string `json:"headers"`
 }

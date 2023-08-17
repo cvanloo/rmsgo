@@ -28,13 +28,14 @@ var _ UUIDer = (*UUIDLogger)(nil)
 
 func (ul UUIDLogger) NewRandom() (uuid.UUID, error) {
 	uuid, err := ul.UUIDer.NewRandom()
-	ul.Log.Debug("UUIDer", "result", uuid, "error", err)
+	ul.Log.Debug("UUIDer", "uuid", uuid, "error", err)
 	return uuid, err
 }
 
 type UUIDResult struct {
-	Result uuid.UUID
-	Err    error
+	LogDTO
+	Result uuid.UUID `json:"uuid"`
+	Err    error     `json:"error"`
 }
 
 type ReplayUUID struct {
