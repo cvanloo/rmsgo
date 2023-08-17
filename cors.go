@@ -20,7 +20,7 @@ func handleCORS(next http.Handler) http.Handler {
 func preflight(w http.ResponseWriter, r *http.Request) {
 	allowedHeaders := []string{"Authorization", "Content-Length", "Content-Type", "Origin", "X-Requested-With", "If-Match", "If-None-Match"}
 
-	path := r.URL.Path
+	path := strings.TrimPrefix(r.URL.Path, g.rroot)
 	isFolder := false
 	if path[len(path)-1] == '/' {
 		isFolder = true
