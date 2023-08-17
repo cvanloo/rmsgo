@@ -4,11 +4,18 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"time"
 
 	. "github.com/cvanloo/rmsgo/mock"
+	"golang.org/x/exp/slog"
 )
+
+func init() {
+	logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	slog.SetDefault(logger)
+}
 
 type Options struct {
 	rroot, sroot    string
@@ -43,8 +50,12 @@ type (
 
 const timeFormat = time.RFC1123
 
-// g holds global configuration values.
-var g *Options
+var (
+	// g holds global configuration values.
+	g *Options
+
+	logger *slog.Logger
+)
 
 // Rroot specifies the URL path at which remoteStorage is rooted.
 // E.g., if Rroot is "/storage" then a document "/Picture/Kittens.png" can
@@ -155,6 +166,10 @@ func Configure(remoteRoot, storageRoot string) (*Options, error) {
 		},
 	}
 	return g, nil
+}
+
+func Logger() *slog.Logger {
+	return logger
 }
 
 // Register the remote storage server (with middleware if configured) to the

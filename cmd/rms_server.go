@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/cvanloo/rmsgo"
-	"github.com/cvanloo/rmsgo/mock"
+	//"github.com/cvanloo/rmsgo/mock"
 )
 
 const (
@@ -23,22 +23,16 @@ func logger(next http.Handler) http.Handler {
 
 		duration := time.Since(start)
 
-		log.Printf("%v", map[string]any{
-			"method":   r.Method,
-			"uri":      r.RequestURI,
-			"duration": duration,
-			"status":   lrw.Status,
-			"size":     lrw.Size,
-		})
+		rmsgo.Logger().Info("Request", "method", r.Method, "uri", r.RequestURI, "duration", duration, "status", lrw.Status, "size", lrw.Size)
 	})
 }
 
 func main() {
 	log.Println("starting listener on :8080")
 
-	mock.Mock(
-		mock.WithDirectory("/tmp/rms/storage/"),
-	)
+	//mock.Mock(
+	//	mock.WithDirectory("/tmp/rms/storage/"),
+	//)
 
 	opts, err := rmsgo.Configure(RemoteRoot, StorageRoot)
 	if err != nil {

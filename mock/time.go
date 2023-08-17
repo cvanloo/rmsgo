@@ -1,8 +1,9 @@
 package mock
 
 import (
-	"log"
 	"time"
+
+	"golang.org/x/exp/slog"
 )
 
 type Timer interface {
@@ -19,17 +20,14 @@ func (RealTime) Now() time.Time {
 
 type TimeLogger struct {
 	Timer
+	Log *slog.Logger
 }
 
 var _ Timer = (*TimeLogger)(nil)
 
 func (tl TimeLogger) Now() time.Time {
 	now := tl.Timer.Now()
-	log.Printf("%v", map[string]any{
-		"action": "Timer",
-		"date":   time.Now(),
-		"result": now,
-	})
+	tl.Log.Debug("Timer", "result", now)
 	return now
 }
 
@@ -43,7 +41,7 @@ func (rt *ReplayTime) Now() time.Time {
 	return rt.Dequeue()
 }
 
-type TimeMock struct { 
+type TimeMock struct {
 	last time.Time
 }
 

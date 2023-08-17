@@ -1,10 +1,8 @@
 package mock
 
 import (
-	"log"
-	"time"
-
 	"github.com/cvanloo/rmsgo/etag"
+	"golang.org/x/exp/slog"
 )
 
 type Versioner interface {
@@ -21,18 +19,14 @@ func (RealVersioner) Version(n etag.Node) (etag.ETag, error) {
 
 type VersionLogger struct {
 	Versioner
+	Log *slog.Logger
 }
 
 var _ Versioner = (*VersionLogger)(nil)
 
 func (vl VersionLogger) Version(n etag.Node) (etag.ETag, error) {
 	etag, err := vl.Versioner.Version(n)
-	log.Printf("%v", map[string]any{
-		"action": "Versioner",
-		"date":   time.Now(),
-		"result": etag,
-		"error":  err,
-	})
+	vl.Log.Debug("Versioner", "result", etag, "error", err)
 	return etag, err
 }
 

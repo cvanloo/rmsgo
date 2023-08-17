@@ -22,9 +22,9 @@ import (
 
 func init() {
 	if !isdelve.Enabled {
-		UUID = &UUIDLogger{UUIDer: &RealUUID{}}
-		Time = &TimeLogger{Timer: &RealTime{}}
-		ETag = &VersionLogger{Versioner: &RealVersioner{}}
+		UUID = &UUIDLogger{UUIDer: &RealUUID{}, Log: logger}
+		Time = &TimeLogger{Timer: &RealTime{}, Log: logger}
+		ETag = &VersionLogger{Versioner: &RealVersioner{}, Log: logger}
 	}
 	Reset()
 }

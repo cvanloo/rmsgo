@@ -2,10 +2,9 @@ package mock
 
 import (
 	"fmt"
-	"log"
-	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/exp/slog"
 )
 
 type UUIDer interface {
@@ -22,24 +21,20 @@ func (RealUUID) NewRandom() (uuid.UUID, error) {
 
 type UUIDLogger struct {
 	UUIDer
+	Log *slog.Logger
 }
 
 var _ UUIDer = (*UUIDLogger)(nil)
 
 func (ul UUIDLogger) NewRandom() (uuid.UUID, error) {
 	uuid, err := ul.UUIDer.NewRandom()
-	log.Printf("%v", map[string]any{
-		"action": "UUIDer",
-		"date":   time.Now(),
-		"result": uuid,
-		"error":  err,
-	})
+	ul.Log.Debug("UUIDer", "result", uuid, "error", err)
 	return uuid, err
 }
 
 type UUIDResult struct {
 	Result uuid.UUID
-	Err error
+	Err    error
 }
 
 type ReplayUUID struct {

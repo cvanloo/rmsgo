@@ -2923,6 +2923,10 @@ func TestReplay(t *testing.T) {
 	log.Println(ETag.Version(nil))
 	log.Println(ETag.Version(nil))
 
+	// {"time":"2023-08-17T18:56:43.356269992+02:00","level":"DEBUG","msg":"UUIDer","result":"f319359f-58a2-470c-b309-1cf2e91feea2","error":null}
+	// {"time":"2023-08-17T18:56:43.356419445+02:00","level":"DEBUG","msg":"Timer","result":"2023-08-17T18:56:43.356417441+02:00"}
+	// {"time":"2023-08-17T18:56:43.356473216+02:00","level":"DEBUG","msg":"Versioner","result":"zRUldnf4gvrlP8zQw0IdKw==","error":null}
+
 	//mux := http.NewServeMux()
 	//Register(mux)
 	//ts := httptest.NewServer(mux)
