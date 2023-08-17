@@ -115,7 +115,7 @@ func (m *FakeFileSystem) createFile(path string, flag int, perm fs.FileMode) (Fi
 		}
 		// @todo: are we allowed to open and truncate the file? (check perms)
 		f.bytes = nil
-		f.lastMod = Time()
+		f.lastMod = Time.Now()
 		return &FakeFileDescriptor{
 			file:   f,
 			cursor: 0,
@@ -139,7 +139,7 @@ func (m *FakeFileSystem) createFile(path string, flag int, perm fs.FileMode) (Fi
 			path:    path,
 			name:    filepath.Base(path),
 			mode:    perm - umask,
-			lastMod: Time(),
+			lastMod: Time.Now(),
 			parent:  p,
 		}
 		p.children[path] = f
@@ -379,7 +379,7 @@ func (m *FakeFileSystem) WriteFile(path string, data []byte, perm os.FileMode) e
 			name:    filepath.Base(path),
 			bytes:   data,
 			mode:    perm - umask,
-			lastMod: Time(),
+			lastMod: Time.Now(),
 			parent:  p,
 		}
 		p.children[path] = f
@@ -610,7 +610,7 @@ func MockFS(opts ...FSOption) (fs *FakeFileSystem) {
 		path:     "/",
 		name:     "/",
 		mode:     0777 - umask,
-		lastMod:  Time(),
+		lastMod:  time.Now(),
 		parent:   nil,
 		children: map[string]*FakeFile{},
 	}
@@ -646,7 +646,7 @@ func WithFile(path string, data []byte) FSOption {
 					path:     pname,
 					name:     parts[i] + "/",
 					mode:     0777 - umask,
-					lastMod:  Time(),
+					lastMod:  Time.Now(),
 					parent:   p,
 					children: map[string]*FakeFile{},
 				}
@@ -663,7 +663,7 @@ func WithFile(path string, data []byte) FSOption {
 			name:    filepath.Base(path),
 			bytes:   data,
 			mode:    0666 - umask,
-			lastMod: Time(),
+			lastMod: Time.Now(),
 			parent:  p,
 		}
 		p.children[path] = f
@@ -687,7 +687,7 @@ func WithDirectory(path string) FSOption {
 					path:     pname,
 					name:     parts[i] + "/",
 					mode:     0777 - umask,
-					lastMod:  Time(),
+					lastMod:  Time.Now(),
 					parent:   p,
 					children: map[string]*FakeFile{},
 				}

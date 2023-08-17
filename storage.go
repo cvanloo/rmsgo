@@ -14,16 +14,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cvanloo/rmsgo/etag"
 	"github.com/cvanloo/rmsgo/isdelve"
 	. "github.com/cvanloo/rmsgo/mock"
-	"github.com/google/uuid"
 	"golang.org/x/exp/maps"
 )
 
 func init() {
 	if !isdelve.Enabled {
-		UUID = uuid.NewRandom
-		Time = time.Now
+		UUID = &UUIDLogger{UUIDer: &RealUUID{}}
+		Time = &TimeLogger{Timer: &RealTime{}}
+		ETag = &VersionLogger{Versioner: &RealVersioner{}}
 	}
 	Reset()
 }
@@ -63,7 +64,7 @@ type node struct {
 	// "/var/rms/storage/(uuid)"
 	sname string
 
-	etag      ETag
+	etag      etag.ETag
 	etagValid bool
 
 	mime     string
@@ -71,6 +72,39 @@ type node struct {
 	lastMod  *time.Time // pointer so that it can be nil (folder's don't have a mod time)
 	children map[string]*node
 }
+
+func (n *node) Reader() (io.ReadCloser, error) {
+	return FS.Open(n.sname)
+}
+
+func (n *node) Children() (children []etag.Node) {
+	for _, child := range n.children {
+		children = append(children, child)
+	}
+	return
+}
+
+func (n *node) IsFolder() bool {
+	return n.isFolder
+}
+
+func (n *node) LastMod() time.Time {
+	return *n.lastMod
+}
+
+func (n *node) Length() int64 {
+	return n.length
+}
+
+func (n *node) Mime() string {
+	return n.mime
+}
+
+func (n *node) Name() string {
+	return n.rname
+}
+
+var _ etag.Node = (*node)(nil)
 
 func (n *node) Valid() bool {
 	return n.etagValid
@@ -80,9 +114,11 @@ func (n *node) Invalidate() {
 	n.etagValid = false
 }
 
-func (n *node) Version() (e ETag, err error) {
+func (n *node) Version() (e etag.ETag, err error) {
 	if !n.etagValid {
-		err = calculateETag(n)
+		e, err = ETag.Version(n)
+		n.etag = e
+		n.etagValid = true
 	}
 	e = n.etag
 	return
@@ -198,7 +234,7 @@ func Load(persistFile io.Reader) error {
 	}
 
 	for _, n := range persist.Nodes {
-		etag, err := ParseETag(n.ETag)
+		etag, err := etag.ParseETag(n.ETag)
 		if err != nil {
 			return err
 		}
@@ -252,7 +288,7 @@ func Migrate(root string) (errs []error) {
 			}
 		}()
 
-		u, err := UUID()
+		u, err := UUID.NewRandom()
 		if err != nil {
 			errs = append(errs, err)
 			return nil
@@ -358,7 +394,7 @@ func AddDocument(rname, sname string, fsize int64, mime string) (*node, error) {
 	// p now points to the document's immediate parent [#1]
 
 	name := filepath.Base(rname)
-	tnow := Time()
+	tnow := Time.Now()
 
 	f := &node{
 		parent:   p, // [#1] assign parent
@@ -387,7 +423,7 @@ func AddDocument(rname, sname string, fsize int64, mime string) (*node, error) {
 func UpdateDocument(n *node, mime string, fsize int64) {
 	assert(!n.isFolder, "UpdateDocument must not be called on a folder")
 
-	tnow := Time()
+	tnow := Time.Now()
 	n.mime = mime
 	n.length = int64(fsize)
 	n.lastMod = &tnow

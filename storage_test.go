@@ -12,7 +12,7 @@ import (
 )
 
 var genpath = func() string {
-	return filepath.Join(g.sroot, mustVal(UUID()).String())
+	return filepath.Join(g.sroot, mustVal(UUID.NewRandom()).String())
 }
 
 func TestAddDocument(t *testing.T) {
@@ -622,7 +622,7 @@ const persistText = `<Root>
 	<Nodes IsFolder="true">
 		<Name>Documents/</Name>
 		<Rname>/Documents</Rname>
-		<ETag>86f32f54096e02778610b22d1d6c56db</ETag>
+		<ETag>53140660214dc410610c3ef93bbdd15d</ETag>
 		<Mime>inode/directory</Mime>
 		<ParentRName>/</ParentRName>
 	</Nodes>
@@ -630,7 +630,7 @@ const persistText = `<Root>
 		<Name>hello.txt</Name>
 		<Rname>/Documents/hello.txt</Rname>
 		<Sname>/tmp/rms/storage/32000000-0000-0000-0000-000000000000</Sname>
-		<ETag>ea724748ce53d55deb465a6d045fd160</ETag>
+		<ETag>f16ae1ac3fb0612504de673f9fc8a3eb</ETag>
 		<Mime>text/plain</Mime>
 		<Length>13</Length>
 		<LastMod>0001-01-01T00:00:00Z</LastMod>
@@ -640,7 +640,7 @@ const persistText = `<Root>
 		<Name>test.txt</Name>
 		<Rname>/Documents/test.txt</Rname>
 		<Sname>/tmp/rms/storage/31000000-0000-0000-0000-000000000000</Sname>
-		<ETag>10b3bf730d787feceec1d534a876dc5f</ETag>
+		<ETag>6ced7c51a3f41fa7c30c197a0ac3aa6f</ETag>
 		<Mime>text/plain</Mime>
 		<Length>20</Length>
 		<LastMod>0001-01-01T00:00:00Z</LastMod>
@@ -958,7 +958,7 @@ func ExamplePersist() {
 	// 	<Nodes IsFolder="true">
 	// 		<Name>Documents/</Name>
 	// 		<Rname>/Documents</Rname>
-	// 		<ETag>86f32f54096e02778610b22d1d6c56db</ETag>
+	// 		<ETag>53140660214dc410610c3ef93bbdd15d</ETag>
 	// 		<Mime>inode/directory</Mime>
 	// 		<ParentRName>/</ParentRName>
 	// 	</Nodes>
@@ -966,7 +966,7 @@ func ExamplePersist() {
 	// 		<Name>hello.txt</Name>
 	// 		<Rname>/Documents/hello.txt</Rname>
 	// 		<Sname>/tmp/rms/storage/32000000-0000-0000-0000-000000000000</Sname>
-	// 		<ETag>ea724748ce53d55deb465a6d045fd160</ETag>
+	// 		<ETag>f16ae1ac3fb0612504de673f9fc8a3eb</ETag>
 	// 		<Mime>text/plain</Mime>
 	// 		<Length>13</Length>
 	// 		<LastMod>0001-01-01T00:00:00Z</LastMod>
@@ -976,7 +976,7 @@ func ExamplePersist() {
 	// 		<Name>test.txt</Name>
 	// 		<Rname>/Documents/test.txt</Rname>
 	// 		<Sname>/tmp/rms/storage/31000000-0000-0000-0000-000000000000</Sname>
-	// 		<ETag>10b3bf730d787feceec1d534a876dc5f</ETag>
+	// 		<ETag>6ced7c51a3f41fa7c30c197a0ac3aa6f</ETag>
 	// 		<Mime>text/plain</Mime>
 	// 		<Length>20</Length>
 	// 		<LastMod>0001-01-01T00:00:00Z</LastMod>
@@ -984,8 +984,8 @@ func ExamplePersist() {
 	// 	</Nodes>
 	// </Root>
 	// Storage listing follows:
-	// {F} / [/] [6330643033303764]
-	//   {F} Documents/ [/Documents] [3836663332663534]
-	//     {D} hello.txt (text/plain, 13) [/Documents/hello.txt -> /tmp/rms/storage/32000000-0000-0000-0000-000000000000] [6561373234373438]
-	//     {D} test.txt (text/plain, 20) [/Documents/test.txt -> /tmp/rms/storage/31000000-0000-0000-0000-000000000000] [3130623362663733]
+	// {F} / [/] [6430346362333766]
+	//   {F} Documents/ [/Documents] [3533313430363630]
+	//     {D} hello.txt (text/plain, 13) [/Documents/hello.txt -> /tmp/rms/storage/32000000-0000-0000-0000-000000000000] [6631366165316163]
+	//     {D} test.txt (text/plain, 20) [/Documents/test.txt -> /tmp/rms/storage/31000000-0000-0000-0000-000000000000] [3663656437633531]
 }

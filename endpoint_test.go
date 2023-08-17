@@ -77,7 +77,7 @@ func ExampleGetFolder() {
 			log.Fatalf("%s %s: %s", r.Request.Method, r.Request.URL, r.Status)
 		}
 		fmt.Printf("Created ETag: %s\n", r.Header.Get("ETag"))
-		// Created ETag: f0d0f717619b09cc081bb0c11d9b9c6b
+		// Created ETag: ef528a27b48c1b187ef7116f7306358b
 	}
 
 	// GET the now NON-empty root folder
@@ -95,12 +95,12 @@ func ExampleGetFolder() {
 		}
 		fmt.Printf("Root ETag: %s\n", r.Header.Get("ETag"))
 		fmt.Print(string(bs))
-		// Root ETag: ef528a27b48c1b187ef7116f7306358b
+		// Root ETag: 6e39dd4634b22d22408e09e8cf0c9f82
 		// {
 		//   "@context": "http://remotestorage.io/spec/folder-description",
 		//   "items": {
 		//     "Documents/": {
-		//       "ETag": "cc4c6d3bbf39189be874992479b60e2a"
+		//       "ETag": "f7d6e4d650182817a94d6ae61fe6a772"
 		//     }
 		//   }
 		// }
@@ -121,14 +121,14 @@ func ExampleGetFolder() {
 		}
 		fmt.Printf("Documents/ ETag: %s\n", r.Header.Get("ETag"))
 		fmt.Print(string(bs))
-		// Documents/ ETag: cc4c6d3bbf39189be874992479b60e2a
+		// Documents/ ETag: f7d6e4d650182817a94d6ae61fe6a772
 		// {
 		//   "@context": "http://remotestorage.io/spec/folder-description",
 		//   "items": {
 		//     "First.txt": {
 		//       "Content-Length": 18,
 		//       "Content-Type": "funny/format",
-		//       "ETag": "f0d0f717619b09cc081bb0c11d9b9c6b",
+		//       "ETag": "ef528a27b48c1b187ef7116f7306358b",
 		//       "Last-Modified": "Mon, 01 Jan 0001 00:00:00 UTC"
 		//     }
 		//   }
@@ -138,11 +138,11 @@ func ExampleGetFolder() {
 	// Output:
 	// Root ETag: 03d871638b18f0b459bf8fd12a58f1d8
 	// {"@context":"http://remotestorage.io/spec/folder-description","items":{}}
-	// Created ETag: f0d0f717619b09cc081bb0c11d9b9c6b
-	// Root ETag: ef528a27b48c1b187ef7116f7306358b
-	// {"@context":"http://remotestorage.io/spec/folder-description","items":{"Documents/":{"ETag":"cc4c6d3bbf39189be874992479b60e2a"}}}
-	// Documents/ ETag: cc4c6d3bbf39189be874992479b60e2a
-	// {"@context":"http://remotestorage.io/spec/folder-description","items":{"First.txt":{"Content-Length":18,"Content-Type":"funny/format","ETag":"f0d0f717619b09cc081bb0c11d9b9c6b","Last-Modified":"Mon, 01 Jan 0001 00:00:00 UTC"}}}
+	// Created ETag: ef528a27b48c1b187ef7116f7306358b
+	// Root ETag: 6e39dd4634b22d22408e09e8cf0c9f82
+	// {"@context":"http://remotestorage.io/spec/folder-description","items":{"Documents/":{"ETag":"f7d6e4d650182817a94d6ae61fe6a772"}}}
+	// Documents/ ETag: f7d6e4d650182817a94d6ae61fe6a772
+	// {"@context":"http://remotestorage.io/spec/folder-description","items":{"First.txt":{"Content-Length":18,"Content-Type":"funny/format","ETag":"ef528a27b48c1b187ef7116f7306358b","Last-Modified":"Mon, 01 Jan 0001 00:00:00 UTC"}}}
 }
 
 // @todo: PUT test chunked transfer-encoding
@@ -153,7 +153,7 @@ func TestPutDocument(t *testing.T) {
 		testContent      = "The material is classified. Its composition is classified. Its use in the weapon is classified, and the process itself is classified."
 		testMime         = "top/secret"
 		testDocument     = "/Classified/FOGBANK.txt"
-		testDocumentEtag = "60ca7ee51a4a4886d00ae2470457b206"
+		testDocumentEtag = "f106b4d223935ad237e8903c6a2eb36f"
 	)
 	mockServer()
 	mux := http.NewServeMux()
@@ -212,10 +212,10 @@ func TestPutDocumentSame(t *testing.T) {
 		testDocument = "/Lyrics/STARSET.txt"
 
 		testContent1      = "I will travel the distance in your eyes Interstellar Light years from you"
-		testDocumentEtag1 = "33f7b41f98820961b12134677ba3f231"
+		testDocumentEtag1 = "9b7c85e3dab0b71cebd9743e7fad9f52"
 
 		testContent2      = "I will travel the distance in your eyes Interstellar Light years from you Supernova We'll fuse when we collide Awaking in the light of all the stars aligned"
-		testDocumentEtag2 = "063c77ac4aa257f9396f1b5cae956004"
+		testDocumentEtag2 = "250e941b92252859dddfd87dad341b14"
 	)
 	mockServer()
 	mux := http.NewServeMux()
@@ -325,10 +325,10 @@ func TestPutDocumentIfMatchSuccess(t *testing.T) {
 		testDocument = "/Lyrics/STARSET.txt"
 
 		testContent1      = "I will travel the distance in your eyes Interstellar Light years from you"
-		testDocumentEtag1 = "33f7b41f98820961b12134677ba3f231"
+		testDocumentEtag1 = "9b7c85e3dab0b71cebd9743e7fad9f52"
 
 		testContent2      = "I will travel the distance in your eyes Interstellar Light years from you Supernova We'll fuse when we collide Awaking in the light of all the stars aligned"
-		testDocumentEtag2 = "063c77ac4aa257f9396f1b5cae956004"
+		testDocumentEtag2 = "250e941b92252859dddfd87dad341b14"
 	)
 	mockServer()
 	mux := http.NewServeMux()
@@ -382,7 +382,7 @@ func TestPutDocumentIfMatchFail(t *testing.T) {
 		wrongETag    = "3de26fc06d5d1e20ff96a8142cd6fabf"
 
 		testContent1      = "I will travel the distance in your eyes Interstellar Light years from you"
-		testDocumentETag1 = "33f7b41f98820961b12134677ba3f231"
+		testDocumentETag1 = "9b7c85e3dab0b71cebd9743e7fad9f52"
 
 		testContent2 = "I will travel the distance in your eyes Interstellar Light years from you Supernova We'll fuse when we collide Awaking in the light of all the stars aligned"
 	)
@@ -437,7 +437,7 @@ func TestPutDocumentIfNonMatchSuccess(t *testing.T) {
 		testDocument = "/Lyrics/STARSET.txt"
 
 		testContent      = "I will travel the distance in your eyes Interstellar Light years from you"
-		testDocumentEtag = "33f7b41f98820961b12134677ba3f231"
+		testDocumentEtag = "9b7c85e3dab0b71cebd9743e7fad9f52"
 	)
 	mockServer()
 	mux := http.NewServeMux()
@@ -470,10 +470,10 @@ func TestPutDocumentIfNonMatchFail(t *testing.T) {
 		testDocument = "/Lyrics/STARSET.txt"
 
 		testContent1      = "I will travel the distance in your eyes Interstellar Light years from you"
-		testDocumentETag1 = "33f7b41f98820961b12134677ba3f231"
+		testDocumentETag1 = "9b7c85e3dab0b71cebd9743e7fad9f52"
 
 		testContent2      = "I will travel the distance in your eyes Interstellar Light years from you Supernova We'll fuse when we collide Awaking in the light of all the stars aligned"
-		testDocumentEtag2 = "063c77ac4aa257f9396f1b5cae956004"
+		testDocumentEtag2 = "e6258bdf4356eeb85334f8f2de857d3f"
 	)
 	mockServer()
 	mux := http.NewServeMux()
@@ -528,9 +528,9 @@ func TestPutDocumentSilentlyCreateAncestors(t *testing.T) {
 		testMime            = "wise/quote"
 		testDocument        = "/Quotes/Neal Stephenson.txt"
 		testDocumentName    = "Neal Stephenson.txt"
-		testDocumentEtag    = "3dc42d11db35b8354dc06c46a53c9c9d"
+		testDocumentEtag    = "b6c3b3eef63f4b9077cb8ad22934ba14"
 		testDocumentDir     = "/Quotes/"
-		testDocumentDirETag = "3de26fc06d5d1e20ff96a8142cd6fabf"
+		testDocumentDirETag = "3868c11b85d6af588df87f4d73237da6"
 	)
 	mockServer()
 	mux := http.NewServeMux()
@@ -629,19 +629,19 @@ func TestPutDocumentUpdatesAncestorETags(t *testing.T) {
 		testContent1      = "Run for the heavens Sing to the stars Love like a lover Shine in the dark Shout like an army Sound the alarm I am a burning [...] Heart"
 		testDocument1     = "/Lyrics/SVRCINA.srt"
 		testDocument1Name = "SVRCINA.srt"
-		testDocument1ETag = "6f9cd924b8654c70d5bec5f96491f55e"
+		testDocument1ETag = "e441dd5f0422b305cf30bca3bbdefd68"
 
 		testContent2      = "I'm attracted to the sky To the sky To the sky Every life I learn to fly Learn to fly Learn to fly"
 		testDocument2     = "/Lyrics/Raizer.srt"
 		testDocument2Name = "Raizer.srt"
-		testDocument2ETag = "9323d12cc9b79190804d1c6b9c2708f3"
+		testDocument2ETag = "5150b056ebc4af9674806717d7a0ecd6"
 
 		testDocumentDir      = "/Lyrics/"
-		testDocumentDirETag1 = "bc42be34636d852ecd65d8b3a3857a62"
-		testDocumentDirETag2 = "6dedad00af566fbfbb811661e6f88387"
+		testDocumentDirETag1 = "25878842e53f4aacdcc46940e9bbe1bd"
+		testDocumentDirETag2 = "e573d0b6954cc13110e4baa481e35f9a"
 
-		testRootETag1 = "e441dd5f0422b305cf30bca3bbdefd68"
-		testRootETag2 = "628e5ebbbcf131c9103ebd51019d1b7e"
+		testRootETag1 = "bf101ee244dfdba96487dcb7fa0dd18f"
+		testRootETag2 = "ddfa5c20ac8c789ebbb552c59b27aa4c"
 	)
 	mockServer()
 	mux := http.NewServeMux()
@@ -768,7 +768,7 @@ func TestPutDocumentAutodetectContentType(t *testing.T) {
 “But look, you found the notice, didn’t you?”
 “Yes,” said Arthur, “yes I did. It was on display in the bottom of a locked filing cabinet stuck in a disused lavatory with a sign on the door saying ‘Beware of the Leopard.”`
 		testDocument     = "/Quotes/Douglas Adams"
-		testDocumentETag = "c1d56d2d5814cf52357a0129341402db"
+		testDocumentETag = "666b6cb64f90e66aa960ef47bf61bbb5"
 		testMime         = "application/octet-stream"
 	)
 	mockServer()
@@ -854,7 +854,7 @@ func TestPutDocumentClashesWithFolderFails(t *testing.T) {
 
 		testContent1      = "Run for the heavens Sing to the stars Love like a lover Shine in the dark Shout like an army Sound the alarm I am a burning [...] Heart"
 		testDocument1     = "/Lyrics/Favourite/SVRCINA.srt"
-		testDocument1ETag = "6f9cd924b8654c70d5bec5f96491f55e"
+		testDocument1ETag = "3dbd75b638098b9c71ffec31e78ce412"
 
 		testContent2  = "I'm attracted to the sky To the sky To the sky Every life I learn to fly Learn to fly Learn to fly"
 		testDocument2 = "/Lyrics/Favourite" // this is going to clash with the already existing /Lyrics/Favourite/ folder
@@ -927,7 +927,7 @@ func TestPutDocumentAncestorFolderClashesWithDocumentFails(t *testing.T) {
 
 		testContent1      = "Run for the heavens Sing to the stars Love like a lover Shine in the dark Shout like an army Sound the alarm I am a burning [...] Heart"
 		testDocument1     = "/Lyrics/Favourite"
-		testDocument1ETag = "421432bf1a9f22883bac81ad1714dd90"
+		testDocument1ETag = "429bdf3f4f788d6f522fd60042169bfa"
 
 		testContent2  = "I'm attracted to the sky To the sky To the sky Every life I learn to fly Learn to fly Learn to fly"
 		testDocument2 = "/Lyrics/Favourite/STARSET.srt" // /Lyrics/Favourite/ is going to clash with the already existing /Lyrics/Favourite document
@@ -1009,12 +1009,12 @@ func TestGetFolder(t *testing.T) {
 > -- <cite>ThePrimeagen, Twitch.tv</cite>`
 		testDocument     = "/Quotes/Twitch/ThePrimeagen.md"
 		testMime         = "text/plain; charset=utf-8"
-		testDocumentETag = "8c2d95a5232b32d1ad8c794313c0c549"
+		testDocumentETag = "41dfa341884bfed834d324277cc26dad"
 
 		testDocumentDir     = "/Quotes/Twitch/"
-		testDocumentDirETag = "25c3d4a9bc64c223d9b8c07e8336952d"
+		testDocumentDirETag = "a3e251b417a9b78281df743395a8b2b3"
 
-		responseBody = `{"@context":"http://remotestorage.io/spec/folder-description","items":{"ThePrimeagen.md":{"Content-Length":242,"Content-Type":"text/plain; charset=utf-8","ETag":"8c2d95a5232b32d1ad8c794313c0c549","Last-Modified":"Mon, 01 Jan 0001 00:00:00 UTC"}}}
+		responseBody = `{"@context":"http://remotestorage.io/spec/folder-description","items":{"ThePrimeagen.md":{"Content-Length":242,"Content-Type":"text/plain; charset=utf-8","ETag":"41dfa341884bfed834d324277cc26dad","Last-Modified":"Mon, 01 Jan 0001 00:00:00 UTC"}}}
 ` // don't forget newline
 	)
 
@@ -1143,10 +1143,10 @@ func TestGetFolderIfNonMatchRevMatches(t *testing.T) {
 		testContent      = `You may disagree with this idiom, and that's okay, because it's enforced by the compiler. You're welcome.`
 		testDocument     = "/public/go_devs_prbly"
 		testMime         = "text/joke"
-		testDocumentETag = "3e507240501005a29cc22520bd333f79"
+		testDocumentETag = "6a372e37db0bfb4240fe477f032c5ba6"
 
 		testDocumentDir     = "/public/"
-		testDocumentDirETag = "660d6f3f14d933aa8e60bb17e7cae7e8"
+		testDocumentDirETag = "25e6318e0d6291e73d3124d9d1819d7f"
 	)
 
 	{
@@ -1194,12 +1194,12 @@ func TestGetFolderIfNonMatchRevNoMatch(t *testing.T) {
 		testContent      = `You may disagree with this idiom, and that's okay, because it's enforced by the compiler. You're welcome.`
 		testDocument     = "/public/go_devs_prbly"
 		testMime         = "text/joke"
-		testDocumentETag = "3e507240501005a29cc22520bd333f79"
+		testDocumentETag = "6a372e37db0bfb4240fe477f032c5ba6"
 
 		testDocumentDir     = "/public/"
-		testDocumentDirETag = "660d6f3f14d933aa8e60bb17e7cae7e8"
+		testDocumentDirETag = "25e6318e0d6291e73d3124d9d1819d7f"
 
-		responseBody = `{"@context":"http://remotestorage.io/spec/folder-description","items":{"go_devs_prbly":{"Content-Length":105,"Content-Type":"text/joke","ETag":"3e507240501005a29cc22520bd333f79","Last-Modified":"Mon, 01 Jan 0001 00:00:00 UTC"}}}
+		responseBody = `{"@context":"http://remotestorage.io/spec/folder-description","items":{"go_devs_prbly":{"Content-Length":105,"Content-Type":"text/joke","ETag":"6a372e37db0bfb4240fe477f032c5ba6","Last-Modified":"Mon, 01 Jan 0001 00:00:00 UTC"}}}
 ` // don't forget newline
 	)
 
@@ -1263,7 +1263,7 @@ func TestGetFolderThatIsADocumentFails(t *testing.T) {
 	const (
 		testContent      = "Since I am innocent of this crime, sir, I find it decidedly inconvenient that the gun was never found."
 		testDocument     = "/Quotes/Movies/Shawshank Redemption"
-		testDocumentETag = "2939b3af2cf45877eb61987397486084"
+		testDocumentETag = "2cd20dc9cc76d950fdbc25acc36f724f"
 
 		testDirThatActuallyIsADocument = "/Quotes/Movies/Shawshank Redemption/"
 	)
@@ -1303,8 +1303,8 @@ func TestHeadFolder(t *testing.T) {
 	defer ts.Close()
 
 	const (
-		testDocumentETag = "1d8fc022c47d2abb16e03f2765575a33"
-		rootETag         = "8bcad8e369ee8b5a6cfc069ca5b4d315"
+		testDocumentETag = "8bcad8e369ee8b5a6cfc069ca5b4d315"
+		rootETag         = "1efea8df94b2ede344547180f4fb3002"
 	)
 
 	{
@@ -1369,7 +1369,7 @@ func TestGetDocument(t *testing.T) {
 		testContent      = "Lisp is a perfectly logical language to use." // 😤
 		testMime         = "text/plain; charset=utf-8"
 		testDocument     = "/everyone/would/agree/Fridman Quote"
-		testDocumentETag = "1439461086c3263260ca619a30278741"
+		testDocumentETag = "ab7e8cd739bb5d94a3a24d3a6b756df0"
 	)
 
 	{
@@ -1463,7 +1463,7 @@ of the estate, decided to add a construct named 'class' which revolved
 around inheritance.`
 		testMime         = "text/plain; charset=utf-8"
 		testDocument     = "/gh/jesseduffield/OK"
-		testDocumentETag = "9e57ccd4ec8d848d413e3e363cd48cdc"
+		testDocumentETag = "c56336c060b8a95cc1af1f1e55136ce1"
 	)
 
 	{
@@ -1517,7 +1517,7 @@ of the estate, decided to add a construct named 'class' which revolved
 around inheritance.`
 		testMime         = "text/plain; charset=utf-8"
 		testDocument     = "/gh/jesseduffield/OK"
-		testDocumentETag = "9e57ccd4ec8d848d413e3e363cd48cdc"
+		testDocumentETag = "c56336c060b8a95cc1af1f1e55136ce1"
 	)
 
 	{
@@ -1583,7 +1583,7 @@ func TestGetDocumentThatIsAFolderFails(t *testing.T) {
 	const (
 		testContent      = "Since I am innocent of this crime, sir, I find it decidedly inconvenient that the gun was never found."
 		testDocument     = "/Quotes/Movies/Shawshank Redemption"
-		testDocumentETag = "2939b3af2cf45877eb61987397486084"
+		testDocumentETag = "2cd20dc9cc76d950fdbc25acc36f724f"
 
 		testDocThatActuallyIsAFolder = "/Quotes/Movies"
 	)
@@ -1626,7 +1626,7 @@ func TestHeadDocument(t *testing.T) {
 		testContent      = "Go is better than everything. In my opinion Go is even better than English."
 		testMime         = "text/plain; charset=us-ascii"
 		testDocument     = "/twitch.tv/ThePrimeagen"
-		testDocumentETag = "d53cc497c102d476599e7853cb3c5601"
+		testDocumentETag = "d45b36d4fcc60d594236508e50cbcdd4"
 	)
 
 	{
@@ -1683,20 +1683,20 @@ func TestDeleteDocument(t *testing.T) {
 	const (
 		testMime                = "text/plain; charset=utf-8"
 		testCommonAncestor      = "/home/"
-		testCommonAncestorETag1 = "59d054586b4316a31fcd76b434565d0e"
-		testCommonAncestorETag2 = "bdf46e2f1803235eb92ac0f939101d28"
+		testCommonAncestorETag1 = "c08117956226a4c41701b262f7fa9493"
+		testCommonAncestorETag2 = "7c88d34bb2bbb2d1e792716f324a948c"
 
-		testRootETag1 = "ed8ca43e261c8d2cf6dc7fb505859827"
-		testRootETag2 = "85e25d4cf67c9d01290b1ca02e6bf60f"
+		testRootETag1 = "049d7da62b7e9bcaf21140b4142dfde0"
+		testRootETag2 = "5f3e6abdf076d8105ff5d41fcd1e48c7"
 
 		testContent1      = "Rien n'est plus dangereux qu'une idée, quand on n'a qu'une idée"
 		testDocument1     = "/home/Chartier/idée"
-		testDocumentETag1 = "50156bf5e641d8d33cd7929e2a2146bd"
+		testDocumentETag1 = "14e6fca69c885d201b2cf5b30c929aa8"
 		testDocumentDir1  = "/home/Chartier/"
 
 		testContent2      = "Did you know that unsigned integers are faster than signed integers because your CPU doesn't have to autograph all of them as they go by?"
 		testDocument2     = "/home/gamozo/unsigned"
-		testDocumentETag2 = "456599fd6afcb9e611b0914147dd5550"
+		testDocumentETag2 = "85e25d4cf67c9d01290b1ca02e6bf60f"
 	)
 
 	// create document
@@ -1908,7 +1908,7 @@ func TestDeleteDocumentToFolder(t *testing.T) {
 		testContent      = "Did you know that unsigned integers are faster than signed integers because your CPU doesn't have to autograph all of them as they go by?"
 		testDocument     = "/home/gamozo/unsigned"
 		testDocumentDir  = "/home/gamozo/"
-		testDocumentETag = "456599fd6afcb9e611b0914147dd5550"
+		testDocumentETag = "85e25d4cf67c9d01290b1ca02e6bf60f"
 	)
 
 	{
@@ -1954,7 +1954,7 @@ func TestDeleteDocumentIfMatch(t *testing.T) {
 		testMime         = "text/plain; charset=utf-8"
 		testContent      = "Asking a question should not change the answer, and nor should asking it twice!"
 		testDocument     = "/home/Henney/Asking Questions"
-		testDocumentETag = "23527eb0b17c95022684c5b878a4c726"
+		testDocumentETag = "8feba501474aa57e655ef04d779196e1"
 	)
 
 	{
@@ -2019,7 +2019,7 @@ func TestDeleteDocumentIfMatchFail(t *testing.T) {
 		testMime         = "text/plain; charset=utf-8"
 		testContent      = "Tetris is an inventory management survival horror game, from the Soviet Union in 1984."
 		testDocument     = "/yt/suckerpinch/Harder Drive"
-		testDocumentETag = "59c0c4a04a46df78d9873e212ef3f57f"
+		testDocumentETag = "0daea784a3c72c074843baf751792133"
 	)
 
 	{
@@ -2090,7 +2090,7 @@ func TestUnauthorizedCanReadPublicDocument(t *testing.T) {
 		mime           = "text/plain; charset=utf-8"
 		publicDocument = "/public/somewhere/somedoc.txt"
 		content        = "A person who has not done one half his day's work by ten o'clock, runs a chance of leaving the other half undone."
-		etag           = "56371d17bb32d583e4131eacfdda53eb"
+		etag           = "02d6730d71284bfe82dd235bdefa83e1"
 	)
 
 	// PUT document with authorization
@@ -2198,7 +2198,7 @@ func TestUnauthorizedCannotAccessPublicFolder(t *testing.T) {
 		publicDocument    = "/public/Napoleon/quotes.txt"
 		publicDocumentDir = "/public/Napoleon/"
 		content           = "You can make a stop during the ascent, but not during the descent."
-		etag              = "12442797aace31d1efab9efd626c96bc"
+		etag              = "7ca83b7c4a8c00d6e2d8433604310841"
 	)
 
 	// PUT document with authorization
@@ -2262,7 +2262,7 @@ func TestUnauthorizedCannotAccessNonPublicDocument(t *testing.T) {
 		mime              = "text/plain; charset=utf-8"
 		nonPublicDocument = "/non-public/Rebel/Nikiforova.txt"
 		content           = "May every state's flag burn, leaving only ashes and the black banner as its negation. Rebel, rebel until all organs of power are eliminated."
-		etag              = "a19f7c5dcf8daaba9f1411a02d6b99e1"
+		etag              = "541857aae5f51d8ff9cfd66e1aee98b4"
 	)
 
 	// PUT document with authorization
@@ -2357,7 +2357,7 @@ func TestUnauthorizedCannotAccessNonPublicFolder(t *testing.T) {
 		nonPublicDocument    = "/non-public/Napoleon/Quotes.txt"
 		nonPublicDocumentDir = "/non-public/Napoleon/"
 		content              = "Death is nothing, but to live defeated and inglorious is to die daily."
-		etag                 = "28c579e7f6c8906fc24b8bd0b8087013"
+		etag                 = "e160a48b29fe9dce8c6240d07b12316b"
 	)
 
 	// PUT document with authorization
@@ -2424,7 +2424,7 @@ func TestAuthorizationRead(t *testing.T) {
 		mime     = "text/plain; charset=utf-8"
 		document = "/Pythagoras/Quotes.txt"
 		content  = "Silence is the loudest answer."
-		etag     = "476012c1b4644cc16a59db9315b280bc"
+		etag     = "d2a82a88392e9c84d7a20f06bf1b5b6a"
 	)
 
 	// PUT document with authorization
@@ -2546,7 +2546,7 @@ func TestAuthorizationReadPublic(t *testing.T) {
 		mime     = "text/plain; charset=utf-8"
 		document = "/public/Pythagoras/Quotes.txt"
 		content  = "Learn silence. With the quiet serenity of a meditative mind, listen, absorb, transcribe, and transform."
-		etag     = "6681e4aec13ebde1e542809292232218"
+		etag     = "d384ea5c083f09e35161e3bec30c8415"
 	)
 
 	// PUT document with authorization
@@ -2668,7 +2668,7 @@ func TestAuthorizationReadWrite(t *testing.T) {
 		mime     = "text/plain; charset=utf-8"
 		document = "/Pythagoras/Quotes.txt"
 		content  = "A man is never as big as when he is on his knees to help a child."
-		etag     = "d8d529c108d78c12c7356ab9f8ac3af2"
+		etag     = "d446454ce3cb4a2032eda7417f5bb4a7"
 	)
 
 	// PUT document with authorization
@@ -2790,7 +2790,7 @@ func TestAuthorizationReadWritePublic(t *testing.T) {
 		mime     = "text/plain; charset=utf-8"
 		document = "/public/Pythagoras/Quotes.txt"
 		content  = "Be silent, or let thy words be worth more than silence"
-		etag     = "e619d8ed176ca9848f0b978a9f8712fc"
+		etag     = "1634d83ac7bd03d8337efab08735cd2e"
 	)
 
 	// PUT document with authorization
@@ -2889,4 +2889,43 @@ func TestAuthorizationReadWritePublic(t *testing.T) {
 			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
 		}
 	}
+}
+
+func TestReplay(t *testing.T) {
+	t.SkipNow()
+
+	const (
+		rroot = "/storage/"
+		sroot = "/tmp/rms/storage/"
+	)
+	Mock(
+		WithDirectory(sroot),
+	)
+	opts := mustVal(Configure(rroot, sroot))
+	opts.AllowAnyReadWrite()
+	Reset()
+
+	Time = &ReplayTime{
+		Queue: []time.Time{},
+	}
+	UUID = &ReplayUUID{
+		Queue: []UUIDResult{},
+	}
+	ETag = &ReplayVersion{
+		Queue: []VersionResult{
+			{Result: []byte("A"), Err: nil},
+			{Result: []byte("B"), Err: nil},
+			{Result: []byte("C"), Err: nil},
+		},
+	}
+
+	log.Println(ETag.Version(nil))
+	log.Println(ETag.Version(nil))
+	log.Println(ETag.Version(nil))
+
+	//mux := http.NewServeMux()
+	//Register(mux)
+	//ts := httptest.NewServer(mux)
+	//remoteRoot := ts.URL + g.rroot
+	//defer ts.Close()
 }

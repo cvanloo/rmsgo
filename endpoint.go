@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cvanloo/rmsgo/etag"
 	"github.com/cvanloo/rmsgo/isdelve"
 	. "github.com/cvanloo/rmsgo/mock"
 )
@@ -91,7 +92,7 @@ func GetFolder(w http.ResponseWriter, r *http.Request) error {
 		})
 	}
 
-	etag, err := n.Version()
+	vers, err := n.Version()
 	if err != nil {
 		return WriteError(w, err) // internal server error
 	}
@@ -100,7 +101,7 @@ func GetFolder(w http.ResponseWriter, r *http.Request) error {
 		conds := strings.Split(condStr, ",")
 		for _, cond := range conds {
 			cond = strings.TrimSpace(cond)
-			rev, err := ParseETag(cond)
+			rev, err := etag.ParseETag(cond)
 			if err != nil {
 				// @note(#orig_error): it's ok to lose the original error,
 				// since it can only be caused by a malformed ETag.
@@ -114,7 +115,7 @@ func GetFolder(w http.ResponseWriter, r *http.Request) error {
 					Cause: ErrBadRequest,
 				})
 			}
-			if rev.Equal(etag) {
+			if rev.Equal(vers) {
 				return WriteError(w, ErrNotModified)
 			}
 		}
@@ -144,7 +145,7 @@ func GetFolder(w http.ResponseWriter, r *http.Request) error {
 	hs := w.Header()
 	hs.Set("Content-Type", "application/ld+json")
 	hs.Set("Cache-Control", "no-cache")
-	hs.Set("ETag", etag.String())
+	hs.Set("ETag", vers.String())
 	return json.NewEncoder(w).Encode(desc)
 }
 
@@ -173,7 +174,7 @@ func GetDocument(w http.ResponseWriter, r *http.Request) error {
 		})
 	}
 
-	etag, err := n.Version()
+	vers, err := n.Version()
 	if err != nil {
 		return WriteError(w, err) // internal server error
 	}
@@ -182,7 +183,7 @@ func GetDocument(w http.ResponseWriter, r *http.Request) error {
 		conds := strings.Split(condStr, ",")
 		for _, cond := range conds {
 			cond = strings.TrimSpace(cond)
-			rev, err := ParseETag(cond)
+			rev, err := etag.ParseETag(cond)
 			if err != nil {
 				// @note(#orig_error): it's ok to lose the original error,
 				// since it can only have been caused by a malformed ETag.
@@ -196,7 +197,7 @@ func GetDocument(w http.ResponseWriter, r *http.Request) error {
 					Cause: ErrBadRequest,
 				})
 			}
-			if rev.Equal(etag) {
+			if rev.Equal(vers) {
 				return WriteError(w, ErrNotModified)
 			}
 		}
@@ -209,7 +210,7 @@ func GetDocument(w http.ResponseWriter, r *http.Request) error {
 
 	hs := w.Header()
 	hs.Set("Cache-Control", "no-cache")
-	hs.Set("ETag", etag.String())
+	hs.Set("ETag", vers.String())
 	hs.Set("Content-Type", n.mime)
 	_, err = io.Copy(w, fd) // @perf: is this efficient for HEAD requests?
 	return err
@@ -253,7 +254,7 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if cond := r.Header.Get("If-Match"); cond != "" {
-		rev, err := ParseETag(cond)
+		rev, err := etag.ParseETag(cond)
 		if err != nil {
 			// @note(#orig_error): it's ok to lose the original error, since
 			// it can only be caused by a malformed ETag.
@@ -267,19 +268,19 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 				Cause: ErrBadRequest,
 			})
 		}
-		etag, err := n.Version()
+		vers, err := n.Version()
 		if err != nil {
 			return WriteError(w, err) // internal server error
 		}
-		w.Header().Set("ETag", etag.String())
-		if !etag.Equal(rev) {
+		w.Header().Set("ETag", vers.String())
+		if !vers.Equal(rev) {
 			return WriteError(w, HttpError{
 				Msg:  "version mismatch",
 				Desc: "The version provided in the If-Match header does not match the document's current version.",
 				Data: LDjson{
 					"rname":    rpath,
 					"if_match": cond,
-					"etag":     etag.String(),
+					"etag":     vers.String(),
 				},
 				Cause: ErrPreconditionFailed,
 			})
@@ -319,7 +320,7 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 			return WriteError(w, err) // internal server error
 		}
 	} else {
-		u, err := UUID()
+		u, err := UUID.NewRandom()
 		if err != nil {
 			return WriteError(w, err) // internal server error
 		}
@@ -405,13 +406,13 @@ func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 		})
 	}
 
-	etag, err := n.Version()
+	vers, err := n.Version()
 	if err != nil {
 		return WriteError(w, err) // internal server error
 	}
 
 	if cond := r.Header.Get("If-Match"); cond != "" {
-		rev, err := ParseETag(cond)
+		rev, err := etag.ParseETag(cond)
 		if err != nil {
 			// @note(#orig_error): it's ok to lose the original error, since
 			// it can only be caused by a malformed ETag.
@@ -425,15 +426,15 @@ func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 				Cause: ErrBadRequest,
 			})
 		}
-		if !etag.Equal(rev) {
-			w.Header().Set("ETag", etag.String())
+		if !vers.Equal(rev) {
+			w.Header().Set("ETag", vers.String())
 			return WriteError(w, HttpError{
 				Msg:  "version mismatch",
 				Desc: "The version provided in the If-Match header does not match the document's current version.",
 				Data: LDjson{
 					"rname":    rpath,
 					"if_match": cond,
-					"etag":     etag.String(),
+					"etag":     vers.String(),
 				},
 				Cause: ErrPreconditionFailed,
 			})
@@ -447,7 +448,7 @@ func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	hs := w.Header()
-	hs.Set("ETag", etag.String())
+	hs.Set("ETag", vers.String())
 	return nil
 }
 

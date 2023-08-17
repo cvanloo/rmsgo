@@ -1,4 +1,4 @@
-package rmsgo
+package etag
 
 import (
 	"crypto/md5"
@@ -8,9 +8,7 @@ import (
 	"log"
 	"os"
 	"sort"
-
-	. "github.com/cvanloo/rmsgo/mock"
-	"golang.org/x/exp/maps"
+	"time"
 )
 
 func init() {
@@ -24,6 +22,16 @@ func init() {
 // ETag is a short and unique identifier assigned to a specific version of a
 // remoteStorage resource.
 type ETag []byte
+
+type Node interface {
+	Reader() (io.ReadCloser, error)
+	Name() string
+	Length() int64
+	Mime() string
+	LastMod() time.Time
+	IsFolder() bool
+	Children() []Node
+}
 
 var hostname string
 
@@ -55,61 +63,46 @@ func (e ETag) Equal(other ETag) bool {
 	return true
 }
 
-func calculateETag(n *node) error {
+func CalculateETag(n Node) (ETag, error) {
 	hash := md5.New()
 	io.WriteString(hash, hostname)
 
-	ns := []*node{n}
+	ns := []Node{n}
 	for len(ns) > 0 {
 		cn := ns[0]
 		ns = ns[1:]
 
-		if cn.isFolder {
-			io.WriteString(hash, cn.name)
-			children := maps.Values(cn.children)
+		if cn.IsFolder() {
+			io.WriteString(hash, cn.Name())
+			children := cn.Children()
 			// Ensure that etag is deterministic by always hashing children in
 			// the same order.
 			sort.Slice(children, func(i, j int) bool {
-				return children[i].rname < children[j].rname
+				return children[i].Name() < children[j].Name()
 			})
 			ns = append(ns, children...)
 		} else {
-			io.WriteString(hash, cn.name)
-			io.WriteString(hash, cn.mime)
-			io.WriteString(hash, cn.lastMod.Format(timeFormat))
+			io.WriteString(hash, cn.Name())
+			io.WriteString(hash, cn.Mime())
+			io.WriteString(hash, cn.LastMod().Format(time.RFC1123))
 
-			fd, err := FS.Open(cn.sname)
+			fd, err := cn.Reader()
 			if err != nil {
-				return err
+				return nil, err
 			}
-
 			n, err := io.Copy(hash, fd)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			if cn.length != int64(n) {
-				return fmt.Errorf("etag: expected to read %d bytes, got: %d", cn.length, n)
+			if cn.Length() != int64(n) {
+				return nil, fmt.Errorf("etag: expected to read %d bytes, got: %d", cn.Length(), n)
 			}
-
 			err = fd.Close()
 			if err != nil {
-				return err
+				return nil, err
 			}
 		}
 	}
 
-	n.etag = hash.Sum(nil)
-	n.etagValid = true
-	return nil
-}
-
-func recalculateAncestorETags(n *node) error {
-	for n != nil {
-		err := calculateETag(n)
-		if err != nil {
-			return err
-		}
-		n = n.parent
-	}
-	return nil
+	return hash.Sum(nil), nil
 }
