@@ -2,6 +2,7 @@ package rmsgo
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	. "github.com/cvanloo/rmsgo/mock"
+	"github.com/google/uuid"
 )
 
 // @todo: test CORS
@@ -2892,7 +2894,7 @@ func TestAuthorizationReadWritePublic(t *testing.T) {
 }
 
 func TestReplay(t *testing.T) {
-	t.SkipNow()
+	//t.SkipNow()
 
 	const (
 		rroot = "/storage/"
@@ -2905,31 +2907,67 @@ func TestReplay(t *testing.T) {
 	opts.AllowAnyReadWrite()
 	Reset()
 
-	Time = &ReplayTime{
-		Queue: []time.Time{},
-	}
-	UUID = &ReplayUUID{
-		Queue: []UUIDResult{},
-	}
-	ETag = &ReplayVersion{
-		Queue: []VersionResult{
-			{Result: []byte("A"), Err: nil},
-			{Result: []byte("B"), Err: nil},
-			{Result: []byte("C"), Err: nil},
-		},
-	}
-
-	log.Println(ETag.Version(nil))
-	log.Println(ETag.Version(nil))
-	log.Println(ETag.Version(nil))
-
 	// {"time":"2023-08-17T18:56:43.356269992+02:00","level":"DEBUG","msg":"UUIDer","result":"f319359f-58a2-470c-b309-1cf2e91feea2","error":null}
 	// {"time":"2023-08-17T18:56:43.356419445+02:00","level":"DEBUG","msg":"Timer","result":"2023-08-17T18:56:43.356417441+02:00"}
 	// {"time":"2023-08-17T18:56:43.356473216+02:00","level":"DEBUG","msg":"Versioner","result":"zRUldnf4gvrlP8zQw0IdKw==","error":null}
+
+	times := []time.Time{}
+	uuids := []UUIDResult{}
+	versions := []VersionResult{}
+
+	var logs struct {
+		Logs []LogDTO `json:"logs"`
+	}
+	err := json.Unmarshal([]byte(logOutput), &logs)
+	if err != nil {
+		t.Error(err)
+	}
+	for _, l := range logs.Logs {
+		switch l.Msg {
+		case "Versioner":
+			b, err := base64.StdEncoding.DecodeString(l.Result)
+			if err != nil {
+				t.Fatal(err)
+			}
+			versions = append(versions, VersionResult{
+				Result: b,
+				Err:    l.Err,
+			})
+		case "Timer":
+			pt, err := time.Parse("2006-01-02T15:04:05-07:00", l.Result)
+			if err != nil {
+				t.Fatal(err)
+			}
+			times = append(times, pt)
+		case "UUIDer":
+			uuids = append(uuids, UUIDResult{
+				Result: uuid.UUID([]byte(l.Result)[:16]),
+				Err:    l.Err,
+			})
+		}
+	}
+
+	Time = &ReplayTime{Queue: times}
+	UUID = &ReplayUUID{Queue: uuids}
+	ETag = &ReplayVersion{Queue: versions}
+
+	log.Println(ETag.Version(nil))
 
 	//mux := http.NewServeMux()
 	//Register(mux)
 	//ts := httptest.NewServer(mux)
 	//remoteRoot := ts.URL + g.rroot
 	//defer ts.Close()
+}
+
+const logOutput = `{"logs":[{"time":"2023-08-17T18:56:43.356269992+02:00","level":"DEBUG","msg":"UUIDer","result":"f319359f-58a2-470c-b309-1cf2e91feea2","error":null},
+{"time":"2023-08-17T18:56:43.356419445+02:00","level":"DEBUG","msg":"Timer","result":"2023-08-17T18:56:43.356417441+02:00"},
+{"time":"2023-08-17T18:56:43.356473216+02:00","level":"DEBUG","msg":"Versioner","result":"zRUldnf4gvrlP8zQw0IdKw==","error":null}]}`
+
+type LogDTO struct {
+	Time   time.Time `json:"time"`
+	Level  string    `json:"level"`
+	Msg    string    `json:"msg"`
+	Result string    `json:"result"`
+	Err    error     `json:"error"`
 }
