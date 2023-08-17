@@ -31,7 +31,6 @@ func (vl VersionLogger) Version(n etag.Node) (etag.ETag, error) {
 }
 
 type VersionResult struct {
-	LogDTO
 	Result etag.ETag `json:"etag"`
 	Err    error     `json:"error"`
 }

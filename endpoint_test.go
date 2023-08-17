@@ -2916,27 +2916,38 @@ func TestReplay(t *testing.T) {
 		t.Error(err)
 	}
 	for _, raw := range rawObjects {
-		var uuidObj UUIDResult
-		if err := json.Unmarshal(raw, &uuidObj); err != nil {
-			uuids = append(uuids, uuidObj)
-			continue
+		var logDto LogDTO
+		if err := json.Unmarshal(raw, &logDto); err != nil {
+			t.Error(err)
 		}
-		var versObj VersionResult
-		if err := json.Unmarshal(raw, &versObj); err != nil {
-			versions = append(versions, versObj)
-			continue
-		}
-		var timeObj TimeResult
-		if err := json.Unmarshal(raw, &timeObj); err != nil {
+		switch logDto.Msg {
+		case "Timer":
+			var timeObj TimeResult
+			if err := json.Unmarshal(raw, &timeObj); err != nil {
+				t.Error(err)
+			}
 			times = append(times, timeObj)
-			continue
-		}
-		var requestObj RequestDTO
-		if err := json.Unmarshal(raw, &requestObj); err != nil {
+		case "Versioner":
+			var versObj VersionResult
+			if err := json.Unmarshal(raw, &versObj); err != nil {
+				t.Error(err)
+			}
+			versions = append(versions, versObj)
+		case "UUIDer":
+			var uuidObj UUIDResult
+			if err := json.Unmarshal(raw, &uuidObj); err != nil {
+				t.Error(err)
+			}
+			uuids = append(uuids, uuidObj)
+		case "Request":
+			var requestObj RequestDTO
+			if err := json.Unmarshal(raw, &requestObj); err != nil {
+				t.Error(err)
+			}
 			requests = append(requests, requestObj)
-			continue
+		default:
+			t.Errorf("could not parse log statement: %s", raw)
 		}
-		t.Fatalf("could not parse log statement: %s", raw)
 	}
 
 	Time = &ReplayTime{Queue: times}
@@ -2949,11 +2960,11 @@ func TestReplay(t *testing.T) {
 	defer ts.Close()
 
 	for _, reqData := range requests {
-		req, err := http.NewRequest(reqData.Method, reqData.Uri, nil)
-		req.Header = reqData.Headers
+		req, err := http.NewRequest(reqData.Method, ts.URL+reqData.Uri, nil)
 		if err != nil {
 			t.Error(err)
 		}
+		req.Header = reqData.Headers
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
@@ -2963,15 +2974,20 @@ func TestReplay(t *testing.T) {
 }
 
 const logOutput = `[
-	{"time":"2023-08-17T20:03:12.25393486+02:00","level":"DEBUG","msg":"Timer","now":"2023-08-17T20:03:12.253932255+02:00"},
-	{"time":"2023-08-17T20:03:12.253799534+02:00","level":"DEBUG","msg":"UUIDer","uuid":"2959c687-d719-4a9f-b35f-b356a475f0f2","error":null},
-	{"time":"2023-08-17T20:03:12.253990635+02:00","level":"DEBUG","msg":"Versioner","etag":"0eced0c10637bc4a8d010035a445f60d","error":null},
-	{"time":"2023-08-17T20:03:12.254004732+02:00","level":"INFO","msg":"Request","method":"PUT","uri":"/storage/Documents/hello.txt","headers":{"Accept":["*/*"],"Content-Length":["13"],"Content-Type":["text/plain"],"User-Agent":["curl/8.2.1"]},"duration":226368,"status":201,"size":0}
+	{"time":"2023-08-17T20:58:50.787026841+02:00","level":"DEBUG","msg":"UUIDer","uuid":"d4414dfb-cedd-48c6-ace2-4d27a6954dee","error":null},
+	{"time":"2023-08-17T20:58:50.787159462+02:00","level":"DEBUG","msg":"Timer","now":"2023-08-17T20:58:50.787157409+02:00"},
+	{"time":"2023-08-17T20:58:50.787209367+02:00","level":"DEBUG","msg":"Versioner","etag":"db7186e3684f2301e978f33c848b68ee","error":null},
+	{"time":"2023-08-17T20:58:50.78722173+02:00","level":"INFO","msg":"Request","method":"PUT","uri":"/storage/Documents/hello.txt","headers":{"Accept":["*/*"],"Content-Length":["13"],"Content-Type":["text/plain"],"User-Agent":["curl/8.2.1"]},"duration":216569,"status":201,"size":0}
 ]`
 
 type RequestDTO struct {
-	LogDTO
 	Method  string              `json:"method"`
 	Uri     string              `json:"uri"`
 	Headers map[string][]string `json:"headers"`
+}
+
+type LogDTO struct {
+	Time  time.Time `json:"time"`
+	Level string    `json:"level"`
+	Msg   string    `json:"msg"`
 }

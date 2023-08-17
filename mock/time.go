@@ -32,7 +32,6 @@ func (tl TimeLogger) Now() time.Time {
 }
 
 type TimeResult struct {
-	LogDTO
 	Result time.Time `json:"now"`
 }
 

@@ -33,7 +33,6 @@ func (ul UUIDLogger) NewRandom() (uuid.UUID, error) {
 }
 
 type UUIDResult struct {
-	LogDTO
 	Result uuid.UUID `json:"uuid"`
 	Err    error     `json:"error"`
 }
