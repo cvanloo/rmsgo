@@ -42,12 +42,8 @@ func ParseETag(s string) (ETag, error) {
 }
 
 func (e ETag) Equal(other ETag) bool {
-	le := len(e)
-	lo := len(other)
-	if le != lo {
-		return false
-	}
-	for i := 0; i < le; i++ {
+	assert(len(e) == len(other), "comparison with malformed ETag")
+	for i := 0; i < len(e); i++ {
 		if e[i] != other[i] {
 			return false
 		}
@@ -100,16 +96,5 @@ func calculateETag(n *node) error {
 
 	n.etag = hash.Sum(nil)
 	n.etagValid = true
-	return nil
-}
-
-func recalculateAncestorETags(n *node) error {
-	for n != nil {
-		err := calculateETag(n)
-		if err != nil {
-			return err
-		}
-		n = n.parent
-	}
 	return nil
 }
