@@ -27,4 +27,4 @@ clean:
 	-rm coverage.out
 
 coverage.out:
-	@go test -tags=delve -coverprofile=coverage.out
+	@go test -tags=delve -coverprofile=coverage.out ./...
