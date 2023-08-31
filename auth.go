@@ -19,6 +19,9 @@ type (
 	// ReadWriteUser is a User with read and write access to any folder.
 	ReadWriteUser struct{}
 
+	// ReadPublicUser is a User with read permissions only to public folders.
+	ReadPublicUser struct{}
+
 	Level string
 	key   int
 )
@@ -31,12 +34,20 @@ var (
 	LevelReadWrite Level = ":rw"
 )
 
+var _ User = (*ReadOnlyUser)(nil)
+var _ User = (*ReadWriteUser)(nil)
+var _ User = (*ReadPublicUser)(nil)
+
 func (ReadOnlyUser) Permission(name string) Level {
 	return LevelRead
 }
 
 func (ReadWriteUser) Permission(name string) Level {
 	return LevelReadWrite
+}
+
+func (ReadPublicUser) Permission(name string) Level {
+	return LevelNone
 }
 
 func UserFromContext(ctx context.Context) (User, bool) {

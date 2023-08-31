@@ -150,6 +150,7 @@ func Configure(remoteRoot, storageRoot string) (*Options, error) {
 			log.Printf("rmsgo: unhandled error: %v\n", err)
 		},
 		defaultUser: ReadOnlyUser{},
+		//defaultUser: ReadPublicUser{},
 		authenticate: func(r *http.Request, bearer string) (User, bool) {
 			return g.defaultUser, true
 		},
