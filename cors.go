@@ -6,10 +6,9 @@ import (
 )
 
 var (
-	errCorsFail          = ErrForbidden
-	allowFolderMethods   = []string{"HEAD", "GET", "PUT", "DELETE"}
-	allowDocumentMethods = []string{"HEAD", "GET", "PUT", "DELETE"}
-	allowHeaders         = []string{
+	errCorsFail  = ErrForbidden
+	allowMethods = []string{"HEAD", "GET", "PUT", "DELETE"}
+	allowHeaders = []string{
 		"Authorization",
 		"Content-Length",
 		"Content-Type",
@@ -62,12 +61,6 @@ func preflight(w http.ResponseWriter, r *http.Request) error {
 		return WriteError(w, errCorsFail)
 	}
 
-	var allowMethods []string
-	if isFolder {
-		allowMethods = allowFolderMethods
-	} else {
-		allowMethods = allowDocumentMethods
-	}
 	reqMethod := strings.ToUpper(r.Header.Get("Access-Control-Request-Method"))
 	reqMethodAllowed := false
 	if reqMethod == http.MethodOptions {
