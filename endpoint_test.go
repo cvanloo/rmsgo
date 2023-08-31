@@ -14,8 +14,6 @@ import (
 	. "github.com/cvanloo/rmsgo/mock"
 )
 
-// @todo: test CORS
-
 func mockServer() {
 	const (
 		rroot = "/storage/"
@@ -2888,5 +2886,752 @@ func TestAuthorizationReadWritePublic(t *testing.T) {
 		if r.StatusCode != http.StatusOK {
 			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
 		}
+	}
+}
+
+func TestPreflightAllowAny(t *testing.T) {
+	const (
+		rroot = "/storage/"
+		sroot = "/tmp/rms/storage/"
+	)
+	Mock(
+		WithDirectory(sroot),
+	)
+	opts := mustVal(Configure(rroot, sroot))
+	_ = opts
+	Reset()
+
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + g.rroot
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Origin", "my.example.com")
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	req.Header.Set("Access-Control-Request-Headers", "Authorization")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusNoContent {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNoContent))
+	}
+}
+
+func TestOptionsAllowAny(t *testing.T) {
+	const (
+		rroot = "/storage/"
+		sroot = "/tmp/rms/storage/"
+	)
+	Mock(
+		WithDirectory(sroot),
+	)
+	opts := mustVal(Configure(rroot, sroot))
+	_ = opts
+	Reset()
+
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + g.rroot
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodGet, remoteRoot+"/", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Origin", "my.example.com")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusOK {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+	}
+}
+
+func TestPreflightAllowSpecific(t *testing.T) {
+	const (
+		rroot = "/storage/"
+		sroot = "/tmp/rms/storage/"
+	)
+	Mock(
+		WithDirectory(sroot),
+	)
+	opts := mustVal(Configure(rroot, sroot))
+	opts.UseAllowedOrigins([]string{"other.example.com", "my.example.com"})
+	Reset()
+
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + g.rroot
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Origin", "my.example.com")
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	req.Header.Set("Access-Control-Request-Headers", "Authorization")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusNoContent {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNoContent))
+	}
+}
+
+func TestOptionsAllowSpecific(t *testing.T) {
+	const (
+		rroot = "/storage/"
+		sroot = "/tmp/rms/storage/"
+	)
+	Mock(
+		WithDirectory(sroot),
+	)
+	opts := mustVal(Configure(rroot, sroot))
+	opts.UseAllowedOrigins([]string{"other.example.com", "my.example.com"})
+	Reset()
+
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + g.rroot
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodGet, remoteRoot+"/", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Origin", "my.example.com")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusOK {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+	}
+}
+
+func TestPreflightAllowCustom(t *testing.T) {
+	const (
+		rroot = "/storage/"
+		sroot = "/tmp/rms/storage/"
+	)
+	Mock(
+		WithDirectory(sroot),
+	)
+	opts := mustVal(Configure(rroot, sroot))
+	opts.UseAllowOrigin(func(r *http.Request, origin string) bool {
+		return origin == "my.example.com"
+	})
+	Reset()
+
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + g.rroot
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Origin", "my.example.com")
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	req.Header.Set("Access-Control-Request-Headers", "Authorization")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusNoContent {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNoContent))
+	}
+}
+
+func TestOptionsAllowCustom(t *testing.T) {
+	const (
+		rroot = "/storage/"
+		sroot = "/tmp/rms/storage/"
+	)
+	Mock(
+		WithDirectory(sroot),
+	)
+	opts := mustVal(Configure(rroot, sroot))
+	opts.UseAllowOrigin(func(r *http.Request, origin string) bool {
+		return origin == "my.example.com"
+	})
+	Reset()
+
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + g.rroot
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodGet, remoteRoot+"/", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Origin", "my.example.com")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusOK {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+	}
+}
+
+func TestPreflightAllowSpecificFail(t *testing.T) {
+	const (
+		rroot = "/storage/"
+		sroot = "/tmp/rms/storage/"
+	)
+	Mock(
+		WithDirectory(sroot),
+	)
+	opts := mustVal(Configure(rroot, sroot))
+	opts.UseAllowedOrigins([]string{"other.example.com", "my.example.com"})
+	Reset()
+
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + g.rroot
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Origin", "wrong.example.com")
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	req.Header.Set("Access-Control-Request-Headers", "Authorization")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusForbidden {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+	}
+}
+
+func TestOptionsAllowSpecificFail(t *testing.T) {
+	const (
+		rroot = "/storage/"
+		sroot = "/tmp/rms/storage/"
+	)
+	Mock(
+		WithDirectory(sroot),
+	)
+	opts := mustVal(Configure(rroot, sroot))
+	opts.UseAllowedOrigins([]string{"other.example.com", "my.example.com"})
+	Reset()
+
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + g.rroot
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodGet, remoteRoot+"/", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Origin", "wrong.example.com")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusForbidden {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+	}
+}
+
+func TestPreflightAllowCustomFail(t *testing.T) {
+	const (
+		rroot = "/storage/"
+		sroot = "/tmp/rms/storage/"
+	)
+	Mock(
+		WithDirectory(sroot),
+	)
+	opts := mustVal(Configure(rroot, sroot))
+	opts.UseAllowOrigin(func(r *http.Request, origin string) bool {
+		return origin == "my.example.com"
+	})
+	Reset()
+
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + g.rroot
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Origin", "wrong.example.com")
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	req.Header.Set("Access-Control-Request-Headers", "Authorization")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusForbidden {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+	}
+}
+
+func TestOptionsAllowCustomFail(t *testing.T) {
+	const (
+		rroot = "/storage/"
+		sroot = "/tmp/rms/storage/"
+	)
+	Mock(
+		WithDirectory(sroot),
+	)
+	opts := mustVal(Configure(rroot, sroot))
+	opts.UseAllowOrigin(func(r *http.Request, origin string) bool {
+		return origin == "my.example.com"
+	})
+	Reset()
+
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + g.rroot
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodGet, remoteRoot+"/", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Origin", "wrong.example.com")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusForbidden {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+	}
+}
+
+func TestPreflightNotFoundFail(t *testing.T) {
+	const (
+		rroot = "/storage/"
+		sroot = "/tmp/rms/storage/"
+	)
+	Mock(
+		WithDirectory(sroot),
+	)
+	opts := mustVal(Configure(rroot, sroot))
+	_ = opts
+	Reset()
+
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + g.rroot
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/not/found/", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Origin", "my.example.com")
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	req.Header.Set("Access-Control-Request-Headers", "Authorization")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusForbidden {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+	}
+}
+
+func TestOptionsNotFoundFail(t *testing.T) {
+	const (
+		rroot = "/storage/"
+		sroot = "/tmp/rms/storage/"
+	)
+	Mock(
+		WithDirectory(sroot),
+	)
+	opts := mustVal(Configure(rroot, sroot))
+	_ = opts
+	Reset()
+
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + g.rroot
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodGet, remoteRoot+"/not/found", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Origin", "my.example.com")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusNotFound {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNotFound))
+	}
+}
+
+func TestPreflightADocumentIsNotAFolderFail(t *testing.T) {
+	const (
+		rroot = "/storage/"
+		sroot = "/tmp/rms/storage/"
+	)
+	Mock(
+		WithDirectory(sroot),
+	)
+	opts := mustVal(Configure(rroot, sroot))
+	opts.AllowAnyReadWrite()
+	Reset()
+
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + g.rroot
+	defer ts.Close()
+
+	// PUT a document
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+"/hello", bytes.NewReader([]byte("Hello, World!")))
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Fatalf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		}
+	}
+
+	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/hello/", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Origin", "my.example.com")
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	req.Header.Set("Access-Control-Request-Headers", "Authorization")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusForbidden {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+	}
+}
+
+func TestOptionsADocumentIsNotAFolderFail(t *testing.T) {
+	const (
+		rroot = "/storage/"
+		sroot = "/tmp/rms/storage/"
+	)
+	Mock(
+		WithDirectory(sroot),
+	)
+	opts := mustVal(Configure(rroot, sroot))
+	opts.AllowAnyReadWrite()
+	Reset()
+
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + g.rroot
+	defer ts.Close()
+
+	// PUT a document
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+"/hello", bytes.NewReader([]byte("Hello, World!")))
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Fatalf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		}
+	}
+
+	req, err := http.NewRequest(http.MethodGet, remoteRoot+"/hello/", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Origin", "my.example.com")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusBadRequest {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusBadRequest))
+	}
+}
+
+func TestPreflightAFolderIsNotADocumentFail(t *testing.T) {
+	const (
+		rroot = "/storage/"
+		sroot = "/tmp/rms/storage/"
+	)
+	Mock(
+		WithDirectory(sroot),
+	)
+	opts := mustVal(Configure(rroot, sroot))
+	opts.AllowAnyReadWrite()
+	Reset()
+
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + g.rroot
+	defer ts.Close()
+
+	// PUT a document
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+"/hello/ignore", bytes.NewReader([]byte("Ignore")))
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Fatalf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		}
+	}
+
+	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/hello", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Origin", "my.example.com")
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	req.Header.Set("Access-Control-Request-Headers", "Authorization")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusForbidden {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+	}
+}
+
+func TestOptionsAFolderIsNotADocumentFail(t *testing.T) {
+	const (
+		rroot = "/storage/"
+		sroot = "/tmp/rms/storage/"
+	)
+	Mock(
+		WithDirectory(sroot),
+	)
+	opts := mustVal(Configure(rroot, sroot))
+	opts.AllowAnyReadWrite()
+	Reset()
+
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + g.rroot
+	defer ts.Close()
+
+	// PUT a document
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+"/hello/ignore", bytes.NewReader([]byte("Ignore")))
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Fatalf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		}
+	}
+
+	req, err := http.NewRequest(http.MethodGet, remoteRoot+"/hello", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Origin", "my.example.com")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusBadRequest {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusBadRequest))
+	}
+}
+
+func TestPreflightMethodFail(t *testing.T) {
+	const (
+		rroot = "/storage/"
+		sroot = "/tmp/rms/storage/"
+	)
+	Mock(
+		WithDirectory(sroot),
+	)
+	opts := mustVal(Configure(rroot, sroot))
+	_ = opts
+	Reset()
+
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + g.rroot
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Origin", "my.example.com")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	req.Header.Set("Access-Control-Request-Headers", "Authorization")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusForbidden {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+	}
+}
+
+func TestPreflightHeaderFail(t *testing.T) {
+	const (
+		rroot = "/storage/"
+		sroot = "/tmp/rms/storage/"
+	)
+	Mock(
+		WithDirectory(sroot),
+	)
+	opts := mustVal(Configure(rroot, sroot))
+	_ = opts
+	Reset()
+
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + g.rroot
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Origin", "my.example.com")
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	req.Header.Set("Access-Control-Request-Headers", "Whatever")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusForbidden {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+	}
+}
+
+func TestPreflightOptions(t *testing.T) {
+	const (
+		rroot = "/storage/"
+		sroot = "/tmp/rms/storage/"
+	)
+	Mock(
+		WithDirectory(sroot),
+	)
+	opts := mustVal(Configure(rroot, sroot))
+	_ = opts
+	Reset()
+
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + g.rroot
+	defer ts.Close()
+
+	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Origin", "my.example.com")
+	req.Header.Set("Access-Control-Request-Method", "OPTIONS")
+	req.Header.Set("Access-Control-Request-Headers", "Authorization")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusNoContent {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNoContent))
+	}
+}
+
+func TestPreflightDocument(t *testing.T) {
+	const (
+		rroot = "/storage/"
+		sroot = "/tmp/rms/storage/"
+	)
+	Mock(
+		WithDirectory(sroot),
+	)
+	opts := mustVal(Configure(rroot, sroot))
+	opts.AllowAnyReadWrite()
+	Reset()
+
+	mux := http.NewServeMux()
+	Register(mux)
+	ts := httptest.NewServer(mux)
+	remoteRoot := ts.URL + g.rroot
+	defer ts.Close()
+
+	// PUT a document
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+"/hello", bytes.NewReader([]byte("Hello, World!")))
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Fatalf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		}
+	}
+
+	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/hello", nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Set("Origin", "my.example.com")
+	req.Header.Set("Access-Control-Request-Method", "PUT")
+	req.Header.Set("Access-Control-Request-Headers", "Authorization")
+	r, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+	if r.StatusCode != http.StatusNoContent {
+		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNoContent))
 	}
 }

@@ -5,60 +5,75 @@ import (
 	"strings"
 )
 
+var (
+	errCorsFail          = ErrForbidden
+	allowFolderMethods   = []string{"HEAD", "GET", "PUT", "DELETE"}
+	allowDocumentMethods = []string{"HEAD", "GET", "PUT", "DELETE"}
+	allowHeaders         = []string{
+		"Authorization",
+		"Content-Length",
+		"Content-Type",
+		"Origin",
+		"X-Requested-With",
+		"If-Match",
+		"If-None-Match",
+	}
+)
+
 func handleCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodOptions {
-			preflight(w, r)
-			w.WriteHeader(http.StatusNoContent) // do NOT pass on to next handler
+			err := preflight(w, r)
+			if err != nil {
+				g.unhandled(err)
+			}
+			// do NOT pass on to next handler
 		} else {
-			cors(w, r)
+			err := cors(w, r)
+			if err != nil {
+				g.unhandled(err)
+			}
 			next.ServeHTTP(w, r)
 		}
 	})
 }
 
-func preflight(w http.ResponseWriter, r *http.Request) {
-	allowedHeaders := []string{"Authorization", "Content-Length", "Content-Type", "Origin", "X-Requested-With", "If-Match", "If-None-Match"}
-
+func preflight(w http.ResponseWriter, r *http.Request) error {
 	path := strings.TrimPrefix(r.URL.Path, g.rroot)
-	isFolder := false
-	if path[len(path)-1] == '/' {
-		isFolder = true
-	}
-
-	n, err := Retrieve(path)
-	if err != nil { // not found
-		return
-	}
-	if n.isFolder != isFolder { // malformed request
-		return
-	}
-
-	var allowedMethods []string // @fixme: HEAD implied by GET?
-	if isFolder {
-		allowedMethods = []string{"GET", "PUT", "DELETE"}
-	} else {
-		allowedMethods = []string{"GET"}
-	}
+	isFolder := path[len(path)-1] == '/'
 
 	hs := w.Header()
-	origin := r.Header.Get("Origin")
 
+	// always set Vary headers
 	hs.Add("Vary", "Origin")
 	hs.Add("Vary", "Access-Control-Request-Method")
 	hs.Add("Vary", "Access-Control-Request-Headers")
 
-	if origin == "" {
-		return
+	origin := r.Header.Get("Origin")
+	if !(g.allowAllOrigins || g.allowOrigin(r, origin)) {
+		return WriteError(w, errCorsFail)
 	}
 
-	reqMethod := r.Header.Get("Access-Control-Request-Method")
-	reqMethod = strings.ToUpper(reqMethod)
+	n, err := Retrieve(path)
+	if err != nil { // not found
+		return WriteError(w, errCorsFail)
+	}
+	if n.isFolder != isFolder { // malformed request
+		return WriteError(w, errCorsFail)
+	}
+
+	var allowMethods []string
+	if isFolder {
+		allowMethods = allowFolderMethods
+	} else {
+		allowMethods = allowDocumentMethods
+	}
+	reqMethod := strings.ToUpper(r.Header.Get("Access-Control-Request-Method"))
 	reqMethodAllowed := false
 	if reqMethod == http.MethodOptions {
 		reqMethodAllowed = true
 	} else {
-		for _, m := range allowedMethods {
+		for _, m := range allowMethods {
 			if m == reqMethod {
 				reqMethodAllowed = true
 				break
@@ -66,21 +81,20 @@ func preflight(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !reqMethodAllowed {
-		return
+		return WriteError(w, errCorsFail)
 	}
 
-	reqHeadersStr := strings.Join(r.Header.Values("Access-Control-Request-Headers"), ",")
-	reqHeaders := strings.Split(reqHeadersStr, ",")
+	reqHeaders := strings.Split(strings.Join(r.Header.Values("Access-Control-Request-Headers"), ","), ",") // not a nop
 	for _, reqHeader := range reqHeaders {
-		reqHeader = strings.TrimSpace(reqHeader)
+		reqHeader = http.CanonicalHeaderKey(strings.TrimSpace(reqHeader))
 		reqHeaderAllowed := false
-		for _, h := range allowedHeaders {
+		for _, h := range allowHeaders {
 			if h == reqHeader {
 				reqHeaderAllowed = true
 			}
 		}
 		if !reqHeaderAllowed {
-			return
+			return WriteError(w, errCorsFail)
 		}
 	}
 
@@ -90,22 +104,22 @@ func preflight(w http.ResponseWriter, r *http.Request) {
 		hs.Set("Access-Control-Allow-Origin", origin)
 	}
 
-	hs.Set("Access-Control-Allow-Methods", strings.Join(allowedMethods, ", "))
-	hs.Set("Access-Control-Allow-Headers", strings.Join(allowedHeaders, ", "))
+	hs.Set("Access-Control-Allow-Methods", strings.Join(allowMethods, ", "))
+	hs.Set("Access-Control-Allow-Headers", strings.Join(allowHeaders, ", "))
+
+	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
 
-func cors(w http.ResponseWriter, r *http.Request) {
+func cors(w http.ResponseWriter, r *http.Request) error {
 	hs := w.Header()
-	origin := r.Header.Get("Origin")
 
+	// always set Vary header
 	hs.Set("Vary", "Origin")
 
-	if origin == "" {
-		return
-	}
-
+	origin := r.Header.Get("Origin")
 	if !(g.allowAllOrigins || g.allowOrigin(r, origin)) {
-		return
+		return WriteError(w, errCorsFail)
 	}
 
 	if g.allowAllOrigins {
@@ -113,4 +127,5 @@ func cors(w http.ResponseWriter, r *http.Request) {
 	} else {
 		hs.Set("Access-Control-Allow-Origin", origin)
 	}
+	return nil
 }
