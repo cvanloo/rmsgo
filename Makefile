@@ -26,5 +26,7 @@ coverage_html: coverage.out
 clean:
 	-rm coverage.out
 
-coverage.out:
+coverage.out: .FORCE
 	@go test -tags=delve -coverprofile=coverage.out ./...
+
+.FORCE:
