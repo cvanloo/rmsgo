@@ -15,6 +15,7 @@ import (
 )
 
 func mockServer() {
+	hostname = "catboy"
 	const (
 		rroot = "/storage/"
 		sroot = "/tmp/rms/storage/"
@@ -2755,11 +2756,11 @@ func TestAuthorizationReadPublicFolderNoPerm(t *testing.T) {
 	defer ts.Close()
 
 	const (
-		mime     = "text/plain; charset=utf-8"
-		document = "/public/Pythagoras/Quotes.txt"
+		mime        = "text/plain; charset=utf-8"
+		document    = "/public/Pythagoras/Quotes.txt"
 		documentDir = "/public/Pythagoras/"
-		content  = "Learn silence. With the quiet serenity of a meditative mind, listen, absorb, transcribe, and transform."
-		etag     = "6681e4aec13ebde1e542809292232218"
+		content     = "Learn silence. With the quiet serenity of a meditative mind, listen, absorb, transcribe, and transform."
+		etag        = "6681e4aec13ebde1e542809292232218"
 	)
 
 	// PUT document with authorization
