@@ -49,15 +49,17 @@ func main() {
         log.Fatal(err)
     }
 
+    defer func() {
+        // At shutdown: persist server state
+        err = rmsgo.Persist(persistFile)
+        if err != nil {
+            log.Fatal(err)
+        }
+    }()
+
     // Register remote storage endpoints to the http.DefaultServeMux
     rmsgo.Register(nil)
     http.ListenAndServe(":8080", nil) // [!] TODO: Use TLS
-
-    // At shutdown: persist server state
-    err = rmsgo.Persist(persistFile)
-    if err != nil {
-        log.Fatal(err)
-    }
 }
 ```
 
