@@ -13,10 +13,6 @@ import (
 	. "github.com/cvanloo/rmsgo/mock"
 )
 
-// @fixme: go doc http.ResponseWriter mentions that Content-Length is only set
-//   automatically for responses under a few KBs.
-//   What if there is a large document? Do we need to set the header manually?
-
 // @todo: https://datatracker.ietf.org/doc/html/draft-dejong-remotestorage-21#section-6
 // keep multiple versions of files around, option to restore deleted files
 // > A provider MAY offer version rollback functionality to its users,
@@ -211,7 +207,11 @@ func GetDocument(w http.ResponseWriter, r *http.Request) error {
 	hs.Set("Cache-Control", "no-cache")
 	hs.Set("ETag", etag.String())
 	hs.Set("Content-Type", n.mime)
-	_, err = io.Copy(w, fd) // @perf: is this efficient for HEAD requests?
+	hs.Set("Content-Length", fmt.Sprintf("%d", n.length))
+	w.WriteHeader(http.StatusOK)
+	if r.Method != http.MethodHead {
+		_, err = io.Copy(w, fd)
+	}
 	return err
 }
 
@@ -448,6 +448,7 @@ func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 
 	hs := w.Header()
 	hs.Set("ETag", etag.String())
+	w.WriteHeader(http.StatusOK)
 	return nil
 }
 

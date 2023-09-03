@@ -51,14 +51,14 @@ var g *Options
 // be accessed using the URL "https://example.com/storage/Picture/Kittens.png".
 // Rroot does not have a trailing slash.
 func (o *Options) Rroot() string {
-	return g.rroot
+	return o.rroot
 }
 
 // Sroot is a path specifying the location on the server's file system where
 // all of remoteStorage's files are stored. Sroot does not have a trailing
 // slash.
 func (o *Options) Sroot() string {
-	return g.sroot
+	return o.sroot
 }
 
 // UseErrorHandler configures the error handler to use.

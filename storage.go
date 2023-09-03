@@ -229,7 +229,7 @@ func Load(persistFile io.Reader) error {
 }
 
 // Migrate traverses the root directory and copies any files contained therein
-// into the remoteStorage root (cfg.Sroot).
+// into the remoteStorage root (g.Sroot).
 func Migrate(root string) (errs []error) {
 	err := FS.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
