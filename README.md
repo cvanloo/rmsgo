@@ -51,6 +51,8 @@ func main() {
 
     defer func() {
         // At shutdown: persist server state
+        persistFile.Truncate(0)
+        persistFile.Seek(0, io.SeekStart)
         err = rmsgo.Persist(persistFile)
         if err != nil {
             log.Fatal(err)
