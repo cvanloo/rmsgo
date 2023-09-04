@@ -442,7 +442,7 @@ func (n node) stringIndent(ident int) (s string) {
 		s += fmt.Sprintf("{F} %s [%s] [%x]\n", n.name, n.rname, mustVal(n.Version())[:4])
 		children := maps.Values(n.children)
 		// Ensure that output is deterministic by always printing in the same
-		// order. (Exmaple functions need this to verify their output.)
+		// order. (Example functions need this to verify their output.)
 		sort.Slice(children, func(i, j int) bool {
 			return children[i].rname < children[j].rname
 		})

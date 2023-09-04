@@ -83,7 +83,7 @@ func calculateETag(n *node) error {
 			if err != nil {
 				return err
 			}
-			if cn.length != int64(n) {
+			if cn.length != n {
 				return fmt.Errorf("etag: expected to read %d bytes, got: %d", cn.length, n)
 			}
 

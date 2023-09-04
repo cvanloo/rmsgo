@@ -22,8 +22,8 @@ type Options struct {
 }
 
 type (
-	// Any errors that the remoteStorage server doesn't know how to handle itself
-	// are passed to the ErrorHandlerFunc.
+	// ErrorHandlerFunc is passed any errors that the remoteStorage server
+	// doesn't know how to handle itself
 	ErrorHandlerFunc func(err error)
 
 	// A MiddlewareFunc is inserted into a chain of other http.Handler.
@@ -90,7 +90,7 @@ func (o *Options) UseAuthentication(a AuthenticateFunc) {
 }
 
 // UseAllowedOrigins configures a list of allowed origins.
-// By default, i.e if UseAllowedOrigins is never called, all origins are allowed.
+// By default, i.e. if UseAllowedOrigins is never called, all origins are allowed.
 func (o *Options) UseAllowedOrigins(origins []string) {
 	o.allowAllOrigins = false
 	o.allowedOrigins = origins
@@ -159,7 +159,7 @@ func Configure(remoteRoot, storageRoot string) (*Options, error) {
 }
 
 // Register the remote storage server (with middleware if configured) to the
-// mux using Rroot + '/' as pattern.
+// mux using g.Rroot + '/' as pattern.
 // If mux is nil, http.DefaultServeMux is used.
 func Register(mux *http.ServeMux) {
 	if mux == nil {
