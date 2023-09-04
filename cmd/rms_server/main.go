@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -56,13 +57,19 @@ func logger(next http.Handler) http.Handler {
 		lrw := rmsgo.NewLoggingResponseWriter(w)
 		next.ServeHTTP(lrw, r)
 		duration := time.Since(start)
-		log.Printf("%v", map[string]any{
+		data := map[string]any{
+			"type":     "request",
 			"method":   r.Method,
 			"uri":      r.RequestURI,
 			"duration": duration,
 			"status":   lrw.Status,
 			"size":     lrw.Size,
-		})
+		}
+		bs, err := json.Marshal(data)
+		if err != nil {
+			log.Printf("invalid logging data: `%v'", data)
+		}
+		log.Println(string(bs))
 	})
 }
 
@@ -129,9 +136,9 @@ func main() {
 	err = rmsgo.Load(fd)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			log.Printf("server state was NOT restored: persist file is empty")
+			log.Printf("server state not restored: persist file is empty")
 		} else {
-			log.Fatalf("server state was NOT restored: %v", err)
+			log.Fatalf("server state not restored: %v", err)
 		}
 	}
 
@@ -154,6 +161,7 @@ func main() {
 	}
 
 	wg := sync.WaitGroup{}
+	defer wg.Wait()
 	go func() {
 		wg.Add(1)
 		defer wg.Done()
@@ -165,11 +173,13 @@ func main() {
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 
 	select {
 	case <-c:
 		log.Println("received interrupt, shutting down...")
-		err = srv.Shutdown(context.TODO())
+		err = srv.Shutdown(ctx)
+		defer cancel()
 		if err != nil {
 			log.Printf("server shutdown with error: %v", err)
 		}
