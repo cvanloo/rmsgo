@@ -121,6 +121,9 @@ func handleRMS() http.Handler {
 // configuration beyond the default settings.
 func Configure(remoteRoot, storageRoot string) (*Options, error) {
 	rroot := filepath.Clean(remoteRoot)
+	if rroot == "/" {
+		rroot = ""
+	}
 	sroot := filepath.Clean(storageRoot)
 	fi, err := FS.Stat(sroot)
 	if err != nil {
