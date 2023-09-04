@@ -73,6 +73,10 @@ func logger(next http.Handler) http.Handler {
 	})
 }
 
+// @todo: client: OAuth 2.0 authentication
+// @todo: lib: optionally persist to db instead of file
+// @todo: lib: periodically persist to avoid losing data in case of a crash
+
 func main() {
 	flag.Var(&origins, "o", "Allowed origins (default is any)")
 	flag.Parse()
