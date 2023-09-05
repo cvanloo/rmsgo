@@ -1,0 +1,12 @@
+[Unit]
+Description=A server that handles remoteStorage requests
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/rms_server -tls /tmp/rms/server -var /tmp/rms/
+Type=simple
+Restart=on-failure
+User=nephelai
+
+[Install]
+WantedBy=multi-user.target
