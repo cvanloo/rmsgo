@@ -31,6 +31,7 @@ var (
 	origins     Origin
 	allOrigins  = true
 	help        = flag.Bool("h", false, "Print usage/help")
+	tls         = flag.String("tls", "", "If, e.g., set to './rms', searches ./rms{.key,.crt} for key and certificate files")
 )
 
 type Origin struct {
@@ -169,7 +170,13 @@ func main() {
 	go func() {
 		wg.Add(1)
 		defer wg.Done()
-		err := srv.ListenAndServe()
+		if *tls != "" {
+			// openssl ecparam -genkey -name secp384r1 -out server.key
+			// openssl req -new -x509 -sha256 -key server.key -out server.crt -days 3650
+			err = srv.ListenAndServeTLS(*tls+".crt", *tls+".key")
+		} else {
+			err = srv.ListenAndServe()
+		}
 		if err != nil && err != http.ErrServerClosed {
 			log.Println(err)
 		}
