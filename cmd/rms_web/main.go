@@ -9,13 +9,12 @@ import (
 	"net/http"
 )
 
-//go:embed templates
-var embedFiles embed.FS
+var (
+	//go:embed templates
+	embedFiles embed.FS
 
-var Files fs.FS = embedFiles
-
-//go:embed templates/main.html
-var mainPage string
+	htmlFiles fs.FS = embedFiles
+)
 
 func main() {
 	var data struct {
@@ -27,13 +26,14 @@ func main() {
 	data.Msg = "Permission Denied"
 	data.Desc = "Missing authorization token."
 	data.URL = "https://www.example.com/error?code=401"
-	tmpl, err := template.New("main page").Parse(mainPage)
+
+	tmpl, err := template.New("").ParseFS(htmlFiles, "templates/*")
 	if err != nil {
 		panic(err)
 	}
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		err = tmpl.Execute(w, data)
+		err = tmpl.ExecuteTemplate(w, "main", data)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			log.Print(err)

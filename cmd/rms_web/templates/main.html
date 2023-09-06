@@ -1,3 +1,4 @@
+{{define "main"}}
 <!DOCTYPE html>
 <html lang="en">
     <head>
@@ -45,25 +46,7 @@
     <body style="overflow: hidden; margin: 0; display: flex; flex-direction: column; justify-content: flex-start; min-height: 100vh;">
         <div style="width: 100%; width: -webkit-fill-available; width: -moz-available; width: stretch; height: 5em; background: var(--accent-color);"></div>
         <main style="max-width: 100ch; margin: 0 auto;">
-            <h1 style="text-decoration: underline var(--accent-color);">Error {{.Status}}</h1>
-            <div style="width: 100%; overflow-x: auto;">
-                <table style="width: 100%;">
-                    <tr>
-                        <td style="text-align: right; padding-right: 15px;">Message</td>
-                        <td>{{.Msg}}</td>
-                    </tr>
-                    <tr>
-                        <td style="text-align: right; padding-right: 15px;">Description</td>
-                        <td>{{.Desc}}</td>
-                    </tr>
-                    {{if .URL}}
-                    <tr>
-                        <td style="text-align: right; padding-right: 15px;">URL</td>
-                        <td><a href="{{.URL}}">{{.URL}}</a></td>
-                    </tr>
-                    {{end}}
-                </table>
-            </div>
+            {{template "error" .}}
         </main>
         <footer style="text-align: center; margin-top: auto; margin-bottom: 8px;">
             <hr style="border: 2px dashed var(--accent-color);" />
@@ -71,3 +54,4 @@
         </footer>
     </body>
 </html>
+{{end}}
