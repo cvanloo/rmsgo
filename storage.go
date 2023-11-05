@@ -213,7 +213,7 @@ func Load(persistFile io.Reader) error {
 		model.lastMod = n.LastMod
 		model.children = make(map[string]*node)
 
-		// N.b. this assumes that parents are always parsed before their
+		// N.b., this assumes that parents are always parsed before their
 		// children! [#parent_first]
 		p, ok := files[n.ParentRName]
 		if !ok {

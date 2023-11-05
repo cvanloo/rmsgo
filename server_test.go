@@ -118,7 +118,7 @@ func ExampleOptions() {
 	opts.UseAuthentication(func(r *http.Request, bearer string) (rmsgo.User, bool) {
 		// [!] TODO: Your authentication logic here...
 		//       Return one of your own users.
-		return rmsgo.ReadWriteUser{}, true
+		return rmsgo.UserReadWrite{}, true
 	})
 
 	rmsgo.Register(nil)

@@ -37,7 +37,7 @@ func ExampleGetFolder() {
 	defer ts.Close()
 
 	// server url + remote root
-	remoteRoot := ts.URL + g.rroot
+	remoteRoot := ts.URL + g.Rroot()
 
 	// GET the currently empty root folder
 	{
@@ -205,7 +205,7 @@ func TestPutDocument(t *testing.T) {
 	}
 }
 
-func TestPutDocumentSame(t *testing.T) {
+func TestPutDocumentTwiceUpdatesIt(t *testing.T) {
 	const (
 		testMime     = "application/x-subrip"
 		testDocument = "/Lyrics/STARSET.txt"
@@ -318,7 +318,7 @@ func TestPutDocumentSame(t *testing.T) {
 	}
 }
 
-func TestPutDocumentIfMatchSuccess(t *testing.T) {
+func TestPutDocumentIfMatchSuccessUpdatesIt(t *testing.T) {
 	const (
 		testMime     = "application/x-subrip"
 		testDocument = "/Lyrics/STARSET.txt"
@@ -374,7 +374,7 @@ func TestPutDocumentIfMatchSuccess(t *testing.T) {
 	}
 }
 
-func TestPutDocumentIfMatchFail(t *testing.T) {
+func TestPutDocumentIfMatchFailDoesNotUpdateIt(t *testing.T) {
 	const (
 		testMime     = "application/x-subrip"
 		testDocument = "/Lyrics/STARSET.txt"
@@ -430,7 +430,7 @@ func TestPutDocumentIfMatchFail(t *testing.T) {
 	}
 }
 
-func TestPutDocumentIfNonMatchSuccess(t *testing.T) {
+func TestPutDocumentIfNonMatchSuccessCreatesTheDocument(t *testing.T) {
 	const (
 		testMime     = "application/x-subrip"
 		testDocument = "/Lyrics/STARSET.txt"
@@ -445,25 +445,47 @@ func TestPutDocumentIfNonMatchSuccess(t *testing.T) {
 	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
-	if err != nil {
-		t.Error(err)
+	{
+		r, err := http.Head(remoteRoot + testDocument)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusNotFound {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNotFound))
+		}
 	}
-	req.Header.Set("Content-Type", testMime)
-	req.Header.Set("If-None-Match", "*") // Set If-None-Match header!
-	r, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Error(err)
+
+	{
+		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+		if err != nil {
+			t.Error(err)
+		}
+		req.Header.Set("Content-Type", testMime)
+		req.Header.Set("If-None-Match", "*") // Set If-None-Match header!
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusCreated {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentEtag {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag)
+		}
 	}
-	if r.StatusCode != http.StatusCreated {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-	}
-	if e := r.Header.Get("ETag"); e != testDocumentEtag {
-		t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag)
+
+	{
+		r, err := http.Head(remoteRoot + testDocument)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
 	}
 }
 
-func TestPutDocumentIfNonMatchFail(t *testing.T) {
+func TestPutDocumentIfNonMatchFailDoesNotUpdateIt(t *testing.T) {
 	const (
 		testMime     = "application/x-subrip"
 		testDocument = "/Lyrics/STARSET.txt"
@@ -1171,7 +1193,7 @@ func TestGetFolderIfNonMatchRevMatches(t *testing.T) {
 		t.Error(err)
 	}
 	// include revision of the folder we're about to GET
-	req.Header.Set("If-None-Match", fmt.Sprintf("03d871638b18f0b459bf8fd12a58f1d8, %s", testDocumentDirETag))
+	req.Header.Set("If-None-Match", fmt.Sprintf(/* this revision does NOT match: */ "03d871638b18f0b459bf8fd12a58f1d8, %s", /* this revision DOES match: */ testDocumentDirETag))
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
@@ -1822,29 +1844,7 @@ func TestDeleteDocument(t *testing.T) {
 		}
 	}
 
-	// check that common ancestor still exists
-	{
-		r, err := http.Head(remoteRoot + testCommonAncestor)
-		if err != nil {
-			t.Error(err)
-		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-	}
-
-	// check that second document still exists
-	{
-		r, err := http.Head(remoteRoot + testDocument2)
-		if err != nil {
-			t.Error(err)
-		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-	}
-
-	// check that common ancestor has an updated etag
+	// check that common ancestor still exists, with an updated etag
 	{
 		r, err := http.Head(remoteRoot + testCommonAncestor)
 		if err != nil {
@@ -1855,6 +1855,20 @@ func TestDeleteDocument(t *testing.T) {
 		}
 		if e := r.Header.Get("ETag"); e != testCommonAncestorETag2 {
 			t.Errorf("got: `%s', want: `%s'", e, testCommonAncestorETag2)
+		}
+	}
+
+	// check that second document still exists, and that it's etag remains unchanged
+	{
+		r, err := http.Head(remoteRoot + testDocument2)
+		if err != nil {
+			t.Error(err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		}
+		if e := r.Header.Get("ETag"); e != testDocumentETag2 {
+			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag2)
 		}
 	}
 
@@ -1894,7 +1908,7 @@ func TestDeleteDocumentNotFound(t *testing.T) {
 	}
 }
 
-func TestDeleteDocumentToFolder(t *testing.T) {
+func TestDeleteFolderFails(t *testing.T) {
 	mockServer()
 	mux := http.NewServeMux()
 	Register(mux)
@@ -2075,7 +2089,7 @@ func TestUnauthorizedCanReadPublicDocument(t *testing.T) {
 	mockServer()
 	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
 		return nil, false
 	})
@@ -2182,7 +2196,7 @@ func TestUnauthorizedCannotAccessPublicFolder(t *testing.T) {
 	mockServer()
 	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
 		return nil, false
 	})
@@ -2247,7 +2261,7 @@ func TestUnauthorizedCannotAccessNonPublicDocument(t *testing.T) {
 	mockServer()
 	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
 		return nil, false
 	})
@@ -2341,7 +2355,7 @@ func TestUnauthorizedCannotAccessNonPublicFolder(t *testing.T) {
 	mockServer()
 	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
 		return nil, false
 	})
@@ -2406,10 +2420,10 @@ func TestAuthorizationRead(t *testing.T) {
 	mockServer()
 	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
 		if bearer == "READER" {
-			return ReadOnlyUser{}, true
+			return UserReadOnly{}, true
 		}
 		return nil, false
 	})
@@ -2426,7 +2440,7 @@ func TestAuthorizationRead(t *testing.T) {
 		etag     = "476012c1b4644cc16a59db9315b280bc"
 	)
 
-	// PUT document with authorization
+	// PUT document with rw authorization
 	{
 		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte(content)))
 		req.Header.Set("Content-Type", mime)
@@ -2446,7 +2460,7 @@ func TestAuthorizationRead(t *testing.T) {
 		}
 	}
 
-	// GET document (with authorization)
+	// GET document (with read authorization)
 	{
 		req, err := http.NewRequest(http.MethodGet, remoteRoot+document, nil)
 		if err != nil {
@@ -2472,7 +2486,7 @@ func TestAuthorizationRead(t *testing.T) {
 		}
 	}
 
-	// HEAD document (with authorization)
+	// HEAD document (with read authorization)
 	{
 		req, err := http.NewRequest(http.MethodHead, remoteRoot+document, nil)
 		if err != nil {
@@ -2491,7 +2505,7 @@ func TestAuthorizationRead(t *testing.T) {
 		}
 	}
 
-	// PUT document (with authorization)
+	// PUT document (with read authorization)
 	{
 		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room.")))
 		if err != nil {
@@ -2507,7 +2521,7 @@ func TestAuthorizationRead(t *testing.T) {
 		}
 	}
 
-	// DELETE document (with authorization)
+	// DELETE document (with read authorization)
 	{
 		req, err := http.NewRequest(http.MethodDelete, remoteRoot+document, nil)
 		if err != nil {
@@ -2528,9 +2542,9 @@ func TestAuthorizationReadPublicNoPerm(t *testing.T) {
 	mockServer()
 	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
-		return ReadPublicUser{}, true
+		return UserReadPublic{}, true
 	})
 	mux := http.NewServeMux()
 	Register(mux)
@@ -2643,9 +2657,9 @@ func TestAuthorizationReadNonPublicNoPerm(t *testing.T) {
 	mockServer()
 	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
-		return ReadPublicUser{}, true
+		return UserReadPublic{}, true
 	})
 	mux := http.NewServeMux()
 	Register(mux)
@@ -2745,9 +2759,9 @@ func TestAuthorizationReadPublicFolderNoPerm(t *testing.T) {
 	mockServer()
 	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
-		return ReadPublicUser{}, true
+		return UserReadPublic{}, true
 	})
 	mux := http.NewServeMux()
 	Register(mux)
@@ -2848,10 +2862,10 @@ func TestAuthorizationReadPublic(t *testing.T) {
 	mockServer()
 	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
 		if bearer == "READER" {
-			return ReadOnlyUser{}, true
+			return UserReadOnly{}, true
 		}
 		return nil, false
 	})
@@ -2970,10 +2984,10 @@ func TestAuthorizationReadWrite(t *testing.T) {
 	mockServer()
 	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
 		if bearer == "READERWRITER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
 		return nil, false
 	})
@@ -3092,10 +3106,10 @@ func TestAuthorizationReadWritePublic(t *testing.T) {
 	mockServer()
 	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
 		if bearer == "READERWRITER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
 		return nil, false
 	})
