@@ -13,13 +13,13 @@ type (
 		// @todo: Quota() int64 ?
 	}
 
-	// ReadOnlyUser is a User with read access to any folder.
+	// UserReadOnly is a User with read access to any folder.
 	UserReadOnly struct{}
 
-	// ReadWriteUser is a User with read and write access to any folder.
+	// UserReadWrite is a User with read and write access to any folder.
 	UserReadWrite struct{}
 
-	// ReadPublicUser is a User with read permissions only to public folders.
+	// UserReadPublic is a User with read permissions only to public folders.
 	UserReadPublic struct{}
 
 	Level string
