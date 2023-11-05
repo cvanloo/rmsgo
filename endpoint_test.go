@@ -2089,7 +2089,7 @@ func TestUnauthorizedCanReadPublicDocument(t *testing.T) {
 	mockServer()
 	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
 		return nil, false
 	})
@@ -2196,7 +2196,7 @@ func TestUnauthorizedCannotAccessPublicFolder(t *testing.T) {
 	mockServer()
 	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
 		return nil, false
 	})
@@ -2261,7 +2261,7 @@ func TestUnauthorizedCannotAccessNonPublicDocument(t *testing.T) {
 	mockServer()
 	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
 		return nil, false
 	})
@@ -2355,7 +2355,7 @@ func TestUnauthorizedCannotAccessNonPublicFolder(t *testing.T) {
 	mockServer()
 	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
 		return nil, false
 	})
@@ -2420,10 +2420,10 @@ func TestAuthorizationRead(t *testing.T) {
 	mockServer()
 	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
 		if bearer == "READER" {
-			return ReadOnlyUser{}, true
+			return UserReadOnly{}, true
 		}
 		return nil, false
 	})
@@ -2542,9 +2542,9 @@ func TestAuthorizationReadPublicNoPerm(t *testing.T) {
 	mockServer()
 	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
-		return ReadPublicUser{}, true
+		return UserReadPublic{}, true
 	})
 	mux := http.NewServeMux()
 	Register(mux)
@@ -2657,9 +2657,9 @@ func TestAuthorizationReadNonPublicNoPerm(t *testing.T) {
 	mockServer()
 	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
-		return ReadPublicUser{}, true
+		return UserReadPublic{}, true
 	})
 	mux := http.NewServeMux()
 	Register(mux)
@@ -2759,9 +2759,9 @@ func TestAuthorizationReadPublicFolderNoPerm(t *testing.T) {
 	mockServer()
 	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
-		return ReadPublicUser{}, true
+		return UserReadPublic{}, true
 	})
 	mux := http.NewServeMux()
 	Register(mux)
@@ -2862,10 +2862,10 @@ func TestAuthorizationReadPublic(t *testing.T) {
 	mockServer()
 	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
 		if bearer == "READER" {
-			return ReadOnlyUser{}, true
+			return UserReadOnly{}, true
 		}
 		return nil, false
 	})
@@ -2984,10 +2984,10 @@ func TestAuthorizationReadWrite(t *testing.T) {
 	mockServer()
 	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
 		if bearer == "READERWRITER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
 		return nil, false
 	})
@@ -3106,10 +3106,10 @@ func TestAuthorizationReadWritePublic(t *testing.T) {
 	mockServer()
 	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
 		if bearer == "READERWRITER" {
-			return ReadWriteUser{}, true
+			return UserReadWrite{}, true
 		}
 		return nil, false
 	})

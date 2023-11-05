@@ -14,13 +14,13 @@ type (
 	}
 
 	// ReadOnlyUser is a User with read access to any folder.
-	ReadOnlyUser struct{}
+	UserReadOnly struct{}
 
 	// ReadWriteUser is a User with read and write access to any folder.
-	ReadWriteUser struct{}
+	UserReadWrite struct{}
 
 	// ReadPublicUser is a User with read permissions only to public folders.
-	ReadPublicUser struct{}
+	UserReadPublic struct{}
 
 	Level string
 	key   int
@@ -34,19 +34,19 @@ var (
 	LevelReadWrite Level = ":rw"
 )
 
-var _ User = (*ReadOnlyUser)(nil)
-var _ User = (*ReadWriteUser)(nil)
-var _ User = (*ReadPublicUser)(nil)
+var _ User = (*UserReadOnly)(nil)
+var _ User = (*UserReadWrite)(nil)
+var _ User = (*UserReadPublic)(nil)
 
-func (ReadOnlyUser) Permission(name string) Level {
+func (UserReadOnly) Permission(name string) Level {
 	return LevelRead
 }
 
-func (ReadWriteUser) Permission(name string) Level {
+func (UserReadWrite) Permission(name string) Level {
 	return LevelReadWrite
 }
 
-func (ReadPublicUser) Permission(name string) Level {
+func (UserReadPublic) Permission(name string) Level {
 	return LevelNone
 }
 
