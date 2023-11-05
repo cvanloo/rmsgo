@@ -119,7 +119,7 @@ func main() {
 		opts.UseAllowedOrigins(origins.Origins)
 	}
 	opts.UseAuthentication(func(r *http.Request, bearer string) (rmsgo.User, bool) {
-		return rmsgo.ReadWriteUser{}, true
+		return rmsgo.UserReadWrite{}, true
 	})
 
 	fd, err := os.OpenFile(*persistFile, os.O_RDWR|os.O_CREATE, 0640)
