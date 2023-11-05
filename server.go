@@ -80,7 +80,7 @@ func (o *Options) UseMiddleware(m MiddlewareFunc) {
 // Per default, i.e if no other option is configured, any GET and HEAD requests
 // are allowed.
 func (o *Options) AllowAnyReadWrite() {
-	o.defaultUser = ReadWriteUser{}
+	o.defaultUser = UserReadWrite{}
 }
 
 // UseAuthentication configures the function to use for authenticating
@@ -152,7 +152,7 @@ func Configure(remoteRoot, storageRoot string) (*Options, error) {
 		unhandled: func(err error) {
 			log.Printf("rmsgo: unhandled error: %v\n", err)
 		},
-		defaultUser: ReadOnlyUser{},
+		defaultUser: UserReadOnly{},
 		//defaultUser: ReadPublicUser{},
 		authenticate: func(r *http.Request, bearer string) (User, bool) {
 			return g.defaultUser, true
