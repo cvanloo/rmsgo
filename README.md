@@ -35,7 +35,7 @@ func main() {
     opts.UseAuthentication(func(r *http.Request, bearer string) (rmsgo.User, bool) {
         // [!] TODO: Your authentication logic here...
         //       Return one of your own users.
-        return rmsgo.ReadWriteUser{}, true
+        return rmsgo.UserReadWrite{}, true
     })
 
     persistFile, err := os.Open(PersistFile)
@@ -113,6 +113,10 @@ func main() {
   - remoteRoot: URL path below which the server is accessible. (e.g. "/storage/")
   - storageRoot: Location on server's file system to store remoteStorage documents. (e.g. "/var/rms/storage/")
 - \[Recommended] `UseAuthentication` configure how requests are authenticated and control access permissions of users.
+  - There are some default users, but for fine grained control custom users can be provided.
+  - `UserReadOnly` has read access to any folder/document
+  - `UserReadWrite` has read and write access to any folder/document
+  - `UserReadPublic` can only read public folders
 - \[Recommended] `UseAllowedOrigins` allow-list of hosts that may make requests to the server. Per default any host is allowed.
 - \[Optional] `UseAllowOrigin` for more control, specify a function that decides based on the request if it is allowed or not. If this option is specified, `UseAllowedOrigins` has no effect.
 - \[Not Recommended] `AllowAnyReadWrite` allow even unauthenticated requests to create, read, and delete any documents on the server. Has no effect if `UseAuthentication` is specified.
