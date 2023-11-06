@@ -5,7 +5,6 @@ import (
 	"embed"
 	"html/template"
 	"io"
-	"io/fs"
 	"log"
 	"net/http"
 )
@@ -23,13 +22,10 @@ func panicIf(err error) {
 	}
 }
 
-var (
-	//go:embed templates
-	templateFiles embed.FS
-	htmlFiles fs.FS = templateFiles
-)
+//go:embed templates
+var templateFiles embed.FS
 
-type errorData struct{
+type errorData struct {
 	Status, Msg, Desc, URL string
 }
 
@@ -46,14 +42,14 @@ func main() {
 		})
 
 		{
-			fd := must(htmlFiles.Open("templates/main.html"))
+			fd := must(templateFiles.Open("templates/main.html"))
 			defer panicIf(fd.Close())
 			bs := must(io.ReadAll(fd))
 			must(tmpl.Parse(string(bs)))
 		}
 
 		{
-			fd := must(htmlFiles.Open("templates/error.html"))
+			fd := must(templateFiles.Open("templates/error.html"))
 			defer panicIf(fd.Close())
 			bs := must(io.ReadAll(fd))
 			must(tmpl.New("body").Parse(string(bs)))
