@@ -1,13 +1,27 @@
 package main
 
 import (
+	"bytes"
 	"embed"
 	"html/template"
+	"io"
 	"io/fs"
 	"log"
-	"mime"
 	"net/http"
 )
+
+func must[T any](t T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return t
+}
+
+func panicIf(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
 
 var (
 	//go:embed templates
@@ -16,27 +30,45 @@ var (
 )
 
 type errorData struct{
-	Title, Status, Msg, Desc, URL string
-}
-
-func init() {
-	_ = mime.AddExtensionType(".js", "text/javascript")
+	Status, Msg, Desc, URL string
 }
 
 func main() {
-	tmpl := template.Must(template.New("").ParseFS(htmlFiles, "templates/*"))
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		data := errorData{
-			Title:  "You need to authenticate in order to use this service.",
-			Status: http.StatusText(http.StatusUnauthorized),
-			Msg:    "Permission Denied",
-			Desc:   "Missing authorization token",
-			URL:    "https://www.example.com/error?code=401",
+		tmpl := template.New("main")
+		tmpl.Funcs(map[string]any{
+			"CallTemplate": func(name string, data any) (html template.HTML, err error) {
+				buf := bytes.NewBuffer([]byte{})
+				err = tmpl.ExecuteTemplate(buf, name, data)
+				html = template.HTML(buf.String())
+				return
+			},
+		})
+
+		{
+			fd := must(htmlFiles.Open("templates/main.html"))
+			defer panicIf(fd.Close())
+			bs := must(io.ReadAll(fd))
+			must(tmpl.Parse(string(bs)))
 		}
-		err := tmpl.ExecuteTemplate(w, "main", data)
-		if err != nil {
-			panic(err)
+
+		{
+			fd := must(htmlFiles.Open("templates/error.html"))
+			defer panicIf(fd.Close())
+			bs := must(io.ReadAll(fd))
+			must(tmpl.New("body").Parse(string(bs)))
 		}
+
+		data := map[string]any{
+			"Title": "Permission Denied",
+			"Data": errorData{
+				Status: http.StatusText(http.StatusUnauthorized),
+				Msg:    "Missing authorization token",
+				Desc:   "You need to authenticate in order to use this service.",
+				URL:    "https://www.example.com/error?code=401",
+			},
+		}
+		panicIf(tmpl.Execute(w, data))
 	}
 	http.Handle("/public/", http.StripPrefix("/public/", http.FileServer(http.Dir("public"))))
 	http.HandleFunc("/", handler)
