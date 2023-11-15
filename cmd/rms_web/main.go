@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"embed"
 	"html/template"
 	"io"
@@ -30,7 +29,7 @@ type errorData struct {
 }
 
 func main() {
-	http.HandleFunc("/", notFoundHandler)
+	http.HandleFunc("/", handlerNotFound)
 	http.Handle("/public/", http.StripPrefix("/public/", http.FileServer(http.Dir("public"))))
 	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("<h1>Hello, World!"))
@@ -38,40 +37,26 @@ func main() {
 	log.Fatal(http.ListenAndServe(":8000", nil))
 }
 
-func notFoundHandler(w http.ResponseWriter, r *http.Request) {
-	tmpl := template.New("main")
-	tmpl.Funcs(map[string]any{
-		"CallTemplate": func(name string, data any) (html template.HTML, err error) {
-			buf := bytes.NewBuffer([]byte{})
-			err = tmpl.ExecuteTemplate(buf, name, data)
-			html = template.HTML(buf.String())
-			return
-		},
-	})
+type templates struct {
+	*template.Template
+}
 
-	{
-		fd := must(templateFiles.Open("templates/main.html"))
-		defer panicIf(fd.Close())
-		bs := must(io.ReadAll(fd))
-		must(tmpl.Parse(string(bs)))
-	}
+func (t *templates) Render(w io.Writer, name string, data any) error {
+	return t.Template.ExecuteTemplate(w , name, data)
+}
 
-	{
-		fd := must(templateFiles.Open("templates/error.html"))
-		defer panicIf(fd.Close())
-		bs := must(io.ReadAll(fd))
-		must(tmpl.New("body").Parse(string(bs)))
-	}
+//var pages = templates{template.Must(template.New("").ParseGlob("templates/*.html"))}
+var pages = templates{template.Must(template.New("").ParseFS(templateFiles, "templates/*.html"))}
 
-	data := map[string]any{
-		"Title": "Not Found",
-		"Data": errorData{
-			Status: http.StatusText(http.StatusNotFound),
-			Msg:    "Page not found.",
-			Desc:   "The requested page does not exist on the server.",
-			URL:    "https://www.example.com/error?code=404",
-		},
+func handlerNotFound(w http.ResponseWriter, r *http.Request) {
+	errorInfo := struct {
+		Status, Msg, Desc, URL string
+	}{
+		Status: http.StatusText(http.StatusNotFound),
+		Msg:    "Page " + r.URL.Path + " not found.",
+		Desc:   "The requested page does not exist on the server.",
+		URL:    "https://www.example.com/error?code=404",
 	}
 	w.WriteHeader(http.StatusNotFound)
-	panicIf(tmpl.Execute(w, data))
+	panicIf(pages.Render(w, "error.html", errorInfo))
 }
