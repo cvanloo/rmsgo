@@ -10,11 +10,12 @@
 //
 // Use the Configure function and the methods on the returned Options struct
 // to setup the server.
-// 	opts, err := rmsgo.Configure(RemoteRoot, StorageRoot)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	opts.UseXXX(...)
+//
+//	opts, err := rmsgo.Configure(RemoteRoot, StorageRoot)
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//	opts.UseXXX(...)
 package rmsgo
 
 import (
@@ -196,4 +197,3 @@ func handleRMS() http.Handler {
 		}
 	})
 }
-

@@ -271,9 +271,9 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 				Msg:  "version mismatch",
 				Desc: "The version provided in the If-Match header does not match the document's current version.",
 				Data: LDjson{
-					"rname":    rpath,
-					"if_match": cond,
-					"current_version":     etag.String(),
+					"rname":           rpath,
+					"if_match":        cond,
+					"current_version": etag.String(),
 				},
 				Cause: ErrPreconditionFailed,
 			})
@@ -425,9 +425,9 @@ func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 				Msg:  "version mismatch",
 				Desc: "The version provided in the If-Match header does not match the document's current version.",
 				Data: LDjson{
-					"rname":    rpath,
-					"if_match": cond,
-					"current_version":     etag.String(),
+					"rname":           rpath,
+					"if_match":        cond,
+					"current_version": etag.String(),
 				},
 				Cause: ErrPreconditionFailed,
 			})
