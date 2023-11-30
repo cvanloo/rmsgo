@@ -77,13 +77,18 @@ func preflight(w http.ResponseWriter, r *http.Request) error {
 		return WriteError(w, errCorsFail)
 	}
 
-	reqHeaders := strings.Split(strings.Join(r.Header.Values("Access-Control-Request-Headers"), ","), ",") // not a nop
+	// We might get multiple header values, but a single value might actually
+	// contain multiple values itself, separated by commas.
+	// By first joining all the values together, and then splitting again, we
+	// ensure that all values are separate.
+	reqHeaders := strings.Split(strings.Join(r.Header.Values("Access-Control-Request-Headers"), ","), ",")
 	for _, reqHeader := range reqHeaders {
 		reqHeader = http.CanonicalHeaderKey(strings.TrimSpace(reqHeader))
 		reqHeaderAllowed := false
 		for _, h := range allowHeaders {
 			if h == reqHeader {
 				reqHeaderAllowed = true
+				break
 			}
 		}
 		if !reqHeaderAllowed {

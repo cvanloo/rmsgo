@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cvanloo/rmsgo/isdelve"
 	. "github.com/cvanloo/rmsgo/mock"
 )
 
@@ -17,12 +16,6 @@ import (
 // keep multiple versions of files around, option to restore deleted files
 // > A provider MAY offer version rollback functionality to its users,
 // > but this specification does not define the interface for that.
-
-func init() {
-	if !isdelve.Enabled {
-		FS = &RealFileSystem{}
-	}
-}
 
 func serve(w http.ResponseWriter, r *http.Request) error {
 	path := r.URL.Path
@@ -41,7 +34,7 @@ func serve(w http.ResponseWriter, r *http.Request) error {
 		if isFolder {
 			return WriteError(w, HttpError{
 				Msg:   "put to folder disallowed",
-				Desc:  "PUT requests only need to be made to documents, and never to folders.",
+				Desc:  "PUT requests need only be made to documents, and never to folders.",
 				Cause: ErrBadRequest,
 			})
 		} else {
@@ -51,7 +44,7 @@ func serve(w http.ResponseWriter, r *http.Request) error {
 		if isFolder {
 			return WriteError(w, HttpError{
 				Msg:   "delete to folder disallowed",
-				Desc:  "DELETE requests only need to be made to documents, and never to folders.",
+				Desc:  "DELETE requests need only be made to documents, and never to folders.",
 				Cause: ErrBadRequest,
 			})
 		} else {
@@ -220,6 +213,7 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 
 	n, err := Retrieve(rpath)
 	found := !errors.Is(err, ErrNotExist)
+
 	if err != nil && found { // err is NOT ErrNotExist
 		return WriteError(w, err) // internal server error
 	}
@@ -279,7 +273,7 @@ func PutDocument(w http.ResponseWriter, r *http.Request) error {
 				Data: LDjson{
 					"rname":    rpath,
 					"if_match": cond,
-					"etag":     etag.String(),
+					"current_version":     etag.String(),
 				},
 				Cause: ErrPreconditionFailed,
 			})
@@ -433,7 +427,7 @@ func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 				Data: LDjson{
 					"rname":    rpath,
 					"if_match": cond,
-					"etag":     etag.String(),
+					"current_version":     etag.String(),
 				},
 				Cause: ErrPreconditionFailed,
 			})
@@ -455,7 +449,7 @@ func DeleteDocument(w http.ResponseWriter, r *http.Request) error {
 // WriteError formats and writes err to w.
 // If err is of type HttpError, its fields are formatted into an ld+json map
 // and written to w. The status code is decided upon based on (HttpError).Cause:
-// if Cause is one of the sentinel error values, status is looked up in the
+// If Cause is one of the sentinel error values, status is looked up in the
 // StatusCodes mapping. Else, if Cause in an unknown error, ErrServerError
 // (500) is used and Cause is returned for further error handling.
 // If err is NOT of type HttpError, only the response status is determined in

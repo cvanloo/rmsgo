@@ -24,7 +24,9 @@ func init() {
 	if !isdelve.Enabled {
 		UUID = uuid.NewRandom
 		Time = time.Now
+		FS = &RealFileSystem{}
 	}
+
 	Reset()
 }
 
@@ -40,11 +42,11 @@ func (e ConflictError) Error() string {
 var ErrNotExist = errors.New("no such document or folder")
 
 var (
-	// files keeps a reference for each document or folder, allowing for easy
-	// access.
+	// The files map keeps a reference to each document and folder, allowing
+	// for easy access, using rname as the key.
 	files map[string]*node
 
-	// root keeps a reference to the root folder.
+	// This root directly references the root folder.
 	// The reference will stay valid for the entire duration of execution once
 	// Reset has been called.
 	root *node

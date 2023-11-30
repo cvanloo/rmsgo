@@ -13,13 +13,14 @@ type (
 		// @todo: Quota() int64 ?
 	}
 
-	// UserReadOnly is a User with read access to any folder.
+	// UserReadOnly is a User with read access to any folder and document.
 	UserReadOnly struct{}
 
-	// UserReadWrite is a User with read and write access to any folder.
+	// UserReadWrite is a User with read and write access to any folder and document.
 	UserReadWrite struct{}
 
-	// UserReadPublic is a User with read permissions only to public folders.
+	// UserReadPublic is a User with read permissions only to public documents.
+	// Public are documents whose path starts with /public/.
 	UserReadPublic struct{}
 
 	Level string
@@ -65,15 +66,17 @@ func handleAuthorization(next http.Handler) http.Handler {
 			r = r.WithContext(nc)
 		}
 
+		// @todo: UseMiddleware option to insert a middleware after authentication
+		//    might want to split authentication and authorization up into two
+		//    separate middleware stages
+
 		isAuthorized := isAuthorized(r, user)
 		if isAuthorized {
 			next.ServeHTTP(w, r)
+		} else if isAuthenticated {
+			w.WriteHeader(http.StatusForbidden)
 		} else {
-			if isAuthenticated {
-				w.WriteHeader(http.StatusForbidden)
-			} else {
-				w.WriteHeader(http.StatusUnauthorized)
-			}
+			w.WriteHeader(http.StatusUnauthorized)
 		}
 	})
 }
@@ -100,12 +103,6 @@ func isAuthorized(r *http.Request, user User) bool {
 func parsePath(path string) (rname string, isPublic, isFolder bool) {
 	rname = strings.TrimPrefix(path, g.rroot)
 	isPublic = strings.HasPrefix(rname, "/public/")
-	// additional if-check necessary, because path could be named
-	// '/publicsomethingelse' in which case the public should not be trimmed
-	if isPublic {
-		// rname must start with a '/', so don't trim it!
-		rname = strings.TrimPrefix(rname, "/public")
-	}
 	isFolder = rname[len(rname)-1] == '/'
 	return
 }
