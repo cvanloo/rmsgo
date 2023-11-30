@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link href="/public/styles.css" rel="stylesheet" />
+        <script src="/public/htmx.js"></script>
+        <title>{{.Title}}</title>
+    </head>
+    <body>
+        <header />
+        <main>
+            {{CallTemplate "body" .Data}}
+        </main>
+        <footer>
+            <hr style="border: 2px dashed var(--accent-color);" />
+            <span style="display: inline-block; transform: rotate(180deg);">&copy;</span>
+            The Unlicense &mdash
+            <a href="https://github.com/cvanloo/rmsgo" target="_blank">GitHub</a>
+        </footer>
+    </body>
+</html>
