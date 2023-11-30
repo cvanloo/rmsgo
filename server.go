@@ -28,7 +28,6 @@ import (
 	. "github.com/cvanloo/rmsgo/mock"
 )
 
-// @todo: use Go options design pattern?
 type (
 	// Options' methods configure the remote storage server.
 	Options struct {
