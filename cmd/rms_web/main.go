@@ -1,13 +1,16 @@
 package main
 
 import (
+	"embed"
+	"bytes"
+	"html/template"
+	"io"
 	"log"
 	"net/http"
-	"html/template"
 )
 
 func init() {
-	pages = Template{template.Must(template.New("").ParseFS(templateFiles, "templates/*.html"))}
+	pages = Template{template.New("")}
 	pages.Funcs(map[string]any{
 		"CallTemplate": func(name string, data any) (html template.HTML, err error) {
 			buf := bytes.NewBuffer([]byte{})
@@ -16,11 +19,12 @@ func init() {
 			return
 		},
 	})
+	template.Must(pages.ParseFS(templateFiles, "templates/*.html"))
 }
 
 func panicIf(err error) {
 	if err != nil {
-		log.Fatalf("panicIf: %w", err)
+		log.Fatalf("panicIf: %v", err)
 	}
 }
 
@@ -29,9 +33,11 @@ type Template struct {
 }
 
 func (t *Template) Render(w io.Writer, name string, data any) error {
-	// @todo: where do we go from here?
 	return t.Template.ExecuteTemplate(w, name, data)
 }
+
+//go:embed templates
+var templateFiles embed.FS
 
 var pages Template
 
@@ -52,8 +58,16 @@ func routeNotFound(w http.ResponseWriter, r *http.Request) {
 		Desc: "The requested page does not exist on the server.",
 		URL: "https://www.example.com/error?code=404",
 	}
+	renderData := struct{
+		Title, Body string
+		Data any
+	}{
+		Title: "Error",
+		Body: "error.html",
+		Data: errorInfo,
+	}
 	w.WriteHeader(http.StatusNotFound)
-	panicIf(pages.Render(w, "error.html", errorInfo))
+	panicIf(pages.Render(w, "main.html", renderData))
 }
 
 func routeHello(w http.ResponseWriter, r *http.Request) {

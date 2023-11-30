@@ -40,7 +40,7 @@ body {
     justify-content: flex-start;
     min-height: 100vh;
 }
-header {
+header #header-bar {
     width: 100%;
     width: -webkit-fill-available;
     width: -moz-available;
