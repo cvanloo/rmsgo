@@ -107,20 +107,27 @@ func main() {
 		log.Fatalf("storage root does not exist: %v", err)
 	}
 
-	opts, err := rmsgo.Configure(*rroot, *sroot)
+	configureOrigins := func() rmsgo.ServerOption {
+		if !allOrigins {
+			return rmsgo.UseAllowedOrigins(origins.Origins)
+		}
+		return func(*rmsgo.Settings){}
+	}
+
+	err = rmsgo.Configure(
+		*rroot, *sroot,
+		rmsgo.UseErrorHandler(func(err error) {
+			log.Fatalf("remote storage: unhandled error: %v", err)
+		}),
+		rmsgo.UseMiddleware(logger),
+		rmsgo.UseAuthentication(func(r *http.Request, bearer string) (rmsgo.User, bool) {
+			return rmsgo.UserReadWrite{}, true
+		}),
+		configureOrigins(),
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
-	opts.UseErrorHandler(func(err error) {
-		log.Fatalf("remote storage: unhandled error: %v", err)
-	})
-	opts.UseMiddleware(logger)
-	if !allOrigins { // allow all is the default in opts
-		opts.UseAllowedOrigins(origins.Origins)
-	}
-	opts.UseAuthentication(func(r *http.Request, bearer string) (rmsgo.User, bool) {
-		return rmsgo.UserReadWrite{}, true
-	})
 
 	fd, err := os.OpenFile(*persistFile, os.O_RDWR|os.O_CREATE, 0640)
 	if err != nil {
