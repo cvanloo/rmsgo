@@ -109,7 +109,7 @@ func main() {
 
 ## All Configuration Options
 
-- \[Required] `Setup` 
+- \[Required] `Configure` 
   - remoteRoot: URL path below which the server is accessible. (e.g. "/storage/")
   - storageRoot: Location on server's file system to store remoteStorage documents. (e.g. "/var/rms/storage/")
 - \[Recommended] `UseAuthentication` configure how requests are authenticated and control access permissions of users.
