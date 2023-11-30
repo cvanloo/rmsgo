@@ -34,6 +34,7 @@ func main() {
 	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("<h1>Hello, World!"))
 	})
+	http.HandleFunc("/storage", handlerStorage)
 	log.Fatal(http.ListenAndServe(":8000", nil))
 }
 
@@ -59,4 +60,13 @@ func handlerNotFound(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNotFound)
 	panicIf(pages.Render(w, "error.html", errorInfo))
+}
+
+func handlerStorage(w http.ResponseWriter, r *http.Request) {
+	// @todo:
+	//  - is user authenticated?
+	//  - is user authorized?
+	//  - get user's storage root / requested storage path
+	//  - return storage listing (or error if requested storage location does not exist)
+	panicIf(pages.Render(w, "storage.html", nil))
 }
