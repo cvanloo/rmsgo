@@ -57,3 +57,39 @@ footer {
     margin-top: auto;
     margin-bottom: 8px;
 }
+
+/* @todo: Since this CSS is specific to that one page, maybe put it into its own CSS file? */
+.file_list {
+    padding: 0;
+    width: 50vw;
+}
+.file_list li {
+    display: grid;
+    grid-template-rows: 1fr 1fr;
+    grid-template-columns: 3fr 1fr;
+    /* margin: 0.5em 0; */
+    padding-top: 1em;
+    box-shadow: 0 5px 5px -5px var(--accent-color);
+}
+.file_list li:hover {
+    background-color: var(--bg-color);
+    box-shadow: 3px 5px 5px var(--accent-color);
+
+    position: relative;
+    left: -15px;
+    top: -10px;
+    z-index: 5;
+}
+.file_list_main {
+    font-size: 1.3em;
+}
+.file_list_detail {
+    font-size: 0.8em;
+    color: gray;
+}
+#file_list_mime {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    margin: auto 0;
+    color: var(--accent-color);
+}

@@ -1,0 +1,16 @@
+<h1>Files</h1>
+<ul class="file_list">
+{{ range .Files }}
+	{{ block "File" . }}
+		<li>
+			<span class="file_list_main">{{.Name}}</span>
+			<span id="file_list_mime">{{.Mime}}</span>
+			{{ if .IsFolder }}
+				<span class="file_list_detail" title="{{.Version}}">Folder</span>
+			{{ else }}
+				<span class="file_list_detail" title="{{.Version}}">{{.Length}} &mdash; {{.LastModText}}</span>
+			{{ end }}
+		</li>
+	{{ end }}
+{{ end }}
+</ul>
