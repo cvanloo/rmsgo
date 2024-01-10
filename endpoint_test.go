@@ -2,19 +2,16 @@ package rmsgo
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	. "github.com/cvanloo/rmsgo/mock"
 )
 
-func mockServer() {
+func mockServer() (ts *httptest.Server, opts *Options, root string) {
 	hostname = "catboy"
 	const (
 		rroot = "/storage/"
@@ -23,129 +20,79 @@ func mockServer() {
 	Mock(
 		WithDirectory(sroot),
 	)
-	opts := mustVal(Configure(rroot, sroot))
+	opts = mustVal(Configure(rroot, sroot))
 	opts.AllowAnyReadWrite()
 	Reset()
-}
-
-func ExampleGetFolder() {
-	mockServer()
 
 	mux := http.NewServeMux()
 	Register(mux)
-	ts := httptest.NewServer(mux)
-	defer ts.Close()
-
-	// server url + remote root
-	remoteRoot := ts.URL + g.Rroot()
-
-	// GET the currently empty root folder
-	{
-		r, err := http.Get(remoteRoot + "/")
-		if err != nil {
-			log.Fatal(err)
-		}
-		if r.StatusCode != http.StatusOK {
-			log.Fatalf("%s %s: %s", r.Request.Method, r.Request.URL, r.Status)
-		}
-		bs, err := io.ReadAll(r.Body)
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Printf("Root ETag: %s\n", r.Header.Get("ETag"))
-		fmt.Print(string(bs))
-		// Root ETag: 03d871638b18f0b459bf8fd12a58f1d8
-		// {
-		//   "@context": "http://remotestorage.io/spec/folder-description",
-		//   "items": {}
-		// }
-	}
-
-	// PUT a document
-	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+"/Documents/First.txt", bytes.NewReader([]byte("My first document.")))
-		if err != nil {
-			log.Fatal(err)
-		}
-		req.Header.Set("Content-Type", "funny/format") // mime type is auto-detected if not specified
-		r, err := http.DefaultClient.Do(req)
-		if err != nil {
-			log.Fatal(err)
-		}
-		if r.StatusCode != http.StatusCreated {
-			log.Fatalf("%s %s: %s", r.Request.Method, r.Request.URL, r.Status)
-		}
-		fmt.Printf("Created ETag: %s\n", r.Header.Get("ETag"))
-		// Created ETag: f0d0f717619b09cc081bb0c11d9b9c6b
-	}
-
-	// GET the now NON-empty root folder
-	{
-		r, err := http.Get(remoteRoot + "/")
-		if err != nil {
-			log.Fatal(err)
-		}
-		if r.StatusCode != http.StatusOK {
-			log.Fatalf("%s %s: %s", r.Request.Method, r.Request.URL, r.Status)
-		}
-		bs, err := io.ReadAll(r.Body)
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Printf("Root ETag: %s\n", r.Header.Get("ETag"))
-		fmt.Print(string(bs))
-		// Root ETag: ef528a27b48c1b187ef7116f7306358b
-		// {
-		//   "@context": "http://remotestorage.io/spec/folder-description",
-		//   "items": {
-		//     "Documents/": {
-		//       "ETag": "cc4c6d3bbf39189be874992479b60e2a"
-		//     }
-		//   }
-		// }
-	}
-
-	// GET the document's folder
-	{
-		r, err := http.Get(remoteRoot + "/Documents/")
-		if err != nil {
-			log.Fatal(err)
-		}
-		if r.StatusCode != http.StatusOK {
-			log.Fatalf("%s %s: %s", r.Request.Method, r.Request.URL, r.Status)
-		}
-		bs, err := io.ReadAll(r.Body)
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Printf("Documents/ ETag: %s\n", r.Header.Get("ETag"))
-		fmt.Print(string(bs))
-		// Documents/ ETag: cc4c6d3bbf39189be874992479b60e2a
-		// {
-		//   "@context": "http://remotestorage.io/spec/folder-description",
-		//   "items": {
-		//     "First.txt": {
-		//       "Content-Length": 18,
-		//       "Content-Type": "funny/format",
-		//       "ETag": "f0d0f717619b09cc081bb0c11d9b9c6b",
-		//       "Last-Modified": "Mon, 01 Jan 0001 00:00:00 UTC"
-		//     }
-		//   }
-		// }
-	}
-
-	// Output:
-	// Root ETag: 03d871638b18f0b459bf8fd12a58f1d8
-	// {"@context":"http://remotestorage.io/spec/folder-description","items":{}}
-	// Created ETag: f0d0f717619b09cc081bb0c11d9b9c6b
-	// Root ETag: ef528a27b48c1b187ef7116f7306358b
-	// {"@context":"http://remotestorage.io/spec/folder-description","items":{"Documents/":{"ETag":"cc4c6d3bbf39189be874992479b60e2a"}}}
-	// Documents/ ETag: cc4c6d3bbf39189be874992479b60e2a
-	// {"@context":"http://remotestorage.io/spec/folder-description","items":{"First.txt":{"Content-Length":18,"Content-Type":"funny/format","ETag":"f0d0f717619b09cc081bb0c11d9b9c6b","Last-Modified":"Mon, 01 Jan 0001 00:00:00 UTC"}}}
+	ts = httptest.NewServer(mux)
+	return ts, opts, ts.URL + g.rroot
 }
 
 // @todo: PUT test chunked transfer-encoding
 // @todo: test requests with http1.1, and with switch to http2
+
+type (
+	Expectation struct {
+		StatusCode int
+		Headers map[string]string
+		Body *string
+	}
+
+	ExpectedOpt func(*Expectation)
+)
+
+func Expect(opts ...ExpectedOpt) *Expectation {
+	e := &Expectation {
+		StatusCode: http.StatusOK,
+		Headers: make(map[string]string),
+		Body: nil,
+	}
+	for _, o := range opts {
+		o(e)
+	}
+	return e
+}
+
+func Status(code int) ExpectedOpt {
+	return func(e *Expectation) {
+		e.StatusCode = code
+	}
+}
+
+func Header(k, v string) ExpectedOpt {
+	return func(e *Expectation) {
+		e.Headers[k] = v
+	}
+}
+
+func Body(content string) ExpectedOpt {
+	return func(e *Expectation) {
+		e.Body = &content
+	}
+}
+
+func (exp *Expectation) Validate(r *http.Response) error {
+	if r.StatusCode != exp.StatusCode {
+		return fmt.Errorf("got: %s, want: %s", r.Status, http.StatusText(exp.StatusCode))
+	}
+	for k, v := range exp.Headers {
+		if hv := r.Header.Get(k); hv != v {
+			return fmt.Errorf("%s got: `%s', want: `%s'", k, hv, v)
+		}
+	}
+	if exp.Body != nil {
+		bs, err := io.ReadAll(r.Body)
+		if err != nil {
+			return err
+		}
+		if s := string(bs); len(s) != len(*exp.Body) || s != *exp.Body {
+			return fmt.Errorf("got: `%s' [%dB], want: `%s' [%dB]", s, len(s), *exp.Body, len(*exp.Body))
+		}
+	}
+	return nil
+}
 
 func TestPutDocument(t *testing.T) {
 	const (
@@ -154,54 +101,37 @@ func TestPutDocument(t *testing.T) {
 		testDocument     = "/Classified/FOGBANK.txt"
 		testDocumentEtag = "60ca7ee51a4a4886d00ae2470457b206"
 	)
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent))))
 	req.Header.Set("Content-Type", testMime)
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusCreated {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-	}
-	if e := r.Header.Get("ETag"); e != testDocumentEtag {
-		t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag)
+
+	if err := Expect(
+		Status(http.StatusCreated),
+		Header("ETag", testDocumentEtag),
+	).Validate(r); err != nil {
+		t.Error(err)
 	}
 
 	r, err = http.Get(remoteRoot + testDocument)
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusOK {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-	}
-	if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
-		t.Errorf("got: `%s', want: `no-cache'", cc)
-	}
-	if l := r.Header.Get("Content-Length"); l != fmt.Sprint(len(testContent)) {
-		t.Errorf("got: %s, want: %d", l, len(testContent))
-	}
-	if l := r.Header.Get("Content-Type"); l != testMime {
-		t.Errorf("got: `%s', want: `%s'", l, testMime)
-	}
-	if e := r.Header.Get("ETag"); e != testDocumentEtag {
-		t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag)
-	}
-	bs, err := io.ReadAll(r.Body)
-	if err != nil {
+
+	if err := Expect(
+		Status(http.StatusOK),
+		Header("Cache-Control", "no-cache"),
+		Header("Content-Length", fmt.Sprint(len(testContent))),
+		Header("Content-Type", testMime),
+		Header("ETag", testDocumentEtag),
+		Body(testContent),
+	).Validate(r); err != nil {
 		t.Error(err)
-	}
-	if string(bs) != testContent {
-		t.Errorf("got: `%s', want: `%s'", bs, testContent)
 	}
 }
 
@@ -216,104 +146,75 @@ func TestPutDocumentTwiceUpdatesIt(t *testing.T) {
 		testContent2      = "I will travel the distance in your eyes Interstellar Light years from you Supernova We'll fuse when we collide Awaking in the light of all the stars aligned"
 		testDocumentEtag2 = "063c77ac4aa257f9396f1b5cae956004"
 	)
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
-	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent1)))
-		if err != nil {
-			t.Error(err)
-		}
+	{ // put first version of document
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent1))))
 		req.Header.Set("Content-Type", testMime)
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentEtag1 {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag1)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentEtag1),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
-	{
+	{ // check that document was created by retrieving it
 		r, err := http.Get(remoteRoot + testDocument)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
-			t.Errorf("got: `%s', want: `no-cache'", cc)
-		}
-		if l := r.Header.Get("Content-Length"); l != fmt.Sprint(len(testContent1)) {
-			t.Errorf("got: %s, want: %d", l, len(testContent1))
-		}
-		if l := r.Header.Get("Content-Type"); l != testMime {
-			t.Errorf("got: `%s', want: `%s'", l, testMime)
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentEtag1 {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag1)
-		}
-		bs, err := io.ReadAll(r.Body)
-		if err != nil {
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("Cache-Control", "no-cache"),
+			Header("Content-Length", fmt.Sprint(len(testContent1))),
+			Header("Content-Type", testMime),
+			Header("ETag", testDocumentEtag1),
+			Body(testContent1),
+		).Validate(r); err != nil {
 			t.Error(err)
-		}
-		if string(bs) != testContent1 {
-			t.Errorf("got: `%s', want: `%s'", bs, testContent1)
 		}
 	}
 
-	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent2)))
-		if err != nil {
-			t.Error(err)
-		}
+	{ // update document content
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent2))))
 		req.Header.Set("Content-Type", testMime)
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentEtag2 {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag2)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentEtag2),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
-	{
+	{ // check that document has changed by retrieving it again
 		r, err := http.Get(remoteRoot + testDocument)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
-			t.Errorf("got: `%s', want: `no-cache'", cc)
-		}
-		if l := r.Header.Get("Content-Length"); l != fmt.Sprint(len(testContent2)) {
-			t.Errorf("got: %s, want: %d", l, len(testContent2))
-		}
-		if l := r.Header.Get("Content-Type"); l != testMime {
-			t.Errorf("got: `%s', want: `%s'", l, testMime)
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentEtag2 {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag2)
-		}
-		bs, err := io.ReadAll(r.Body)
-		if err != nil {
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("Cache-Control", "no-cache"),
+			Header("Content-Length", fmt.Sprint(len(testContent2))),
+			Header("Content-Type", testMime),
+			Header("ETag", testDocumentEtag2),
+			Body(testContent2),
+		).Validate(r); err != nil {
 			t.Error(err)
-		}
-		if string(bs) != testContent2 {
-			t.Errorf("got: `%s', want: `%s'", bs, testContent2)
 		}
 	}
 }
@@ -329,47 +230,40 @@ func TestPutDocumentIfMatchSuccessUpdatesIt(t *testing.T) {
 		testContent2      = "I will travel the distance in your eyes Interstellar Light years from you Supernova We'll fuse when we collide Awaking in the light of all the stars aligned"
 		testDocumentEtag2 = "063c77ac4aa257f9396f1b5cae956004"
 	)
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent1)))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent1))))
 		req.Header.Set("Content-Type", testMime)
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentEtag1 {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag1)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentEtag1),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent2)))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent2))))
 		req.Header.Set("Content-Type", testMime)
 		req.Header.Set("If-Match", testDocumentEtag1) // Set If-Match header!
+
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentEtag2 {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag2)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentEtag2),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 }
@@ -381,52 +275,121 @@ func TestPutDocumentIfMatchFailDoesNotUpdateIt(t *testing.T) {
 		wrongETag    = "3de26fc06d5d1e20ff96a8142cd6fabf"
 
 		testContent1      = "I will travel the distance in your eyes Interstellar Light years from you"
-		testDocumentETag1 = "33f7b41f98820961b12134677ba3f231"
+		testDocumentEtag1 = "33f7b41f98820961b12134677ba3f231"
 
 		testContent2 = "I will travel the distance in your eyes Interstellar Light years from you Supernova We'll fuse when we collide Awaking in the light of all the stars aligned"
 	)
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent1)))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent1))))
 		req.Header.Set("Content-Type", testMime)
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag1 {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag1)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentEtag1),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent2)))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent2))))
 		req.Header.Set("Content-Type", testMime)
-		req.Header.Set("If-Match", wrongETag) // Set If-Match header!
+		req.Header.Set("If-Match", wrongETag)
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusPreconditionFailed {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusPreconditionFailed))
+
+		if err := Expect(
+			Status(http.StatusPreconditionFailed),
+			Header("ETag", testDocumentEtag1), // Returns ETag of current (server) version
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag1 {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag1)
+	}
+}
+
+func TestPutDocumentIfMatchUpdateInBetween(t *testing.T) {
+	const (
+		testMime     = "application/x-subrip"
+		testDocument = "/Lyrics/STARSET.txt"
+		wrongETag    = "3de26fc06d5d1e20ff96a8142cd6fabf"
+
+		testContent1      = "I will travel the distance in your eyes Interstellar Light years from you"
+		testDocumentEtag1 = "33f7b41f98820961b12134677ba3f231"
+
+		testContent2      = "I will travel the distance in your eyes Interstellar Light years from you Supernova We'll fuse when we collide Awaking in the light of all the stars aligned"
+		testDocumentEtag2 = "063c77ac4aa257f9396f1b5cae956004"
+
+		testContent3 = "I will travel the distance in your eyes"
+	)
+	ts, _, remoteRoot := mockServer()
+	defer ts.Close()
+
+	{ // create document
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent1))))
+		req.Header.Set("Content-Type", testMime)
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
 		}
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentEtag1),
+		).Validate(r); err != nil {
+			t.Error(err)
+		}
+	}
+
+	{ // @todo: check document contents
+	}
+
+	{ // update document
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent2))))
+		req.Header.Set("Content-Type", testMime)
+		req.Header.Set("If-Match", testDocumentEtag1)
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentEtag2),
+		).Validate(r); err != nil {
+			t.Error(err)
+		}
+	}
+
+	{ // @todo: check document contents
+	}
+
+	{ // try to update document again, from a version earlier
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent2))))
+		req.Header.Set("Content-Type", testMime)
+		req.Header.Set("If-Match", wrongETag)
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+
+		if err := Expect(
+			Status(http.StatusPreconditionFailed),
+			Header("ETag", testDocumentEtag2), // Returns ETag of current (server) version
+		).Validate(r); err != nil {
+			t.Error(err)
+		}
+	}
+
+	{ // @todo: check document contents remain unchanged
 	}
 }
 
@@ -438,11 +401,7 @@ func TestPutDocumentIfNonMatchSuccessCreatesTheDocument(t *testing.T) {
 		testContent      = "I will travel the distance in your eyes Interstellar Light years from you"
 		testDocumentEtag = "33f7b41f98820961b12134677ba3f231"
 	)
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	{
@@ -456,21 +415,19 @@ func TestPutDocumentIfNonMatchSuccessCreatesTheDocument(t *testing.T) {
 	}
 
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent))))
 		req.Header.Set("Content-Type", testMime)
-		req.Header.Set("If-None-Match", "*") // Set If-None-Match header!
+		req.Header.Set("If-None-Match", "*")
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentEtag {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentEtag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -496,49 +453,44 @@ func TestPutDocumentIfNonMatchFailDoesNotUpdateIt(t *testing.T) {
 		testContent2      = "I will travel the distance in your eyes Interstellar Light years from you Supernova We'll fuse when we collide Awaking in the light of all the stars aligned"
 		testDocumentEtag2 = "063c77ac4aa257f9396f1b5cae956004"
 	)
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent1)))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent1))))
 		req.Header.Set("Content-Type", testMime)
-		req.Header.Set("If-None-Match", "*") // Set If-None-Match header!
+		req.Header.Set("If-None-Match", "*")
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag1 {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag1)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentETag1),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent2)))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent2))))
 		req.Header.Set("Content-Type", testMime)
-		req.Header.Set("If-None-Match", "*") // Set If-None-Match header!
+		req.Header.Set("If-None-Match", "*")
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusPreconditionFailed {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusPreconditionFailed))
+
+		if err := Expect(
+			Status(http.StatusPreconditionFailed),
+			Header("ETag", testDocumentETag1),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag1 {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag1)
-		}
+	}
+
+	{ // @todo: check document contents
 	}
 }
 
@@ -550,143 +502,83 @@ func TestPutDocumentSilentlyCreateAncestors(t *testing.T) {
 		testDocument        = "/Quotes/Neal Stephenson.txt"
 		testDocumentName    = "Neal Stephenson.txt"
 		testDocumentEtag    = "3dc42d11db35b8354dc06c46a53c9c9d"
+
 		testDocumentDir     = "/Quotes/"
 		testDocumentDirETag = "3de26fc06d5d1e20ff96a8142cd6fabf"
+
+		testDirListing = `{"@context":"http://remotestorage.io/spec/folder-description","items":{"Neal Stephenson.txt":{"Content-Length":83,"Content-Type":"wise/quote","ETag":"3dc42d11db35b8354dc06c46a53c9c9d","Last-Modified":"Mon, 01 Jan 0001 00:00:00 UTC"}}}
+` // don't forget newline
 	)
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent))))
 	req.Header.Set("Content-Type", testMime)
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusCreated {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-	}
-	if e := r.Header.Get("ETag"); e != testDocumentEtag {
-		t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag)
+
+	if err := Expect(
+		Status(http.StatusCreated),
+		Header("ETag", testDocumentEtag),
+	).Validate(r); err != nil {
+		t.Error(err)
 	}
 
 	r, err = http.Get(remoteRoot + testDocumentDir)
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusOK {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-	}
-	if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
-		t.Errorf("got: `%s', want: `no-cache'", cc)
-	}
-	if e := r.Header.Get("ETag"); e != testDocumentDirETag {
-		t.Errorf("got: `%s', want: `%s'", e, testDocumentDirETag)
-	}
-	bs, err := io.ReadAll(r.Body)
-	if err != nil {
-		t.Error(err)
-	}
 
-	lst := LDjson{}
-	err = json.Unmarshal(bs, &lst)
-	if err != nil {
+	if err := Expect(
+		Status(http.StatusOK),
+		Header("Cache-Control", "no-cache"),
+		Header("ETag", testDocumentDirETag),
+		Body(testDirListing),
+	).Validate(r); err != nil {
 		t.Error(err)
 	}
-	ctx, err := LDGet[string](lst, "@context")
-	if err != nil {
-		t.Error(err)
-	}
-	if ctx != rmsContext {
-		t.Errorf("got: `%s', want: `%s'", ctx, rmsContext)
-	}
-	docLst, err := LDGet[LDjson](lst, "items", testDocumentName)
-	if err != nil {
-		t.Error(err)
-	}
-
-	e, err := LDGet[string](docLst, "ETag")
-	if err != nil {
-		t.Error(err)
-	}
-	if e != testDocumentEtag {
-		t.Errorf("got: `%s', want: `%s'", e, testDocumentEtag)
-	}
-	mime, err := LDGet[string](docLst, "Content-Type")
-	if err != nil {
-		t.Error(err)
-	}
-	if mime != testMime {
-		t.Errorf("got: `%s', want: `%s'", mime, testMime)
-	}
-	l, err := LDGet[float64](docLst, "Content-Length")
-	if err != nil {
-		t.Error(err)
-	}
-	if l != float64(len(testContent)) {
-		t.Errorf("got: %f, want: %d", l, len(testContent))
-	}
-	modt, err := LDGet[string](docLst, "Last-Modified")
-	if err != nil {
-		t.Error(err)
-	}
-	tme, err := time.Parse(timeFormat, modt)
-	if err != nil {
-		t.Error(err)
-	}
-	_ = tme // @todo: we can't really verify this right now
 }
 
 func TestPutDocumentUpdatesAncestorETags(t *testing.T) {
 	const (
 		testMime = "application/x-subrip"
 
-		testContent1      = "Run for the heavens Sing to the stars Love like a lover Shine in the dark Shout like an army Sound the alarm I am a burning [...] Heart"
+		testContent1      = `Run for the heavens \\ Sing to the stars \\ Love like a lover \\ Shine in the dark \\ Shout like an army \\ Sound the alarm \\ I am a burning [...] Heart`
 		testDocument1     = "/Lyrics/SVRCINA.srt"
 		testDocument1Name = "SVRCINA.srt"
-		testDocument1ETag = "6f9cd924b8654c70d5bec5f96491f55e"
+		testDocument1ETag = "65973f0e09b0b8830949c134162d112e"
 
-		testContent2      = "I'm attracted to the sky To the sky To the sky Every life I learn to fly Learn to fly Learn to fly"
+		testContent2      = `I'm attracted to the sky \\ To the sky \\ To the sky \\ Every life I learn to fly \\ Learn to fly \\ Learn to fly`
 		testDocument2     = "/Lyrics/Raizer.srt"
 		testDocument2Name = "Raizer.srt"
-		testDocument2ETag = "9323d12cc9b79190804d1c6b9c2708f3"
+		testDocument2ETag = "19ca2805893dd1db277e23d80c2f14cd"
 
 		testDocumentDir      = "/Lyrics/"
-		testDocumentDirETag1 = "bc42be34636d852ecd65d8b3a3857a62"
-		testDocumentDirETag2 = "6dedad00af566fbfbb811661e6f88387"
+		testDocumentDirETag1 = "db72f39f4a2cf47b0d119946f066c894"
+		testDocumentDirETag2 = "5da5bbb350f940f06f4569f8552948b0"
 
-		testRootETag1 = "e441dd5f0422b305cf30bca3bbdefd68"
-		testRootETag2 = "628e5ebbbcf131c9103ebd51019d1b7e"
+		testRootETag1 = "b5f199d0f2c635bf299450fe9f81da94"
+		testRootETag2 = "42e40ece81f1b30afe6ae1a6de3eaffa"
 	)
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	// PUT first document
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument1, bytes.NewReader([]byte(testContent1)))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument1, bytes.NewReader([]byte(testContent1))))
 		req.Header.Set("Content-Type", testMime)
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocument1ETag {
-			t.Errorf("got: `%s', want: `%s'", e, testDocument1ETag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocument1ETag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -696,14 +588,13 @@ func TestPutDocumentUpdatesAncestorETags(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
-			t.Errorf("got: `%s', want: `no-cache'", cc)
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentDirETag1 {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentDirETag1)
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("Cache-Control", "no-cache"),
+			Header("ETag", testDocumentDirETag1),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -713,33 +604,30 @@ func TestPutDocumentUpdatesAncestorETags(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
-			t.Errorf("got: `%s', want: `no-cache'", cc)
-		}
-		if e := r.Header.Get("ETag"); e != testRootETag1 {
-			t.Errorf("got: `%s', want: `%s'", e, testRootETag1)
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("Cache-Control", "no-cache"),
+			Header("ETag", testRootETag1),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// PUT second document
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument2, bytes.NewReader([]byte(testContent2)))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument2, bytes.NewReader([]byte(testContent2))))
 		req.Header.Set("Content-Type", testMime)
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocument2ETag {
-			t.Errorf("got: `%s', want: `%s'", e, testDocument2ETag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocument2ETag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -749,14 +637,13 @@ func TestPutDocumentUpdatesAncestorETags(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
-			t.Errorf("got: `%s', want: `no-cache'", cc)
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentDirETag2 {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentDirETag2)
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("Cache-Control", "no-cache"),
+			Header("ETag", testDocumentDirETag2),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -766,14 +653,13 @@ func TestPutDocumentUpdatesAncestorETags(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
-			t.Errorf("got: `%s', want: `no-cache'", cc)
-		}
-		if e := r.Header.Get("ETag"); e != testRootETag2 {
-			t.Errorf("got: `%s', want: `%s'", e, testRootETag2)
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("Cache-Control", "no-cache"),
+			Header("ETag", testRootETag2),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 }
@@ -792,28 +678,22 @@ func TestPutDocumentAutodetectContentType(t *testing.T) {
 		testDocumentETag = "c1d56d2d5814cf52357a0129341402db"
 		testMime         = "application/octet-stream"
 	)
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent))))
 		// don't set Content-Type header
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentETag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -822,50 +702,32 @@ func TestPutDocumentAutodetectContentType(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
-			t.Errorf("got: `%s', want: `no-cache'", cc)
-		}
-		if l := r.Header.Get("Content-Length"); l != fmt.Sprint(len(testContent)) {
-			t.Errorf("got: %s, want: %d", l, len(testContent))
-		}
-		if l := r.Header.Get("Content-Type"); l != testMime {
-			t.Errorf("got: `%s', want: `%s'", l, testMime)
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
-		}
-		bs, err := io.ReadAll(r.Body)
-		if err != nil {
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("Cache-Control", "no-cache"),
+			Header("Content-Length", fmt.Sprint(len(testContent))),
+			Header("Content-Type", testMime),
+			Header("ETag", testDocumentETag),
+			Body(testContent),
+		).Validate(r); err != nil {
 			t.Error(err)
-		}
-		if string(bs) != testContent {
-			t.Errorf("got: `%s', want: `%s'", bs, testContent)
 		}
 	}
 }
 
 func TestPutDocumentAsFolderFails(t *testing.T) {
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodPut, remoteRoot+"/Edward/M/D/Teach/", bytes.NewReader([]byte("HA! Liar. I have to write sentences with multiple dependent clauses in order to repair the damage of your 5 word rhetorical cluster grenade.")))
-	if err != nil {
-		t.Error(err)
-	}
-	// (don't set Content-Type header)
+	req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+"/Edward/M/D/Teach/", bytes.NewReader([]byte("HA! Liar. I have to write sentences with multiple dependent clauses in order to repair the damage of your 5 word rhetorical cluster grenade."))))
+	// don't set Content-Type header
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusBadRequest {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusBadRequest))
+	if err := Expect(Status(http.StatusBadRequest)).Validate(r); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -882,62 +744,37 @@ func TestPutDocumentClashesWithFolderFails(t *testing.T) {
 
 		expectedConflictPath = "/Lyrics/Favourite"
 	)
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	// PUT first document
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument1, bytes.NewReader([]byte(testContent1)))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument1, bytes.NewReader([]byte(testContent1))))
 		req.Header.Set("Content-Type", testMime)
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocument1ETag {
-			t.Errorf("got: `%s', want: `%s'", e, testDocument1ETag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocument1ETag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// PUT second document
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument2, bytes.NewReader([]byte(testContent2)))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument2, bytes.NewReader([]byte(testContent2))))
 		req.Header.Set("Content-Type", testMime)
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusConflict {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusConflict))
-		}
 
-		bs, err := io.ReadAll(r.Body)
-		if err != nil {
+		if err := Expect(Status(http.StatusConflict)).Validate(r); err != nil {
 			t.Error(err)
-		}
-		errLst := LDjson{}
-		err = json.Unmarshal(bs, &errLst)
-		if err != nil {
-			t.Error(err)
-		}
-		conflictPath, err := LDGet[string](errLst, "data", "conflict")
-		if err != nil {
-			t.Error(err)
-		}
-		if conflictPath != expectedConflictPath {
-			t.Errorf("got: `%s', want: `%s'", conflictPath, expectedConflictPath)
 		}
 	}
 }
@@ -955,72 +792,43 @@ func TestPutDocumentAncestorFolderClashesWithDocumentFails(t *testing.T) {
 
 		expectedConflictPath = "/Lyrics/Favourite"
 	)
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	// PUT first document
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument1, bytes.NewReader([]byte(testContent1)))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument1, bytes.NewReader([]byte(testContent1))))
 		req.Header.Set("Content-Type", testMime)
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocument1ETag {
-			t.Errorf("got: `%s', want: `%s'", e, testDocument1ETag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocument1ETag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// PUT second document
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument2, bytes.NewReader([]byte(testContent2)))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument2, bytes.NewReader([]byte(testContent2))))
 		req.Header.Set("Content-Type", testMime)
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusConflict {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusConflict))
-		}
 
-		bs, err := io.ReadAll(r.Body)
-		if err != nil {
+		if err := Expect(Status(http.StatusConflict)).Validate(r); err != nil {
 			t.Error(err)
-		}
-		errLst := LDjson{}
-		err = json.Unmarshal(bs, &errLst)
-		if err != nil {
-			t.Error(err)
-		}
-		conflictPath, err := LDGet[string](errLst, "data", "conflict")
-		if err != nil {
-			t.Error(err)
-		}
-		if conflictPath != expectedConflictPath {
-			t.Errorf("got: `%s', want: `%s'", conflictPath, expectedConflictPath)
 		}
 	}
 }
 
 func TestGetFolder(t *testing.T) {
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1040,20 +848,18 @@ func TestGetFolder(t *testing.T) {
 	)
 
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent))))
 		req.Header.Set("Content-Type", testMime)
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentETag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -1061,33 +867,20 @@ func TestGetFolder(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusOK {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-	}
-	if ct := r.Header.Get("Content-Type"); ct != "application/ld+json" {
-		t.Errorf("got: `%s', want: `application/ld+json'", ct)
-	}
-	if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
-		t.Errorf("got: `%s', want: `no-cache'", cc)
-	}
-	if e := r.Header.Get("ETag"); e != testDocumentDirETag {
-		t.Errorf("got: `%s', want: `%s'", e, testDocumentDirETag)
-	}
-	bs, err := io.ReadAll(r.Body)
-	if err != nil {
+
+	if err := Expect(
+		Status(http.StatusOK),
+		Header("Content-Type", "application/ld+json"),
+		Header("Cache-Control", "no-cache"),
+		Header("ETag", testDocumentDirETag),
+		Body(responseBody),
+	).Validate(r); err != nil {
 		t.Error(err)
-	}
-	if string(bs) != responseBody {
-		t.Errorf("got: `%s', want: `%s'", bs, responseBody)
 	}
 }
 
 func TestGetFolderEmpty(t *testing.T) {
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1101,63 +894,33 @@ func TestGetFolderEmpty(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusOK {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-	}
-	if ct := r.Header.Get("Content-Type"); ct != "application/ld+json" {
-		t.Errorf("got: `%s', want: `application/ld+json'", ct)
-	}
-	if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
-		t.Errorf("got: `%s', want: `no-cache'", cc)
-	}
-	if e := r.Header.Get("ETag"); e != testDocumentDirETag {
-		t.Errorf("got: `%s', want: `%s'", e, testDocumentDirETag)
-	}
-	bs, err := io.ReadAll(r.Body)
-	if err != nil {
+
+	if err := Expect(
+		Status(http.StatusOK),
+		Header("Content-Type", "application/ld+json"),
+		Header("Cache-Control", "no-cache"),
+		Header("ETag", testDocumentDirETag),
+		Body(responseBody),
+	).Validate(r); err != nil {
 		t.Error(err)
-	}
-	if string(bs) != responseBody {
-		t.Errorf("got: `%s', want: `%s'", bs, responseBody)
 	}
 }
 
 func TestGetFolderNotFound(t *testing.T) {
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
-
-	const responseBody = `{"data":{"rname":"/nonexistent/"},"description":"The requested folder does not exist on the server.","message":"folder not found","url":""}
-` // don't forget newline
 
 	r, err := http.Get(remoteRoot + "/nonexistent/")
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusNotFound {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNotFound))
-	}
-	if ct := r.Header.Get("Content-Type"); ct != "application/ld+json" {
-		t.Errorf("got: `%s', want: `application/ld+json'", ct)
-	}
-	bs, err := io.ReadAll(r.Body)
-	if err != nil {
+	if err := Expect(Status(http.StatusNotFound)).Validate(r); err != nil {
 		t.Error(err)
-	}
-	if string(bs) != responseBody {
-		t.Errorf("got: `%s', want: `%s'", bs, responseBody)
 	}
 }
 
 func TestGetFolderIfNonMatchRevMatches(t *testing.T) {
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1171,44 +934,36 @@ func TestGetFolderIfNonMatchRevMatches(t *testing.T) {
 	)
 
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent))))
 		req.Header.Set("Content-Type", testMime)
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentETag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
-	req, err := http.NewRequest(http.MethodGet, remoteRoot+testDocumentDir, nil)
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodGet, remoteRoot+testDocumentDir, nil))
 	// include revision of the folder we're about to GET
-	req.Header.Set("If-None-Match", fmt.Sprintf(/* this revision does NOT match: */ "03d871638b18f0b459bf8fd12a58f1d8, %s", /* this revision DOES match: */ testDocumentDirETag))
+	//                                            v-- doesn't match                        v-- does match
+	req.Header.Set("If-None-Match", fmt.Sprintf("03d871638b18f0b459bf8fd12a58f1d8, %s", testDocumentDirETag))
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusNotModified {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNotModified))
+	if err := Expect(Status(http.StatusNotModified)).Validate(r); err != nil {
+		t.Error(err)
 	}
 }
 
 func TestGetFolderIfNonMatchRevNoMatch(t *testing.T) {
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1225,60 +980,42 @@ func TestGetFolderIfNonMatchRevNoMatch(t *testing.T) {
 	)
 
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent))))
 		req.Header.Set("Content-Type", testMime)
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentETag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
-	req, err := http.NewRequest(http.MethodGet, remoteRoot+testDocumentDir, nil)
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodGet, remoteRoot+testDocumentDir, nil))
 	// none of the revisions match our public/ folder
 	req.Header.Set("If-None-Match", "03d871638b18f0b459bf8fd12a58f1d8, 3e507240501005a29cc22520bd333f79, 33f7b41f98820961b12134677ba3f231")
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusOK {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-	}
-	if ct := r.Header.Get("Content-Type"); ct != "application/ld+json" {
-		t.Errorf("got: `%s', want: `application/ld+json'", ct)
-	}
-	if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
-		t.Errorf("got: `%s', want: `no-cache'", cc)
-	}
-	if e := r.Header.Get("ETag"); e != testDocumentDirETag {
-		t.Errorf("got: `%s', want: `%s'", e, testDocumentDirETag)
-	}
-	bs, err := io.ReadAll(r.Body)
-	if err != nil {
+
+	if err := Expect(
+		Status(http.StatusOK),
+		Header("Content-Type", "application/ld+json"),
+		Header("Cache-Control", "no-cache"),
+		Header("ETag", testDocumentDirETag),
+		Body(responseBody),
+	).Validate(r); err != nil {
 		t.Error(err)
-	}
-	if string(bs) != responseBody {
-		t.Errorf("got: `%s', want: `%s'", bs, responseBody)
 	}
 }
 
 func TestGetFolderThatIsADocumentFails(t *testing.T) {
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1290,19 +1027,17 @@ func TestGetFolderThatIsADocumentFails(t *testing.T) {
 	)
 
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent))))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentETag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -1310,17 +1045,13 @@ func TestGetFolderThatIsADocumentFails(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusBadRequest {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusBadRequest))
+	if err := Expect(Status(http.StatusBadRequest)).Validate(r); err != nil {
+		t.Error(err)
 	}
 }
 
 func TestHeadFolder(t *testing.T) {
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1329,19 +1060,17 @@ func TestHeadFolder(t *testing.T) {
 	)
 
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+"/yt/rendle/citation", bytes.NewReader([]byte("In space no one can set a breakpoint.")))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+"/yt/rendle/citation", bytes.NewReader([]byte("In space no one can set a breakpoint."))))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentETag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -1349,27 +1078,16 @@ func TestHeadFolder(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusOK {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-	}
-	bs, err := io.ReadAll(r.Body)
-	if err != nil {
+
+	if err := Expect(
+		Status(http.StatusOK),
+		Header("ETag", rootETag),
+		Header("Content-Length", "123"),
+		Header("Content-Type", "application/ld+json"),
+		Header("Cache-Control", "no-cache"),
+		Body(""), // response to a head request should have an empty body
+	).Validate(r); err != nil {
 		t.Error(err)
-	}
-	if etag := r.Header.Get("ETag"); etag != rootETag {
-		t.Errorf("got: `%s', want: `%s'", etag, rootETag)
-	}
-	if l := r.Header.Get("Content-Length"); l != "123" {
-		t.Errorf("got: `%s', want: 123", l)
-	}
-	if ct := r.Header.Get("Content-Type"); ct != "application/ld+json" {
-		t.Errorf("got: `%s', want: `application/ld+json'", ct)
-	}
-	if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
-		t.Errorf("got: `%s', want: `no-cache'", cc)
-	}
-	if len(bs) != 0 {
-		t.Error("the response to a head request should have an empty body")
 	}
 }
 
@@ -1379,11 +1097,7 @@ func TestHeadFolder(t *testing.T) {
 // (Go's HTTP lib takes care of not including the body in the response.)
 
 func TestGetDocument(t *testing.T) {
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1394,20 +1108,18 @@ func TestGetDocument(t *testing.T) {
 	)
 
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent))))
 		req.Header.Set("Content-Type", testMime)
-		if err != nil {
-			t.Error(err)
-		}
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentETag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -1415,63 +1127,35 @@ func TestGetDocument(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusOK {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-	}
-	if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
-		t.Errorf("got: `%s', want: `no-cache'", cc)
-	}
-	if l := r.Header.Get("Content-Length"); l != fmt.Sprintf("%d", len(testContent)) {
-		t.Errorf("got: %s, want: %d", l, len(testContent))
-	}
-	if e := r.Header.Get("ETag"); e != testDocumentETag {
-		t.Errorf("got: `%s, want: `%s'", e, testDocumentETag)
-	}
-	if ct := r.Header.Get("Content-Type"); ct != testMime {
-		t.Errorf("got: `%s', want: `%s'", ct, testMime)
-	}
-	bs, err := io.ReadAll(r.Body)
-	if err != nil {
+
+	if err := Expect(
+		Status(http.StatusOK),
+		Header("Cache-Control", "no-cache"),
+		Header("Content-Length", fmt.Sprint(len(testContent))),
+		Header("ETag", testDocumentETag),
+		Header("Content-Type", testMime),
+		Body(testContent),
+	).Validate(r); err != nil {
 		t.Error(err)
-	}
-	if string(bs) != testContent {
-		t.Errorf("got: `%s', want: `%s'", bs, testContent)
 	}
 }
 
 func TestGetDocumentNotFound(t *testing.T) {
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
-
-	const response = `{"data":{"rname":"/inexistent/document"},"description":"The requested document does not exist on the server.","message":"document not found","url":""}
-` // don't forget newline
 
 	r, err := http.Get(remoteRoot + "/inexistent/document")
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusNotFound {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNotFound))
-	}
-	bs, err := io.ReadAll(r.Body)
-	if err != nil {
+
+	if err := Expect(Status(http.StatusNotFound)).Validate(r); err != nil {
 		t.Error(err)
-	}
-	if string(bs) != response {
-		t.Errorf("got: `%s', want: `%s'", bs, response)
 	}
 }
 
 func TestGetDocumentIfNonMatchRevMatches(t *testing.T) {
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1488,44 +1172,35 @@ around inheritance.`
 	)
 
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent))))
 		req.Header.Set("Content-Type", testMime)
-		if err != nil {
-			t.Error(err)
-		}
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentETag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
-	req, err := http.NewRequest(http.MethodGet, remoteRoot+testDocument, nil)
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodGet, remoteRoot+testDocument, nil))
 	// include revision of the document we're about to GET
 	req.Header.Set("If-None-Match", fmt.Sprintf("03d871638b18f0b459bf8fd12a58f1d8, %s", testDocumentETag))
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusNotModified {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNotModified))
+	if err := Expect(Status(http.StatusNotModified)).Validate(r); err != nil {
+		t.Error(err)
 	}
 }
 
 func TestGetDocumentIfNonMatchRevNoMatch(t *testing.T) {
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1542,63 +1217,43 @@ around inheritance.`
 	)
 
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent))))
 		req.Header.Set("Content-Type", testMime)
-		if err != nil {
-			t.Error(err)
-		}
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentETag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
-	req, err := http.NewRequest(http.MethodGet, remoteRoot+testDocument, nil)
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodGet, remoteRoot+testDocument, nil))
 	// revision of our document NOT included
 	req.Header.Set("If-None-Match", "03d871638b18f0b459bf8fd12a58f1d8, cc4c6d3bbf39189be874992479b60e2a, f0d0f717619b09cc081bb0c11d9b9c6b")
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusOK {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-	}
-	if cc := r.Header.Get("Cache-Control"); cc != "no-cache" {
-		t.Errorf("got: `%s', want: `no-cache'", cc)
-	}
-	if l := r.Header.Get("Content-Length"); l != fmt.Sprintf("%d", len(testContent)) {
-		t.Errorf("got: %s, want: %d", l, len(testContent))
-	}
-	if e := r.Header.Get("ETag"); e != testDocumentETag {
-		t.Errorf("got: `%s, want: `%s'", e, testDocumentETag)
-	}
-	if ct := r.Header.Get("Content-Type"); ct != testMime {
-		t.Errorf("got: `%s', want: `%s'", ct, testMime)
-	}
-	bs, err := io.ReadAll(r.Body)
-	if err != nil {
+
+	if err := Expect(
+		Status(http.StatusOK),
+		Header("Cache-Control", "no-cache"),
+		Header("Content-Length", fmt.Sprint(len(testContent))),
+		Header("ETag", testDocumentETag),
+		Header("Content-Type", testMime),
+		Body(testContent),
+	).Validate(r); err != nil {
 		t.Error(err)
-	}
-	if string(bs) != testContent {
-		t.Errorf("got: `%s', want: `%s'", bs, testContent)
 	}
 }
 
 func TestGetDocumentThatIsAFolderFails(t *testing.T) {
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1610,19 +1265,17 @@ func TestGetDocumentThatIsAFolderFails(t *testing.T) {
 	)
 
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent))))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentETag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -1630,17 +1283,13 @@ func TestGetDocumentThatIsAFolderFails(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusBadRequest {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusBadRequest))
+	if err := Expect(Status(http.StatusBadRequest)).Validate(r); err != nil {
+		t.Error(err)
 	}
 }
 
 func TestHeadDocument(t *testing.T) {
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1651,20 +1300,18 @@ func TestHeadDocument(t *testing.T) {
 	)
 
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent))))
 		req.Header.Set("Content-Type", testMime)
-		if err != nil {
-			t.Error(err)
-		}
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentETag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -1672,33 +1319,20 @@ func TestHeadDocument(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusOK {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-	}
-	if l := r.Header.Get("Content-Length"); l != fmt.Sprintf("%d", len(testContent)) {
-		t.Errorf("got: %s, want: %d", l, len(testContent))
-	}
-	if e := r.Header.Get("ETag"); e != testDocumentETag {
-		t.Errorf("got: `%s, want: `%s'", e, testDocumentETag)
-	}
-	if ct := r.Header.Get("Content-Type"); ct != testMime {
-		t.Errorf("got: `%s', want: `%s'", ct, testMime)
-	}
-	bs, err := io.ReadAll(r.Body)
-	if err != nil {
+
+	if err := Expect(
+		Status(http.StatusOK),
+		Header("Content-Length", fmt.Sprint(len(testContent))),
+		Header("ETag", testDocumentETag),
+		Header("Content-Type", testMime),
+		Body(""), // response to a head request should have an empty body
+	).Validate(r); err != nil {
 		t.Error(err)
-	}
-	if len(bs) != 0 {
-		t.Error("the response to a head request should have an empty body")
 	}
 }
 
 func TestDeleteDocument(t *testing.T) {
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1722,39 +1356,35 @@ func TestDeleteDocument(t *testing.T) {
 
 	// create document
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument1, bytes.NewReader([]byte(testContent1)))
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument1, bytes.NewReader([]byte(testContent1))))
 		req.Header.Set("Content-Type", testMime)
-		if err != nil {
-			t.Error(err)
-		}
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag1 {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag1)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentETag1),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// create another document with a different parent
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument2, bytes.NewReader([]byte(testContent2)))
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument2, bytes.NewReader([]byte(testContent2))))
 		req.Header.Set("Content-Type", testMime)
-		if err != nil {
-			t.Error(err)
-		}
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag2 {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag2)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentETag2),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -1764,15 +1394,16 @@ func TestDeleteDocument(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		if err := Expect(Status(http.StatusOK)).Validate(r); err != nil {
+			t.Error(err)
 		}
+
 		r, err = http.Head(remoteRoot + testDocument2)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		if err := Expect(Status(http.StatusOK)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -1782,11 +1413,12 @@ func TestDeleteDocument(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if e := r.Header.Get("ETag"); e != testCommonAncestorETag1 {
-			t.Errorf("got: `%s', want: `%s'", e, testCommonAncestorETag1)
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("ETag", testCommonAncestorETag1),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -1796,29 +1428,28 @@ func TestDeleteDocument(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if e := r.Header.Get("ETag"); e != testRootETag1 {
-			t.Errorf("got: `%s', want: `%s'", e, testRootETag1)
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("ETag", testRootETag1),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// delete first document
 	{
-		req, err := http.NewRequest(http.MethodDelete, remoteRoot+testDocument1, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodDelete, remoteRoot+testDocument1, nil))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag1 {
-			t.Errorf("got: `%s, want: `%s'", e, testDocumentETag1)
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("ETag", testDocumentETag1),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -1828,8 +1459,8 @@ func TestDeleteDocument(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusNotFound {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNotFound))
+		if err := Expect(Status(http.StatusNotFound)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -1839,8 +1470,8 @@ func TestDeleteDocument(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusNotFound {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNotFound))
+		if err := Expect(Status(http.StatusNotFound)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -1850,11 +1481,12 @@ func TestDeleteDocument(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if e := r.Header.Get("ETag"); e != testCommonAncestorETag2 {
-			t.Errorf("got: `%s', want: `%s'", e, testCommonAncestorETag2)
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("ETag", testCommonAncestorETag2),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -1864,11 +1496,12 @@ func TestDeleteDocument(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag2 {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag2)
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("ETag", testDocumentETag2),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -1878,42 +1511,32 @@ func TestDeleteDocument(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if e := r.Header.Get("ETag"); e != testRootETag2 {
-			t.Errorf("got: `%s', want: `%s'", e, testRootETag2)
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("ETag", testRootETag2),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 }
 
 func TestDeleteDocumentNotFound(t *testing.T) {
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodDelete, remoteRoot+"/nonexistent/document", nil)
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodDelete, remoteRoot+"/nonexistent/document", nil))
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusNotFound {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNotFound))
+	if err := Expect(Status(http.StatusNotFound)).Validate(r); err != nil {
+		t.Error(err)
 	}
 }
 
 func TestDeleteFolderFails(t *testing.T) {
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1925,42 +1548,34 @@ func TestDeleteFolderFails(t *testing.T) {
 	)
 
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent))))
 		req.Header.Set("Content-Type", testMime)
-		if err != nil {
-			t.Error(err)
-		}
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentETag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
-	req, err := http.NewRequest(http.MethodDelete, remoteRoot+testDocumentDir, nil)
-	if err != nil {
-		t.Error(err)
-	}
-	r, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Error(err)
-	}
-	if r.StatusCode != http.StatusBadRequest {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusBadRequest))
+	{
+		req := mustVal(http.NewRequest(http.MethodDelete, remoteRoot+testDocumentDir, nil))
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if err := Expect(Status(http.StatusBadRequest)).Validate(r); err != nil {
+			t.Error(err)
+		}
 	}
 }
 
 func TestDeleteDocumentIfMatch(t *testing.T) {
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1971,40 +1586,36 @@ func TestDeleteDocumentIfMatch(t *testing.T) {
 	)
 
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent))))
 		req.Header.Set("Content-Type", testMime)
-		if err != nil {
-			t.Error(err)
-		}
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentETag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// delete document, pass the correct version in if-match
 	{
-		req, err := http.NewRequest(http.MethodDelete, remoteRoot+testDocument, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodDelete, remoteRoot+testDocument, nil))
 		// rev matches the document's current version
 		req.Header.Set("If-Match", testDocumentETag)
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("ETag", testDocumentETag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -2014,18 +1625,14 @@ func TestDeleteDocumentIfMatch(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusNotFound {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNotFound))
+		if err := Expect(Status(http.StatusNotFound)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 }
 
 func TestDeleteDocumentIfMatchFail(t *testing.T) {
-	mockServer()
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
+	ts, _, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -2036,40 +1643,36 @@ func TestDeleteDocumentIfMatchFail(t *testing.T) {
 	)
 
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent)))
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent))))
 		req.Header.Set("Content-Type", testMime)
-		if err != nil {
-			t.Error(err)
-		}
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", testDocumentETag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// delete document, pass wrong version in if-match
 	{
-		req, err := http.NewRequest(http.MethodDelete, remoteRoot+testDocument, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodDelete, remoteRoot+testDocument, nil))
 		// rev does NOT match the document's current version
 		req.Header.Set("If-Match", "456599fd6afcb9e611b0914147dd5550")
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusPreconditionFailed {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusPreconditionFailed))
-		}
-		if e := r.Header.Get("ETag"); e != testDocumentETag {
-			t.Errorf("got: `%s', want: `%s'", e, testDocumentETag)
+
+		if err := Expect(
+			Status(http.StatusPreconditionFailed),
+			Header("ETag", testDocumentETag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -2079,25 +1682,21 @@ func TestDeleteDocumentIfMatchFail(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		if err := Expect(Status(http.StatusOK)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 }
 
 func TestUnauthorizedCanReadPublicDocument(t *testing.T) {
-	mockServer()
-	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+	ts, opts, remoteRoot := mockServer()
+	defer ts.Close()
+	opts.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
 			return UserReadWrite{}, true
 		}
 		return nil, false
 	})
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
-	defer ts.Close()
 
 	const (
 		mime           = "text/plain; charset=utf-8"
@@ -2108,21 +1707,19 @@ func TestUnauthorizedCanReadPublicDocument(t *testing.T) {
 
 	// PUT document with authorization
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+publicDocument, bytes.NewReader([]byte(content)))
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+publicDocument, bytes.NewReader([]byte(content))))
 		req.Header.Set("Content-Type", mime)
 		req.Header.Set("Authorization", "Bearer PUTTER")
-		if err != nil {
-			t.Error(err)
-		}
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", etag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -2132,18 +1729,13 @@ func TestUnauthorizedCanReadPublicDocument(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
-		}
-		bs, err := io.ReadAll(r.Body)
-		if err != nil {
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("ETag", etag),
+			Body(content),
+		).Validate(r); err != nil {
 			t.Error(err)
-		}
-		if string(bs) != content {
-			t.Errorf("got: `%s', want: `%s'", bs, content)
 		}
 	}
 
@@ -2153,58 +1745,49 @@ func TestUnauthorizedCanReadPublicDocument(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("ETag", etag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// PUT public document (no authorization)
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+publicDocument, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room.")))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+publicDocument, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room."))))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusUnauthorized {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		if err := Expect(Status(http.StatusUnauthorized)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// DELETE public document (no authorization)
 	{
-		req, err := http.NewRequest(http.MethodDelete, remoteRoot+publicDocument, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodDelete, remoteRoot+publicDocument, nil))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusUnauthorized {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		if err := Expect(Status(http.StatusUnauthorized)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 }
 
 func TestUnauthorizedCannotAccessPublicFolder(t *testing.T) {
-	mockServer()
-	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+	ts, opts, remoteRoot := mockServer()
+	defer ts.Close()
+	opts.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
 			return UserReadWrite{}, true
 		}
 		return nil, false
 	})
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
-	defer ts.Close()
 
 	const (
 		mime              = "text/plain; charset=utf-8"
@@ -2216,21 +1799,19 @@ func TestUnauthorizedCannotAccessPublicFolder(t *testing.T) {
 
 	// PUT document with authorization
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+publicDocument, bytes.NewReader([]byte(content)))
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+publicDocument, bytes.NewReader([]byte(content))))
 		req.Header.Set("Content-Type", mime)
 		req.Header.Set("Authorization", "Bearer PUTTER")
-		if err != nil {
-			t.Error(err)
-		}
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", etag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -2240,8 +1821,8 @@ func TestUnauthorizedCannotAccessPublicFolder(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusUnauthorized {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		if err := Expect(Status(http.StatusUnauthorized)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -2251,25 +1832,21 @@ func TestUnauthorizedCannotAccessPublicFolder(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusUnauthorized {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		if err := Expect(Status(http.StatusUnauthorized)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 }
 
 func TestUnauthorizedCannotAccessNonPublicDocument(t *testing.T) {
-	mockServer()
-	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+	ts, opts, remoteRoot := mockServer()
+	defer ts.Close()
+	opts.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
 			return UserReadWrite{}, true
 		}
 		return nil, false
 	})
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
-	defer ts.Close()
 
 	const (
 		mime              = "text/plain; charset=utf-8"
@@ -2280,21 +1857,19 @@ func TestUnauthorizedCannotAccessNonPublicDocument(t *testing.T) {
 
 	// PUT document with authorization
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+nonPublicDocument, bytes.NewReader([]byte(content)))
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+nonPublicDocument, bytes.NewReader([]byte(content))))
 		req.Header.Set("Content-Type", mime)
 		req.Header.Set("Authorization", "Bearer PUTTER")
-		if err != nil {
-			t.Error(err)
-		}
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", etag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -2304,8 +1879,8 @@ func TestUnauthorizedCannotAccessNonPublicDocument(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusUnauthorized {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		if err := Expect(Status(http.StatusUnauthorized)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -2315,55 +1890,45 @@ func TestUnauthorizedCannotAccessNonPublicDocument(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusUnauthorized {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		if err := Expect(Status(http.StatusUnauthorized)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// PUT document (no authorization)
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+nonPublicDocument, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room.")))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+nonPublicDocument, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room."))))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusUnauthorized {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		if err := Expect(Status(http.StatusUnauthorized)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// DELETE document (no authorization)
 	{
-		req, err := http.NewRequest(http.MethodDelete, remoteRoot+nonPublicDocument, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodDelete, remoteRoot+nonPublicDocument, nil))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusUnauthorized {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		if err := Expect(Status(http.StatusUnauthorized)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 }
 
 func TestUnauthorizedCannotAccessNonPublicFolder(t *testing.T) {
-	mockServer()
-	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+	ts, opts, remoteRoot := mockServer()
+	defer ts.Close()
+	opts.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
 			return UserReadWrite{}, true
 		}
 		return nil, false
 	})
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
-	defer ts.Close()
 
 	const (
 		mime                 = "text/plain; charset=utf-8"
@@ -2375,21 +1940,19 @@ func TestUnauthorizedCannotAccessNonPublicFolder(t *testing.T) {
 
 	// PUT document with authorization
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+nonPublicDocument, bytes.NewReader([]byte(content)))
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+nonPublicDocument, bytes.NewReader([]byte(content))))
 		req.Header.Set("Content-Type", mime)
 		req.Header.Set("Authorization", "Bearer PUTTER")
-		if err != nil {
-			t.Error(err)
-		}
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", etag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -2399,8 +1962,8 @@ func TestUnauthorizedCannotAccessNonPublicFolder(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusUnauthorized {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		if err := Expect(Status(http.StatusUnauthorized)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
@@ -2410,15 +1973,16 @@ func TestUnauthorizedCannotAccessNonPublicFolder(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusUnauthorized {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusUnauthorized))
+		if err := Expect(Status(http.StatusUnauthorized)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 }
 
 func TestAuthorizationRead(t *testing.T) {
-	mockServer()
-	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+	ts, opts, remoteRoot := mockServer()
+	defer ts.Close()
+	opts.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
 			return UserReadWrite{}, true
 		}
@@ -2427,11 +1991,6 @@ func TestAuthorizationRead(t *testing.T) {
 		}
 		return nil, false
 	})
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
-	defer ts.Close()
 
 	const (
 		mime     = "text/plain; charset=utf-8"
@@ -2442,115 +2001,93 @@ func TestAuthorizationRead(t *testing.T) {
 
 	// PUT document with rw authorization
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte(content)))
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte(content))))
 		req.Header.Set("Content-Type", mime)
 		req.Header.Set("Authorization", "Bearer PUTTER")
-		if err != nil {
-			t.Error(err)
-		}
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", etag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// GET document (with read authorization)
 	{
-		req, err := http.NewRequest(http.MethodGet, remoteRoot+document, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodGet, remoteRoot+document, nil))
 		req.Header.Set("Authorization", "Bearer READER")
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
-		}
-		bs, err := io.ReadAll(r.Body)
-		if err != nil {
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("ETag", etag),
+			Body(content),
+		).Validate(r); err != nil {
 			t.Error(err)
-		}
-		if string(bs) != content {
-			t.Errorf("got: `%s', want: `%s'", bs, content)
 		}
 	}
 
 	// HEAD document (with read authorization)
 	{
-		req, err := http.NewRequest(http.MethodHead, remoteRoot+document, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodHead, remoteRoot+document, nil))
 		req.Header.Set("Authorization", "Bearer READER")
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("ETag", etag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// PUT document (with read authorization)
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room.")))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room."))))
 		req.Header.Set("Authorization", "Bearer READER")
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusForbidden {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// DELETE document (with read authorization)
 	{
-		req, err := http.NewRequest(http.MethodDelete, remoteRoot+document, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodDelete, remoteRoot+document, nil))
 		req.Header.Set("Authorization", "Bearer READER")
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusForbidden {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 }
 
 func TestAuthorizationReadPublicNoPerm(t *testing.T) {
-	mockServer()
-	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+	ts, opts, remoteRoot := mockServer()
+	defer ts.Close()
+	opts.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
 			return UserReadWrite{}, true
 		}
 		return UserReadPublic{}, true
 	})
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
-	defer ts.Close()
 
 	const (
 		mime     = "text/plain; charset=utf-8"
@@ -2561,111 +2098,89 @@ func TestAuthorizationReadPublicNoPerm(t *testing.T) {
 
 	// PUT document with authorization
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte(content)))
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte(content))))
 		req.Header.Set("Content-Type", mime)
 		req.Header.Set("Authorization", "Bearer PUTTER")
-		if err != nil {
-			t.Error(err)
-		}
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", etag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// GET public document (without authorization)
 	{
-		req, err := http.NewRequest(http.MethodGet, remoteRoot+document, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodGet, remoteRoot+document, nil))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
-		}
-		bs, err := io.ReadAll(r.Body)
-		if err != nil {
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("ETag", etag),
+			Body(content),
+		).Validate(r); err != nil {
 			t.Error(err)
-		}
-		if string(bs) != content {
-			t.Errorf("got: `%s', want: `%s'", bs, content)
 		}
 	}
 
 	// HEAD public document (without authorization)
 	{
-		req, err := http.NewRequest(http.MethodHead, remoteRoot+document, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodHead, remoteRoot+document, nil))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("ETag", etag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// PUT public document (without authorization)
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room.")))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room."))))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusForbidden {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// DELETE public document (without authorization)
 	{
-		req, err := http.NewRequest(http.MethodDelete, remoteRoot+document, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodDelete, remoteRoot+document, nil))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusForbidden {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 }
 
 func TestAuthorizationReadNonPublicNoPerm(t *testing.T) {
-	mockServer()
-	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+	ts, opts, remoteRoot := mockServer()
+	defer ts.Close()
+	opts.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
 			return UserReadWrite{}, true
 		}
 		return UserReadPublic{}, true
 	})
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
-	defer ts.Close()
 
 	const (
 		mime     = "text/plain; charset=utf-8"
@@ -2676,98 +2191,81 @@ func TestAuthorizationReadNonPublicNoPerm(t *testing.T) {
 
 	// PUT document with authorization
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte(content)))
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte(content))))
 		req.Header.Set("Content-Type", mime)
 		req.Header.Set("Authorization", "Bearer PUTTER")
-		if err != nil {
-			t.Error(err)
-		}
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", etag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// GET non-public document (without authorization)
 	{
-		req, err := http.NewRequest(http.MethodGet, remoteRoot+document, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodGet, remoteRoot+document, nil))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusForbidden {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+
+		if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// HEAD non-public document (without authorization)
 	{
-		req, err := http.NewRequest(http.MethodHead, remoteRoot+document, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodHead, remoteRoot+document, nil))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusForbidden {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// PUT non-public document (without authorization)
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room.")))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room."))))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusForbidden {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// DELETE non-public document (without authorization)
 	{
-		req, err := http.NewRequest(http.MethodDelete, remoteRoot+document, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodDelete, remoteRoot+document, nil))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusForbidden {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 }
 
 func TestAuthorizationReadPublicFolderNoPerm(t *testing.T) {
-	mockServer()
-	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+	ts, opts, remoteRoot := mockServer()
+	defer ts.Close()
+	opts.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
 			return UserReadWrite{}, true
 		}
 		return UserReadPublic{}, true
 	})
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
-	defer ts.Close()
 
 	const (
 		mime        = "text/plain; charset=utf-8"
@@ -2779,88 +2277,75 @@ func TestAuthorizationReadPublicFolderNoPerm(t *testing.T) {
 
 	// PUT document with authorization
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte(content)))
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte(content))))
 		req.Header.Set("Content-Type", mime)
 		req.Header.Set("Authorization", "Bearer PUTTER")
-		if err != nil {
-			t.Error(err)
-		}
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", etag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// GET public folder (without authorization)
 	{
-		req, err := http.NewRequest(http.MethodGet, remoteRoot+documentDir, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodGet, remoteRoot+documentDir, nil))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusForbidden {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// HEAD public folder (without authorization)
 	{
-		req, err := http.NewRequest(http.MethodHead, remoteRoot+documentDir, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodHead, remoteRoot+documentDir, nil))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusForbidden {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// PUT public folder (without authorization)
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+documentDir, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room.")))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+documentDir, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room."))))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusForbidden {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// DELETE public folder (without authorization)
 	{
-		req, err := http.NewRequest(http.MethodDelete, remoteRoot+documentDir, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodDelete, remoteRoot+documentDir, nil))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusForbidden {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 }
 
 func TestAuthorizationReadPublic(t *testing.T) {
-	mockServer()
-	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+	ts, opts, remoteRoot := mockServer()
+	defer ts.Close()
+	opts.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
 			return UserReadWrite{}, true
 		}
@@ -2869,11 +2354,6 @@ func TestAuthorizationReadPublic(t *testing.T) {
 		}
 		return nil, false
 	})
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
-	defer ts.Close()
 
 	const (
 		mime     = "text/plain; charset=utf-8"
@@ -2884,105 +2364,88 @@ func TestAuthorizationReadPublic(t *testing.T) {
 
 	// PUT document with authorization
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte(content)))
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte(content))))
 		req.Header.Set("Content-Type", mime)
 		req.Header.Set("Authorization", "Bearer PUTTER")
-		if err != nil {
-			t.Error(err)
-		}
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", etag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// GET public document (with authorization)
 	{
-		req, err := http.NewRequest(http.MethodGet, remoteRoot+document, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodGet, remoteRoot+document, nil))
 		req.Header.Set("Authorization", "Bearer READER")
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
-		}
-		bs, err := io.ReadAll(r.Body)
-		if err != nil {
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("ETag", etag),
+			Body(content),
+		).Validate(r); err != nil {
 			t.Error(err)
-		}
-		if string(bs) != content {
-			t.Errorf("got: `%s', want: `%s'", bs, content)
 		}
 	}
 
 	// HEAD public document (with authorization)
 	{
-		req, err := http.NewRequest(http.MethodHead, remoteRoot+document, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodHead, remoteRoot+document, nil))
 		req.Header.Set("Authorization", "Bearer READER")
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("ETag", etag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// PUT public document (with authorization)
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room.")))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room."))))
 		req.Header.Set("Authorization", "Bearer READER")
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusForbidden {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// DELETE public document (with authorization)
 	{
-		req, err := http.NewRequest(http.MethodDelete, remoteRoot+document, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodDelete, remoteRoot+document, nil))
 		req.Header.Set("Authorization", "Bearer READER")
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusForbidden {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 }
 
 func TestAuthorizationReadWrite(t *testing.T) {
-	mockServer()
-	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+	ts, opts, remoteRoot := mockServer()
+	defer ts.Close()
+	opts.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
 			return UserReadWrite{}, true
 		}
@@ -2991,11 +2454,6 @@ func TestAuthorizationReadWrite(t *testing.T) {
 		}
 		return nil, false
 	})
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
-	defer ts.Close()
 
 	const (
 		mime     = "text/plain; charset=utf-8"
@@ -3006,105 +2464,90 @@ func TestAuthorizationReadWrite(t *testing.T) {
 
 	// PUT document with authorization
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte(content)))
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte(content))))
 		req.Header.Set("Content-Type", mime)
 		req.Header.Set("Authorization", "Bearer PUTTER")
-		if err != nil {
-			t.Error(err)
-		}
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", etag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// GET document (with authorization)
 	{
-		req, err := http.NewRequest(http.MethodGet, remoteRoot+document, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodGet, remoteRoot+document, nil))
 		req.Header.Set("Authorization", "Bearer READERWRITER")
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
-		}
-		bs, err := io.ReadAll(r.Body)
-		if err != nil {
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("ETag", etag),
+			Body(content),
+		).Validate(r); err != nil {
 			t.Error(err)
-		}
-		if string(bs) != content {
-			t.Errorf("got: `%s', want: `%s'", bs, content)
 		}
 	}
 
 	// HEAD document (with authorization)
 	{
-		req, err := http.NewRequest(http.MethodHead, remoteRoot+document, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodHead, remoteRoot+document, nil))
 		req.Header.Set("Authorization", "Bearer READERWRITER")
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("ETag", etag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// PUT document (with authorization)
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room.")))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room."))))
 		req.Header.Set("Authorization", "Bearer READERWRITER")
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+
+		if err := Expect(Status(http.StatusCreated)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// DELETE document (with authorization)
 	{
-		req, err := http.NewRequest(http.MethodDelete, remoteRoot+document, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodDelete, remoteRoot+document, nil))
 		req.Header.Set("Authorization", "Bearer READERWRITER")
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+
+		if err := Expect(Status(http.StatusOK)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 }
 
 func TestAuthorizationReadWritePublic(t *testing.T) {
-	mockServer()
-	g.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
+	ts, opts, remoteRoot := mockServer()
+	defer ts.Close()
+	opts.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
 		if bearer == "PUTTER" {
 			return UserReadWrite{}, true
 		}
@@ -3113,11 +2556,6 @@ func TestAuthorizationReadWritePublic(t *testing.T) {
 		}
 		return nil, false
 	})
-	mux := http.NewServeMux()
-	Register(mux)
-	ts := httptest.NewServer(mux)
-	remoteRoot := ts.URL + g.rroot
-	defer ts.Close()
 
 	const (
 		mime     = "text/plain; charset=utf-8"
@@ -3128,98 +2566,80 @@ func TestAuthorizationReadWritePublic(t *testing.T) {
 
 	// PUT document with authorization
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte(content)))
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte(content))))
 		req.Header.Set("Content-Type", mime)
 		req.Header.Set("Authorization", "Bearer PUTTER")
-		if err != nil {
-			t.Error(err)
-		}
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
+
+		if err := Expect(
+			Status(http.StatusCreated),
+			Header("ETag", etag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// GET public document (with authorization)
 	{
-		req, err := http.NewRequest(http.MethodGet, remoteRoot+document, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodGet, remoteRoot+document, nil))
 		req.Header.Set("Authorization", "Bearer READERWRITER")
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
-		}
-		bs, err := io.ReadAll(r.Body)
-		if err != nil {
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("ETag", etag),
+			Body(content),
+		).Validate(r); err != nil {
 			t.Error(err)
-		}
-		if string(bs) != content {
-			t.Errorf("got: `%s', want: `%s'", bs, content)
 		}
 	}
 
 	// HEAD public document (with authorization)
 	{
-		req, err := http.NewRequest(http.MethodHead, remoteRoot+document, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodHead, remoteRoot+document, nil))
 		req.Header.Set("Authorization", "Bearer READERWRITER")
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
-		}
-		if e := r.Header.Get("ETag"); e != etag {
-			t.Errorf("got: `%s', want: `%s'", e, etag)
+
+		if err := Expect(
+			Status(http.StatusOK),
+			Header("ETag", etag),
+		).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// PUT public document (with authorization)
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room.")))
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+document, bytes.NewReader([]byte("Be the reason why the lights flicker when you enter a room."))))
 		req.Header.Set("Authorization", "Bearer READERWRITER")
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusCreated))
+		if err := Expect(Status(http.StatusCreated)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 
 	// DELETE public document (with authorization)
 	{
-		req, err := http.NewRequest(http.MethodDelete, remoteRoot+document, nil)
-		if err != nil {
-			t.Error(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodDelete, remoteRoot+document, nil))
 		req.Header.Set("Authorization", "Bearer READERWRITER")
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Error(err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+		if err := Expect(Status(http.StatusOK)).Validate(r); err != nil {
+			t.Error(err)
 		}
 	}
 }
@@ -3242,10 +2662,7 @@ func TestPreflightAllowAny(t *testing.T) {
 	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/", nil)
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodOptions, remoteRoot+"/", nil))
 	req.Header.Set("Origin", "my.example.com")
 	req.Header.Set("Access-Control-Request-Method", "GET")
 	req.Header.Set("Access-Control-Request-Headers", "Authorization")
@@ -3253,8 +2670,8 @@ func TestPreflightAllowAny(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusNoContent {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNoContent))
+	if err := Expect(Status(http.StatusNoContent)).Validate(r); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -3276,17 +2693,14 @@ func TestOptionsAllowAny(t *testing.T) {
 	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodGet, remoteRoot+"/", nil)
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodGet, remoteRoot+"/", nil))
 	req.Header.Set("Origin", "my.example.com")
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusOK {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+	if err := Expect(Status(http.StatusOK)).Validate(r); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -3308,10 +2722,7 @@ func TestPreflightAllowSpecific(t *testing.T) {
 	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/", nil)
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodOptions, remoteRoot+"/", nil))
 	req.Header.Set("Origin", "my.example.com")
 	req.Header.Set("Access-Control-Request-Method", "GET")
 	req.Header.Set("Access-Control-Request-Headers", "Authorization")
@@ -3319,8 +2730,8 @@ func TestPreflightAllowSpecific(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusNoContent {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNoContent))
+	if err := Expect(Status(http.StatusNoContent)).Validate(r); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -3342,17 +2753,14 @@ func TestOptionsAllowSpecific(t *testing.T) {
 	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodGet, remoteRoot+"/", nil)
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodGet, remoteRoot+"/", nil))
 	req.Header.Set("Origin", "my.example.com")
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusOK {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+	if err := Expect(Status(http.StatusOK)).Validate(r); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -3376,10 +2784,7 @@ func TestPreflightAllowCustom(t *testing.T) {
 	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/", nil)
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodOptions, remoteRoot+"/", nil))
 	req.Header.Set("Origin", "my.example.com")
 	req.Header.Set("Access-Control-Request-Method", "GET")
 	req.Header.Set("Access-Control-Request-Headers", "Authorization")
@@ -3387,8 +2792,8 @@ func TestPreflightAllowCustom(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusNoContent {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNoContent))
+	if err := Expect(Status(http.StatusNoContent)).Validate(r); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -3412,17 +2817,14 @@ func TestOptionsAllowCustom(t *testing.T) {
 	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodGet, remoteRoot+"/", nil)
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodGet, remoteRoot+"/", nil))
 	req.Header.Set("Origin", "my.example.com")
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusOK {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusOK))
+	if err := Expect(Status(http.StatusOK)).Validate(r); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -3444,10 +2846,7 @@ func TestPreflightAllowSpecificFail(t *testing.T) {
 	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/", nil)
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodOptions, remoteRoot+"/", nil))
 	req.Header.Set("Origin", "wrong.example.com")
 	req.Header.Set("Access-Control-Request-Method", "GET")
 	req.Header.Set("Access-Control-Request-Headers", "Authorization")
@@ -3455,8 +2854,8 @@ func TestPreflightAllowSpecificFail(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusForbidden {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+	if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -3478,17 +2877,14 @@ func TestOptionsAllowSpecificFail(t *testing.T) {
 	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodGet, remoteRoot+"/", nil)
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodGet, remoteRoot+"/", nil))
 	req.Header.Set("Origin", "wrong.example.com")
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusForbidden {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+	if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -3512,10 +2908,7 @@ func TestPreflightAllowCustomFail(t *testing.T) {
 	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/", nil)
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodOptions, remoteRoot+"/", nil))
 	req.Header.Set("Origin", "wrong.example.com")
 	req.Header.Set("Access-Control-Request-Method", "GET")
 	req.Header.Set("Access-Control-Request-Headers", "Authorization")
@@ -3523,8 +2916,8 @@ func TestPreflightAllowCustomFail(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusForbidden {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+	if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -3548,17 +2941,14 @@ func TestOptionsAllowCustomFail(t *testing.T) {
 	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodGet, remoteRoot+"/", nil)
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodGet, remoteRoot+"/", nil))
 	req.Header.Set("Origin", "wrong.example.com")
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusForbidden {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+	if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -3580,10 +2970,7 @@ func TestPreflightNotFoundFail(t *testing.T) {
 	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/not/found/", nil)
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodOptions, remoteRoot+"/not/found/", nil))
 	req.Header.Set("Origin", "my.example.com")
 	req.Header.Set("Access-Control-Request-Method", "GET")
 	req.Header.Set("Access-Control-Request-Headers", "Authorization")
@@ -3591,8 +2978,8 @@ func TestPreflightNotFoundFail(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusForbidden {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+	if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -3614,17 +3001,14 @@ func TestOptionsNotFoundFail(t *testing.T) {
 	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodGet, remoteRoot+"/not/found", nil)
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodGet, remoteRoot+"/not/found", nil))
 	req.Header.Set("Origin", "my.example.com")
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusNotFound {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNotFound))
+	if err := Expect(Status(http.StatusNotFound)).Validate(r); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -3648,32 +3032,28 @@ func TestPreflightADocumentIsNotAFolderFail(t *testing.T) {
 
 	// PUT a document
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+"/hello", bytes.NewReader([]byte("Hello, World!")))
-		if err != nil {
-			t.Fatal(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+"/hello", bytes.NewReader([]byte("Hello, World!"))))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Fatalf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		if err := Expect(Status(http.StatusCreated)).Validate(r); err != nil {
+			t.Fatal(err)
 		}
 	}
 
-	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/hello/", nil)
-	if err != nil {
-		t.Error(err)
-	}
-	req.Header.Set("Origin", "my.example.com")
-	req.Header.Set("Access-Control-Request-Method", "GET")
-	req.Header.Set("Access-Control-Request-Headers", "Authorization")
-	r, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Error(err)
-	}
-	if r.StatusCode != http.StatusForbidden {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+	{
+		req := mustVal(http.NewRequest(http.MethodOptions, remoteRoot+"/hello/", nil))
+		req.Header.Set("Origin", "my.example.com")
+		req.Header.Set("Access-Control-Request-Method", "GET")
+		req.Header.Set("Access-Control-Request-Headers", "Authorization")
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+			t.Error(err)
+		}
 	}
 }
 
@@ -3697,30 +3077,26 @@ func TestOptionsADocumentIsNotAFolderFail(t *testing.T) {
 
 	// PUT a document
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+"/hello", bytes.NewReader([]byte("Hello, World!")))
-		if err != nil {
-			t.Fatal(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+"/hello", bytes.NewReader([]byte("Hello, World!"))))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Fatalf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		if err := Expect(Status(http.StatusCreated)).Validate(r); err != nil {
+			t.Fatal(err)
 		}
 	}
 
-	req, err := http.NewRequest(http.MethodGet, remoteRoot+"/hello/", nil)
-	if err != nil {
-		t.Error(err)
-	}
-	req.Header.Set("Origin", "my.example.com")
-	r, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Error(err)
-	}
-	if r.StatusCode != http.StatusBadRequest {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusBadRequest))
+	{
+		req := mustVal(http.NewRequest(http.MethodGet, remoteRoot+"/hello/", nil))
+		req.Header.Set("Origin", "my.example.com")
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if err := Expect(Status(http.StatusBadRequest)).Validate(r); err != nil {
+			t.Error(err)
+		}
 	}
 }
 
@@ -3744,32 +3120,28 @@ func TestPreflightAFolderIsNotADocumentFail(t *testing.T) {
 
 	// PUT a document
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+"/hello/ignore", bytes.NewReader([]byte("Ignore")))
-		if err != nil {
-			t.Fatal(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+"/hello/ignore", bytes.NewReader([]byte("Ignore"))))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Fatalf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		if err := Expect(Status(http.StatusCreated)).Validate(r); err != nil {
+			t.Fatal(err)
 		}
 	}
 
-	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/hello", nil)
-	if err != nil {
-		t.Error(err)
-	}
-	req.Header.Set("Origin", "my.example.com")
-	req.Header.Set("Access-Control-Request-Method", "GET")
-	req.Header.Set("Access-Control-Request-Headers", "Authorization")
-	r, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Error(err)
-	}
-	if r.StatusCode != http.StatusForbidden {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+	{
+		req := mustVal(http.NewRequest(http.MethodOptions, remoteRoot+"/hello", nil))
+		req.Header.Set("Origin", "my.example.com")
+		req.Header.Set("Access-Control-Request-Method", "GET")
+		req.Header.Set("Access-Control-Request-Headers", "Authorization")
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+			t.Error(err)
+		}
 	}
 }
 
@@ -3793,30 +3165,24 @@ func TestOptionsAFolderIsNotADocumentFail(t *testing.T) {
 
 	// PUT a document
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+"/hello/ignore", bytes.NewReader([]byte("Ignore")))
-		if err != nil {
-			t.Fatal(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+"/hello/ignore", bytes.NewReader([]byte("Ignore"))))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Fatalf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		if err := Expect(Status(http.StatusCreated)).Validate(r); err != nil {
+			t.Fatal(err)
 		}
 	}
 
-	req, err := http.NewRequest(http.MethodGet, remoteRoot+"/hello", nil)
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodGet, remoteRoot+"/hello", nil))
 	req.Header.Set("Origin", "my.example.com")
 	r, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusBadRequest {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusBadRequest))
+	if err := Expect(Status(http.StatusBadRequest)).Validate(r); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -3838,10 +3204,7 @@ func TestPreflightMethodFail(t *testing.T) {
 	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/", nil)
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodOptions, remoteRoot+"/", nil))
 	req.Header.Set("Origin", "my.example.com")
 	req.Header.Set("Access-Control-Request-Method", "POST")
 	req.Header.Set("Access-Control-Request-Headers", "Authorization")
@@ -3849,8 +3212,8 @@ func TestPreflightMethodFail(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusForbidden {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+	if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -3872,10 +3235,7 @@ func TestPreflightHeaderFail(t *testing.T) {
 	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/", nil)
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodOptions, remoteRoot+"/", nil))
 	req.Header.Set("Origin", "my.example.com")
 	req.Header.Set("Access-Control-Request-Method", "GET")
 	req.Header.Set("Access-Control-Request-Headers", "Whatever")
@@ -3883,8 +3243,8 @@ func TestPreflightHeaderFail(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusForbidden {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+	if err := Expect(Status(http.StatusForbidden)).Validate(r); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -3906,10 +3266,7 @@ func TestPreflightOptions(t *testing.T) {
 	remoteRoot := ts.URL + g.rroot
 	defer ts.Close()
 
-	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/", nil)
-	if err != nil {
-		t.Error(err)
-	}
+	req := mustVal(http.NewRequest(http.MethodOptions, remoteRoot+"/", nil))
 	req.Header.Set("Origin", "my.example.com")
 	req.Header.Set("Access-Control-Request-Method", "OPTIONS")
 	req.Header.Set("Access-Control-Request-Headers", "Authorization")
@@ -3917,8 +3274,8 @@ func TestPreflightOptions(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if r.StatusCode != http.StatusNoContent {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNoContent))
+	if err := Expect(Status(http.StatusNoContent)).Validate(r); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -3942,32 +3299,28 @@ func TestPreflightDocument(t *testing.T) {
 
 	// PUT a document
 	{
-		req, err := http.NewRequest(http.MethodPut, remoteRoot+"/hello", bytes.NewReader([]byte("Hello, World!")))
-		if err != nil {
-			t.Fatal(err)
-		}
+		req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+"/hello", bytes.NewReader([]byte("Hello, World!"))))
 		r, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if r.StatusCode != http.StatusCreated {
-			t.Fatalf("got: %s, want: %s", r.Status, http.StatusText(http.StatusForbidden))
+		if err := Expect(Status(http.StatusCreated)).Validate(r); err != nil {
+			t.Fatal(err)
 		}
 	}
 
-	req, err := http.NewRequest(http.MethodOptions, remoteRoot+"/hello", nil)
-	if err != nil {
-		t.Error(err)
-	}
-	req.Header.Set("Origin", "my.example.com")
-	req.Header.Set("Access-Control-Request-Method", "PUT")
-	req.Header.Set("Access-Control-Request-Headers", "Authorization")
-	r, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Error(err)
-	}
-	if r.StatusCode != http.StatusNoContent {
-		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNoContent))
+	{
+		req := mustVal(http.NewRequest(http.MethodOptions, remoteRoot+"/hello", nil))
+		req.Header.Set("Origin", "my.example.com")
+		req.Header.Set("Access-Control-Request-Method", "PUT")
+		req.Header.Set("Access-Control-Request-Headers", "Authorization")
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Error(err)
+		}
+		if err := Expect(Status(http.StatusNoContent)).Validate(r); err != nil {
+			t.Error(err)
+		}
 	}
 }
 
