@@ -36,18 +36,18 @@ func mockServer() (ts *httptest.Server, opts *Options, root string) {
 type (
 	Expectation struct {
 		StatusCode int
-		Headers map[string]string
-		Body *string
+		Headers    map[string]string
+		Body       *string
 	}
 
 	ExpectedOpt func(*Expectation)
 )
 
 func Expect(opts ...ExpectedOpt) *Expectation {
-	e := &Expectation {
+	e := &Expectation{
 		StatusCode: http.StatusOK,
-		Headers: make(map[string]string),
-		Body: nil,
+		Headers:    make(map[string]string),
+		Body:       nil,
 	}
 	for _, o := range opts {
 		o(e)
@@ -496,12 +496,12 @@ func TestPutDocumentIfNonMatchFailDoesNotUpdateIt(t *testing.T) {
 
 func TestPutDocumentSilentlyCreateAncestors(t *testing.T) {
 	const (
-		rmsContext          = "http://remotestorage.io/spec/folder-description"
-		testContent         = "[...] It is written in Lisp, which is the only computer language that is beautiful." // sorry Go
-		testMime            = "wise/quote"
-		testDocument        = "/Quotes/Neal Stephenson.txt"
-		testDocumentName    = "Neal Stephenson.txt"
-		testDocumentEtag    = "3dc42d11db35b8354dc06c46a53c9c9d"
+		rmsContext       = "http://remotestorage.io/spec/folder-description"
+		testContent      = "[...] It is written in Lisp, which is the only computer language that is beautiful." // sorry Go
+		testMime         = "wise/quote"
+		testDocument     = "/Quotes/Neal Stephenson.txt"
+		testDocumentName = "Neal Stephenson.txt"
+		testDocumentEtag = "3dc42d11db35b8354dc06c46a53c9c9d"
 
 		testDocumentDir     = "/Quotes/"
 		testDocumentDirETag = "3de26fc06d5d1e20ff96a8142cd6fabf"

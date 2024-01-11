@@ -1,3 +1,4 @@
+//go:build delve
 // +build delve
 
 package isdelve

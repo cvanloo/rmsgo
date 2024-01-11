@@ -2,25 +2,25 @@ package mock
 
 import (
 	"fmt"
-	"time"
 	"github.com/cvanloo/go-ffs"
+	"time"
 
 	"github.com/google/uuid"
 )
 
 // Alias into this namespace, to make importing easier for users of mock.
 type (
-	FileSystem = ffs.FileSystem
-	File = ffs.File
+	FileSystem     = ffs.FileSystem
+	File           = ffs.File
 	RealFileSystem = ffs.RealFileSystem
 	FakeFileSystem = ffs.FakeFileSystem
-	FSOption = ffs.FSOption
+	FSOption       = ffs.FSOption
 )
 
 // Alias into this namespace, to make importing easier for users of mock.
 var (
-	MockFS = ffs.MockFS
-	WithFile = ffs.WithFile
+	MockFS        = ffs.MockFS
+	WithFile      = ffs.WithFile
 	WithDirectory = ffs.WithDirectory
 )
 
