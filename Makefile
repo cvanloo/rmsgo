@@ -1,4 +1,4 @@
-.PHONY: test debug debug_test coverage coverage_html clean
+.PHONY: test debug debug_test coverage coverage_html clean help
 
 test:
 ifdef run
@@ -28,5 +28,8 @@ clean:
 
 coverage.out: .FORCE
 	@go test -tags=delve -coverprofile=coverage.out ./...
+
+help:
+	@cat Makefile | grep -E "^\w+:$:"
 
 .FORCE:
