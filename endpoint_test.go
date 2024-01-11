@@ -3970,3 +3970,5 @@ func TestPreflightDocument(t *testing.T) {
 		t.Errorf("got: %s, want: %s", r.Status, http.StatusText(http.StatusNoContent))
 	}
 }
+
+// @todo: write tests for unhandled errors!

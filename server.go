@@ -187,12 +187,3 @@ func Register(mux *http.ServeMux) {
 	}
 	mux.Handle(g.rroot+"/", g.middleware(handleCORS(handleAuthorization(handleRMS()))))
 }
-
-func handleRMS() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		err := serve(w, r)
-		if err != nil {
-			g.unhandled(err)
-		}
-	})
-}
