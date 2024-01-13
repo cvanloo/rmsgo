@@ -178,6 +178,24 @@ func (o *Options) UseAllowOrigin(f AllowOriginFunc) {
 	o.allowOrigin = f
 }
 
+func handlePanic(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if r := recover(); r != nil {
+				var err error
+				switch t := r.(type) {
+				case error:
+					err = fmt.Errorf("recovered panic: %w", t)
+				default:
+					err = fmt.Errorf("recovered panic: %v", t)
+				}
+				g.unhandled(err)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
 // Register the remote storage server (with middleware if configured) to the
 // mux using g.Rroot + '/' as pattern.
 // If mux is nil the http.DefaultServeMux is used.
@@ -185,5 +203,5 @@ func Register(mux *http.ServeMux) {
 	if mux == nil {
 		mux = http.DefaultServeMux
 	}
-	mux.Handle(g.rroot+"/", g.middleware(handleCORS(handleAuthorization(handleRMS()))))
+	mux.Handle(g.rroot+"/", handlePanic(g.middleware(handleCORS(handleAuthorization(handleRMS())))))
 }
