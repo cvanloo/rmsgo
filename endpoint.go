@@ -17,77 +17,91 @@ import (
 // > A provider MAY offer version rollback functionality to its users,
 // > but this specification does not define the interface for that.
 
-func handleRMS() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := serve(w, r); err != nil {
-			if err := WriteError(w, err); err != nil {
-				g.unhandled(err)
-			}
-		}
-	})
-}
 
-func serve(w http.ResponseWriter, r *http.Request) error {
-	path := r.URL.Path
-	isFolder := path[len(path)-1] == '/'
+type (
+	Middleware func(next http.Handler) http.Handler
 
-	switch r.Method {
-	case http.MethodHead:
-		fallthrough
-	case http.MethodGet:
-		if isFolder {
-			return getFolder(w, r)
-		} else {
-			return getDocument(w, r)
-		}
-	case http.MethodPut:
-		if isFolder {
-			return HttpError{
-				Msg:   "put to folder disallowed",
-				Desc:  "PUT requests need only be made to documents, and never to folders.",
-				Cause: ErrBadRequest,
-			}
-		} else {
-			return putDocument(w, r)
-		}
-	case http.MethodDelete:
-		if isFolder {
-			return HttpError{
-				Msg:   "delete to folder disallowed",
-				Desc:  "DELETE requests need only be made to documents, and never to folders.",
-				Cause: ErrBadRequest,
-			}
-		} else {
-			return deleteDocument(w, r)
-		}
+	HandlerWithError func(w http.ResponseWriter, r *http.Request) error
+
+	MuxWithError struct {
+		http.ServeMux
 	}
 
-	return ErrMethodNotAllowed
+	ErrorResponder interface {
+		RespondError(w http.ResponseWriter, r *http.Request) (wasHandled bool)
+	}
+)
+
+func MiddlewareStack(middlewares ...Middleware) Middleware {
+	// @nocheckin: test that this really works the way I think it does
+	return func(next http.Handler) http.Handler {
+		for i := len(middlewares)-1; i >= 0; i-- {
+			m := middlewares[i]
+			next = m(next)
+		}
+
+		return next
+	}
+}
+
+func (h HandlerWithError) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if err := h(w, r); err != nil {
+		if err, ok := err.(ErrorResponder); ok {
+			if err.RespondError(w, r) {
+				return
+			}
+		}
+		status := http.StatusInternalServerError
+		http.Error(w, http.StatusText(status), status)
+		g.unhandled(err)
+	}
+}
+
+func (m *MuxWithError) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request) error) {
+	m.ServeMux.Handle(pattern, HandlerWithError(handler))
+}
+
+func RMSRouter() http.Handler {
+	folderMux := &MuxWithError{}
+	folderMux.HandleFunc("GET /", getFolder) // @nocheckin: GET also accepts HEAD?
+	folderMux.Handle("/", ErrMethodNotAllowed{
+		HttpError: HttpError{
+			Status: http.StatusMethodNotAllowed,
+		},
+	}) // @todo: return detailed error description
+
+	documentMux := &MuxWithError{}
+	documentMux.HandleFunc("GET /", getDocument) // @nocheckin: GET also accepts HEAD?
+	documentMux.HandleFunc("PUT /", putDocument)
+	documentMux.HandleFunc("DELETE /", deleteDocument)
+	documentMux.Handle("/", ErrMethodNotAllowed{
+		HttpError: HttpError{
+			Status: http.StatusMethodNotAllowed,
+		},
+	}) // @todo: return detailed error description
+
+	mux := &MuxWithError{}
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) error {
+		path := r.URL.Path
+		isFolder := path[len(path)-1] == '/' // @fixme: is this the path without query parameters and stuff?
+		if isFolder {
+			folderMux.ServeHTTP(w, r)
+		} else {
+			documentMux.ServeHTTP(w, r)
+		}
+		return nil // @nocheckin: ?
+	})
+
+	return mux
 }
 
 func getFolder(w http.ResponseWriter, r *http.Request) error {
-	rpath := strings.TrimPrefix(r.URL.Path, g.rroot)
-
-	n, err := Retrieve(rpath)
+	n, err := Retrieve(r.URL.Path)
 	if err != nil {
-		return HttpError{
-			Msg:  "folder not found",
-			Desc: "The requested folder does not exist on the server.",
-			Data: LDjson{
-				"rname": rpath,
-			},
-			Cause: ErrNotFound,
-		}
+		return MaybeNotFound(err)
 	}
 	if !n.isFolder {
-		return HttpError{
-			Msg:  "requested resource is not a folder",
-			Desc: "A request was made to retrieve a folder, but a document with the same path was found.",
-			Data: LDjson{
-				"rname": rpath,
-			},
-			Cause: ErrBadRequest,
-		}
+		return NotAFolder(n.rname)
 	}
 
 	etag, err := n.Version()
@@ -95,7 +109,7 @@ func getFolder(w http.ResponseWriter, r *http.Request) error {
 		return err // internal server error
 	}
 
-	if condStr := r.Header.Get("If-None-Match"); condStr != "" {
+	if condStr := r.Header.Get("If-None-Match"); condStr != "" { // @todo: extract into its own type/functionality?
 		conds := strings.Split(condStr, ",")
 		for _, cond := range conds {
 			cond = strings.TrimSpace(cond)
@@ -103,18 +117,10 @@ func getFolder(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				// @note(#orig_error): it's ok to lose the original error,
 				// since it can only be caused by a malformed ETag.
-				return HttpError{
-					Msg:  "invalid etag",
-					Desc: "Failed to parse the ETag contained in the If-None-Match header.",
-					Data: LDjson{
-						"rname":         rpath,
-						"if_none_match": cond,
-					},
-					Cause: ErrBadRequest,
-				}
+				return InvalidIfNonMatch(cond) // @todo: pass original err?
 			}
 			if rev.Equal(etag) {
-				return ErrNotModified
+				return NotModified()
 			}
 		}
 	}
@@ -148,28 +154,12 @@ func getFolder(w http.ResponseWriter, r *http.Request) error {
 }
 
 func getDocument(w http.ResponseWriter, r *http.Request) error {
-	rpath := strings.TrimPrefix(r.URL.Path, g.rroot)
-
-	n, err := Retrieve(rpath)
+	n, err := Retrieve(r.URL.Path)
 	if err != nil {
-		return HttpError{
-			Msg:  "document not found",
-			Desc: "The requested document does not exist on the server.",
-			Data: LDjson{
-				"rname": rpath,
-			},
-			Cause: ErrNotFound,
-		}
+		return MaybeNotFound(err)
 	}
 	if n.isFolder {
-		return HttpError{
-			Msg:  "requested resource is not a document",
-			Desc: "A request was made to retrieve a document, but a folder with the same path was found.",
-			Data: LDjson{
-				"rname": rpath,
-			},
-			Cause: ErrBadRequest,
-		}
+		return NotADocument(n.rname)
 	}
 
 	etag, err := n.Version()
@@ -185,18 +175,10 @@ func getDocument(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				// @note(#orig_error): it's ok to lose the original error,
 				// since it can only have been caused by a malformed ETag.
-				return HttpError{
-					Msg:  "invalid etag",
-					Desc: "Failed to parse the ETag contained in the If-None-Match header.",
-					Data: LDjson{
-						"rname":         rpath,
-						"if_none_match": cond,
-					},
-					Cause: ErrBadRequest,
-				}
+				return InvalidIfNonMatch(cond) // @todo: parse all and report all errors instead of only the first?
 			}
 			if rev.Equal(etag) {
-				return ErrNotModified
+				return NotModified()
 			}
 		}
 	}
@@ -219,24 +201,17 @@ func getDocument(w http.ResponseWriter, r *http.Request) error {
 }
 
 func putDocument(w http.ResponseWriter, r *http.Request) error {
-	rpath := strings.TrimPrefix(r.URL.Path, g.rroot)
+	rpath := r.URL.Path
 
 	n, err := Retrieve(rpath)
 	found := !errors.Is(err, ErrNotExist)
 
-	if err != nil && found { // err is NOT ErrNotExist
-		return err // internal server error
-	}
-
-	if found && n.isFolder {
-		return HttpError{
-			Msg:  "conflicting path names",
-			Desc: "The document conflicts with an already existing folder of the same name.",
-			Data: map[string]any{
-				"rname":    rpath,
-				"conflict": rpath,
-			},
-			Cause: ErrConflict,
+	if found { // err is /not/ ErrNotExist
+		if err != nil {
+			return err // internal server error
+		}
+		if n.isFolder {
+			return Conflict(n.rname)
 		}
 	}
 
@@ -246,14 +221,7 @@ func putDocument(w http.ResponseWriter, r *http.Request) error {
 			return err // internal server error
 		}
 		w.Header().Set("ETag", etag.String())
-		return HttpError{
-			Msg:  fmt.Sprintf("document already exists: %s", rpath),
-			Desc: "The request was rejected because the requested document already exists, but `If-None-Match: *' was specified.",
-			Data: LDjson{
-				"rname": rpath,
-			},
-			Cause: ErrPreconditionFailed,
-		}
+		return DocExists(n.rname)
 	}
 
 	if cond := r.Header.Get("If-Match"); cond != "" {
@@ -261,15 +229,7 @@ func putDocument(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			// @note(#orig_error): it's ok to lose the original error, since
 			// it can only be caused by a malformed ETag.
-			return HttpError{
-				Msg:  "invalid etag",
-				Desc: "Failed to parse the ETag contained in the If-Match header.",
-				Data: LDjson{
-					"rname":    rpath,
-					"if_match": cond,
-				},
-				Cause: ErrBadRequest,
-			}
+			return InvalidIfMatch(cond)
 		}
 		etag, err := n.Version()
 		if err != nil {
@@ -277,16 +237,7 @@ func putDocument(w http.ResponseWriter, r *http.Request) error {
 		}
 		w.Header().Set("ETag", etag.String())
 		if !etag.Equal(rev) {
-			return HttpError{
-				Msg:  "version mismatch",
-				Desc: "The version provided in the If-Match header does not match the document's current version.",
-				Data: LDjson{
-					"rname":           rpath,
-					"if_match":        cond,
-					"current_version": etag.String(),
-				},
-				Cause: ErrPreconditionFailed,
-			}
+			return VersionMismatch(rev, etag)
 		}
 	}
 
@@ -353,19 +304,9 @@ func putDocument(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		n, err = AddDocument(rpath, sname, fsize, mime)
-		var conflictErr ConflictError
-		if err != nil && errors.As(err, &conflictErr) {
-			return HttpError{
-				Msg:  "conflicting path names",
-				Desc: "The name of an ancestor collides with the name of an existing document.",
-				Data: LDjson{
-					"rname":    rpath,
-					"conflict": conflictErr.ConflictPath,
-				},
-				Cause: ErrConflict,
-			}
+		if err != nil {
+			return MaybeAncestorConflict(err, rpath)
 		}
-		assert(err == nil, "ConflictError is the only kind of error returned by AddDocument")
 
 		err = fd.Close()
 		if err != nil {
@@ -385,28 +326,14 @@ func putDocument(w http.ResponseWriter, r *http.Request) error {
 }
 
 func deleteDocument(w http.ResponseWriter, r *http.Request) error {
-	rpath := strings.TrimPrefix(r.URL.Path, g.rroot)
+	rpath := r.URL.Path
 
 	n, err := Retrieve(rpath)
 	if err != nil {
-		return HttpError{
-			Msg:  "document not found",
-			Desc: "The requested document does not exist on the server.",
-			Data: LDjson{
-				"rname": rpath,
-			},
-			Cause: ErrNotFound,
-		}
+		return MaybeNotFound(err)
 	}
 	if n.isFolder {
-		return HttpError{
-			Msg:  "requested resource is not a document",
-			Desc: "A request was made to retrieve a document, but a folder with the same path was found.",
-			Data: LDjson{
-				"rname": rpath,
-			},
-			Cause: ErrBadRequest,
-		}
+		return NotADocument(n.rname)
 	}
 
 	etag, err := n.Version()
@@ -419,28 +346,11 @@ func deleteDocument(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			// @note(#orig_error): it's ok to lose the original error, since
 			// it can only be caused by a malformed ETag.
-			return HttpError{
-				Msg:  "invalid etag",
-				Desc: "Failed to parse the ETag contained in the If-Match header.",
-				Data: LDjson{
-					"rname":    rpath,
-					"if_match": cond,
-				},
-				Cause: ErrBadRequest,
-			}
+			return InvalidIfMatch(cond)
 		}
 		if !etag.Equal(rev) {
 			w.Header().Set("ETag", etag.String())
-			return HttpError{
-				Msg:  "version mismatch",
-				Desc: "The version provided in the If-Match header does not match the document's current version.",
-				Data: LDjson{
-					"rname":           rpath,
-					"if_match":        cond,
-					"current_version": etag.String(),
-				},
-				Cause: ErrPreconditionFailed,
-			}
+			return VersionMismatch(rev, etag)
 		}
 	}
 
@@ -454,45 +364,4 @@ func deleteDocument(w http.ResponseWriter, r *http.Request) error {
 	hs.Set("ETag", etag.String())
 	w.WriteHeader(http.StatusOK)
 	return nil
-}
-
-// WriteError formats and writes err to w.
-// If err is wrapped in an HttpError, it is formatted into an ld+json map.
-// The status code is decided based upon the (inner) error.
-// If err or err.(HttpError).Cause is one of the sentinel errors no further handling is needed.
-// Otherwise, an ErrServerError is written to w and the error returned for further handling.
-func WriteError(w http.ResponseWriter, err error) error {
-	var (
-		httpErr   HttpError
-		unhandled error
-	)
-	if errors.As(err, &httpErr) {
-		status, isSentinel := StatusCodes[httpErr.Cause]
-		if !isSentinel {
-			unhandled = httpErr.Cause
-			status = StatusCodes[ErrServerError]
-		}
-		data := LDjson{
-			"message":     httpErr.Msg,
-			"description": httpErr.Desc,
-			"url":         httpErr.URL,
-			"data":        httpErr.Data,
-		}
-		hs := w.Header()
-		hs.Set("Content-Type", "application/ld+json")
-		w.WriteHeader(status)
-		encErr := json.NewEncoder(w).Encode(data)
-		if encErr != nil {
-			unhandled = errors.Join(unhandled, encErr)
-		}
-		return unhandled
-	} else {
-		status, isSentinel := StatusCodes[err]
-		if !isSentinel {
-			unhandled = err
-			status = StatusCodes[ErrServerError]
-		}
-		w.WriteHeader(status)
-		return unhandled
-	}
 }

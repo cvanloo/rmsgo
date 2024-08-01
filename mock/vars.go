@@ -51,7 +51,7 @@ func UUIDFunc() func() (uuid.UUID, error) {
 	last := 0
 	return func() (uuid.UUID, error) {
 		last++
-		lastX := fmt.Sprintf("%x", last)
+		lastX := fmt.Sprintf("%016x", last) // @nocheckin
 		return uuid.UUID([]byte(lastX)[:16]), nil
 	}
 }

@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	errCorsFail  = ErrForbidden
+	errCorsFail  = Forbidden()
 	allowMethods = []string{"HEAD", "GET", "PUT", "DELETE"}
 	allowHeaders = []string{
 		"Authorization",
@@ -20,25 +20,22 @@ var (
 )
 
 func handleCORS(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return HandlerWithError(func(w http.ResponseWriter, r *http.Request) error {
 		if r.Method == http.MethodOptions {
-			err := preflight(w, r)
-			if err != nil {
-				g.unhandled(err)
-			}
-			// do NOT pass on to next handler
+			return preflight(w, r)
+			// do /not/ pass on to next handler
 		} else {
-			err := cors(w, r)
-			if err != nil {
-				g.unhandled(err)
+			if err := cors(w, r); err != nil {
+				return err
 			}
 			next.ServeHTTP(w, r)
+			return nil // @nocheckin: maybe just a normal http.HandlerFunc?
 		}
 	})
 }
 
 func preflight(w http.ResponseWriter, r *http.Request) error {
-	path := strings.TrimPrefix(r.URL.Path, g.rroot)
+	path := r.URL.Path
 	isFolder := path[len(path)-1] == '/'
 
 	hs := w.Header()
@@ -50,15 +47,15 @@ func preflight(w http.ResponseWriter, r *http.Request) error {
 
 	origin := r.Header.Get("Origin")
 	if !(g.allowAllOrigins || g.allowOrigin(r, origin)) {
-		return WriteError(w, errCorsFail)
+		return errCorsFail
 	}
 
 	n, err := Retrieve(path)
 	if err != nil { // not found
-		return WriteError(w, errCorsFail)
+		return errCorsFail
 	}
 	if n.isFolder != isFolder { // malformed request
-		return WriteError(w, errCorsFail)
+		return errCorsFail
 	}
 
 	reqMethod := strings.ToUpper(r.Header.Get("Access-Control-Request-Method"))
@@ -74,7 +71,7 @@ func preflight(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	if !reqMethodAllowed {
-		return WriteError(w, errCorsFail)
+		return errCorsFail
 	}
 
 	// We might get multiple header values, but a single value might actually
@@ -92,7 +89,7 @@ func preflight(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 		if !reqHeaderAllowed {
-			return WriteError(w, errCorsFail)
+			return errCorsFail
 		}
 	}
 
@@ -117,7 +114,7 @@ func cors(w http.ResponseWriter, r *http.Request) error {
 
 	origin := r.Header.Get("Origin")
 	if !(g.allowAllOrigins || g.allowOrigin(r, origin)) {
-		return WriteError(w, errCorsFail)
+		return errCorsFail
 	}
 
 	if g.allowAllOrigins {

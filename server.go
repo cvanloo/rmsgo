@@ -35,7 +35,7 @@ type (
 		allowAllOrigins bool
 		allowedOrigins  []string
 		allowOrigin     AllowOriginFunc
-		middleware      MiddlewareFunc
+		middleware      Middleware
 		unhandled       ErrorHandlerFunc
 		defaultUser     User
 		authenticate    AuthenticateFunc
@@ -44,13 +44,6 @@ type (
 	// ErrorHandlerFunc is passed any errors that the remoteStorage server
 	// doesn't know how to handle itself.
 	ErrorHandlerFunc func(err error)
-
-	// A MiddlewareFunc is inserted into a chain of other http.Handler.
-	// This way, different parts of handling a request can be separated each
-	// into its own handler.
-	// The handler inserted here will receive the request first, before any
-	// remote storage handler are executed.
-	MiddlewareFunc func(next http.Handler) http.Handler
 
 	// AllowOriginFunc decides whether the origin of request r is allowed
 	// (returns true) or forbidden (returns false).
@@ -138,8 +131,8 @@ func (o *Options) UseErrorHandler(h ErrorHandlerFunc) {
 // remote storage server.
 // The middleware is responsible for passing the request on to the rms server
 // using next.ServeHTTP(w, r).
-func (o *Options) UseMiddleware(m MiddlewareFunc) {
-	o.middleware = m
+func (o *Options) UseMiddleware(m Middleware) {
+	o.middleware = m // @fixme: remove? is there any use case for this? potential for user to break library if request not correctly forwarded
 }
 
 // AllowAnyReadWrite allows even unauthenticated requests to create, read, and
@@ -196,6 +189,12 @@ func handlePanic(next http.Handler) http.Handler {
 	})
 }
 
+func stripRoot(next http.Handler) http.Handler {
+	return http.StripPrefix(g.rroot /* don't strip slash */, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r)
+	}))
+}
+
 // Register the remote storage server (with middleware if configured) to the
 // mux using g.Rroot + '/' as pattern.
 // If mux is nil the http.DefaultServeMux is used.
@@ -203,5 +202,12 @@ func Register(mux *http.ServeMux) {
 	if mux == nil {
 		mux = http.DefaultServeMux
 	}
-	mux.Handle(g.rroot+"/", handlePanic(g.middleware(handleCORS(handleAuthorization(handleRMS())))))
+	stack := MiddlewareStack(
+		//handlePanic,
+		g.middleware,
+		stripRoot,
+		handleCORS,
+		handleAuthorization,
+	)
+	mux.Handle(g.rroot+"/", stack(RMSRouter()))
 }
