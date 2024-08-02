@@ -4,17 +4,18 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"encoding/json"
 )
 
 type (
 	// @todo: to be extended as a RFC 9457 compliant error
 	//   (?maybe as its own library?)
 	HttpError struct {
-		Type string
-		Status int
-		Title string
-		Detail string
-		Instance string
+		Type string `json:"type"`
+		Status int `json:"status"`
+		Title string `json:"title"`
+		Detail string `json:"detail"`
+		Instance string `json:"instance"`
 	}
 
 	ErrMethodNotAllowed struct {
@@ -50,9 +51,7 @@ type (
 		HttpError
 	}
 
-	ErrNotModified struct {
-		HttpError
-	}
+	ErrNotModified struct{} // not an RFC9457 error: (1) 304 does not allow a body, (2) also not really an error, just an (expected) condition
 
 	ErrConflict struct {
 		HttpError
@@ -77,12 +76,25 @@ func (e HttpError) Error() string {
 }
 
 func (e HttpError) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	text := http.StatusText(e.Status) // @todo: replace with RFC 9457 formatted error response
-	http.Error(w, text, e.Status)
+	h := w.Header()
+	h.Set("Content-Type", "application/problem+json") // respond with problem+json even if the client didn't request it (rfc9457#section-3-11)
+
+	// @nocheckin
+	//text := http.StatusText(e.Status) // @todo: replace with RFC 9457 formatted error response
+	//http.Error(w, text, e.Status)
+
+	// @todo: do we want any validation that the HttpError is valid? (eg., valid Status value, type, ...?)
+
+	w.WriteHeader(e.Status)
+	encErr := json.NewEncoder(w).Encode(e)
+	if encErr != nil {
+		// at this point we probably can't respond (eg., with internal server error) anymore
+		g.unhandled(errors.Join(encErr, e))
+	}
 }
 
 func (e HttpError) RespondError(w http.ResponseWriter, r *http.Request) bool {
-	http.Error(w, http.StatusText(e.Status), e.Status)
+	e.ServeHTTP(w, r)
 	return true
 }
 
@@ -179,11 +191,17 @@ func InvalidIfMatch(cond string) error {
 }
 
 func NotModified() error {
-	return ErrNotModified{
-		HttpError: HttpError{
-			Status: http.StatusNotModified,
-		},
-	}
+	return ErrNotModified{}
+}
+
+func (e ErrNotModified) Error() string {
+	return http.StatusText(http.StatusNotModified)
+}
+
+func (e ErrNotModified) RespondError(w http.ResponseWriter, r *http.Request) bool {
+	s := http.StatusNotModified
+	http.Error(w, http.StatusText(s), s)
+	return true
 }
 
 func Conflict(path string) error {

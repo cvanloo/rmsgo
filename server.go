@@ -41,6 +41,8 @@ type (
 		authenticate    AuthenticateFunc
 	}
 
+	// @todo: domain name (needed eg., for rfc9457 errors)
+
 	// ErrorHandlerFunc is passed any errors that the remoteStorage server
 	// doesn't know how to handle itself.
 	ErrorHandlerFunc func(err error)
