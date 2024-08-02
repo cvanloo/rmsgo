@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	errCorsFail  = Forbidden()
+	errCorsFail  = Forbidden("you are not allowed in here")
 	allowMethods = []string{"HEAD", "GET", "PUT", "DELETE"}
 	allowHeaders = []string{
 		"Authorization",

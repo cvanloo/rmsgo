@@ -18,6 +18,10 @@ type (
 		Instance string `json:"instance"`
 	}
 
+	ErrBadRequest struct {
+		HttpError
+	}
+
 	ErrMethodNotAllowed struct {
 		HttpError
 	}
@@ -98,34 +102,53 @@ func (e HttpError) RespondError(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-func MethodNotAllowed() error {
+func BadRequest(msg string) error {
+	s := http.StatusBadRequest
+	return ErrBadRequest{
+		HttpError: HttpError{
+			Status: s,
+			Title: http.StatusText(s),
+			Detail: msg,
+		},
+	}
+}
+
+func MethodNotAllowed(msg string) error {
+	s := http.StatusMethodNotAllowed
 	return ErrMethodNotAllowed{
 		HttpError: HttpError{
-			Status: http.StatusMethodNotAllowed,
+			Status: s,
+			Title: http.StatusText(s),
 		},
 	}
 }
 
-func Forbidden() error {
+func Forbidden(msg string) error {
+	s := http.StatusForbidden
 	return ErrForbidden{
 		HttpError: HttpError{
-			Status: http.StatusForbidden,
+			Status: s,
+			Title: http.StatusText(s),
 		},
 	}
 }
 
-func NotFound() error {
+func NotFound(msg string) error {
+	s := http.StatusNotFound
 	return ErrNotFound{
 		HttpError: HttpError{
-			Status: http.StatusNotFound,
+			Status: s,
+			Title: http.StatusText(s),
 		},
 	}
 }
 
 func MaybeNotFound(err error) error {
+	s := http.StatusNotFound
 	return ErrMaybeNotFound{
 		HttpError: HttpError{
-			Status: http.StatusNotFound,
+			Status: s,
+			Title: http.StatusText(s),
 		},
 		Cause: err,
 	}

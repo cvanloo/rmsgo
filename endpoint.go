@@ -62,21 +62,17 @@ func (m *MuxWithError) HandleFunc(pattern string, handler func(http.ResponseWrit
 func RMSRouter() http.Handler {
 	folderMux := &MuxWithError{}
 	folderMux.HandleFunc("GET /", getFolder) // @nocheckin: GET also accepts HEAD?
-	folderMux.Handle("/", ErrMethodNotAllowed{
-		HttpError: HttpError{
-			Status: http.StatusMethodNotAllowed,
-		},
-	}) // @todo: return detailed error description
+	folderMux.Handle("/", HandlerWithError(func(http.ResponseWriter, *http.Request) error {
+		return BadRequest("method not allowed on folders")
+	}))
 
 	documentMux := &MuxWithError{}
 	documentMux.HandleFunc("GET /", getDocument) // @nocheckin: GET also accepts HEAD?
 	documentMux.HandleFunc("PUT /", putDocument)
 	documentMux.HandleFunc("DELETE /", deleteDocument)
-	documentMux.Handle("/", ErrMethodNotAllowed{
-		HttpError: HttpError{
-			Status: http.StatusMethodNotAllowed,
-		},
-	}) // @todo: return detailed error description
+	documentMux.Handle("/", HandlerWithError(func(http.ResponseWriter, *http.Request) error {
+		return BadRequest("method not allowed on documents")
+	}))
 
 	mux := &MuxWithError{}
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) error {
