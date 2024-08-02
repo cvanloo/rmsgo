@@ -33,13 +33,11 @@ type (
 )
 
 func MiddlewareStack(middlewares ...Middleware) Middleware {
-	// @nocheckin: test that this really works the way I think it does
 	return func(next http.Handler) http.Handler {
 		for i := len(middlewares)-1; i >= 0; i-- {
 			m := middlewares[i]
 			next = m(next)
 		}
-
 		return next
 	}
 }

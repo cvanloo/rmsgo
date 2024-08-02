@@ -66,6 +66,7 @@ var g *Options
 // documents are written to and read from.
 // A pointer to the Options object is returned and allows for further
 // configuration beyond the default settings.
+// At the very least authentication should be properly configured.
 func Configure(remoteRoot, storageRoot string) (*Options, error) {
 	rroot := filepath.Clean(remoteRoot)
 	if rroot == "/" {
@@ -131,13 +132,14 @@ func (o *Options) UseErrorHandler(h ErrorHandlerFunc) {
 // remote storage server.
 // The middleware is responsible for passing the request on to the rms server
 // using next.ServeHTTP(w, r).
+// If this is not done correctly, rmsgo won't be able to handle requests.
 func (o *Options) UseMiddleware(m Middleware) {
-	o.middleware = m // @fixme: remove? is there any use case for this? potential for user to break library if request not correctly forwarded
+	o.middleware = m
 }
 
 // AllowAnyReadWrite allows even unauthenticated requests to create, read, and
 // delete any documents on the server.
-// This option has no effect if UseAuthentication is used.
+// This option has no effect if Options.UseAuthentication is called.
 // Per default, i.e if neither this nor any other auth related option
 // is configured, read-only (GET and HEAD) requests are allowed for the
 // unauthenticated user.
@@ -146,8 +148,8 @@ func (o *Options) AllowAnyReadWrite() {
 }
 
 // UseAuthentication configures the function to use for authenticating requests.
-// The AuthenticateFunc authenticates a request and returns the associated user,
-// or nil (unauthenticated).
+// The AuthenticateFunc authenticates a request and returns the associated user
+// and true, or nil and false (unauthenticated).
 // In the latter case, access is forbidden unless it is a read request going to
 // a public document (a document whose path starts with "/public/").
 // In case of an authenticated user, access rights are determined based on the
@@ -158,6 +160,7 @@ func (o *Options) UseAuthentication(a AuthenticateFunc) {
 
 // UseAllowedOrigins configures a list of allowed origins.
 // By default all origins are allowed.
+// This option is ignored if Options.UseAllowOrigin is called.
 func (o *Options) UseAllowedOrigins(origins []string) {
 	o.allowAllOrigins = false
 	o.allowedOrigins = origins
@@ -195,15 +198,15 @@ func stripRoot(next http.Handler) http.Handler {
 	}))
 }
 
-// Register the remote storage server (with middleware if configured) to the
-// mux using g.Rroot + '/' as pattern.
+// Register the remote storage server (with middleware if configured via
+// Options.UseMiddleware) to the mux using g.Rroot() + '/' as pattern.
 // If mux is nil the http.DefaultServeMux is used.
 func Register(mux *http.ServeMux) {
 	if mux == nil {
 		mux = http.DefaultServeMux
 	}
 	stack := MiddlewareStack(
-		//handlePanic,
+		handlePanic,
 		g.middleware,
 		stripRoot,
 		handleCORS,

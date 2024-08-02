@@ -6,8 +6,6 @@ import (
 	"net/http"
 )
 
-// @nocheckin: some of these might be better of as sentinel error values, instead of constructing them anew each time
-
 type (
 	// @todo: to be extended as a RFC 9457 compliant error
 	//   (?maybe as its own library?)
