@@ -17,7 +17,6 @@ import (
 // > A provider MAY offer version rollback functionality to its users,
 // > but this specification does not define the interface for that.
 
-
 type (
 	Middleware func(next http.Handler) http.Handler
 
@@ -34,7 +33,7 @@ type (
 
 func MiddlewareStack(middlewares ...Middleware) Middleware {
 	return func(next http.Handler) http.Handler {
-		for i := len(middlewares)-1; i >= 0; i-- {
+		for i := len(middlewares) - 1; i >= 0; i-- {
 			m := middlewares[i]
 			next = m(next)
 		}

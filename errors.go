@@ -1,20 +1,20 @@
 package rmsgo
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"encoding/json"
 )
 
 type (
 	// @todo: to be extended as a RFC 9457 compliant error
 	//   (?maybe as its own library?)
 	HttpError struct {
-		Type string `json:"type"`
-		Status int `json:"status"`
-		Title string `json:"title"`
-		Detail string `json:"detail"`
+		Type     string `json:"type"`
+		Status   int    `json:"status"`
+		Title    string `json:"title"`
+		Detail   string `json:"detail"`
 		Instance string `json:"instance"`
 	}
 
@@ -106,7 +106,7 @@ func BadRequest(msg string) error {
 	return ErrBadRequest{
 		HttpError: HttpError{
 			Status: s,
-			Title: http.StatusText(s),
+			Title:  http.StatusText(s),
 			Detail: msg,
 		},
 	}
@@ -117,7 +117,7 @@ func MethodNotAllowed(msg string) error {
 	return ErrMethodNotAllowed{
 		HttpError: HttpError{
 			Status: s,
-			Title: http.StatusText(s),
+			Title:  http.StatusText(s),
 		},
 	}
 }
@@ -127,7 +127,7 @@ func Forbidden(msg string) error {
 	return ErrForbidden{
 		HttpError: HttpError{
 			Status: s,
-			Title: http.StatusText(s),
+			Title:  http.StatusText(s),
 		},
 	}
 }
@@ -137,7 +137,7 @@ func NotFound(msg string) error {
 	return ErrNotFound{
 		HttpError: HttpError{
 			Status: s,
-			Title: http.StatusText(s),
+			Title:  http.StatusText(s),
 		},
 	}
 }
@@ -147,7 +147,7 @@ func MaybeNotFound(err error) error {
 	return ErrMaybeNotFound{
 		HttpError: HttpError{
 			Status: s,
-			Title: http.StatusText(s),
+			Title:  http.StatusText(s),
 		},
 		Cause: err,
 	}
@@ -172,7 +172,7 @@ func NotAFolder(path string) error {
 	return ErrNotAFolder{
 		HttpError: HttpError{
 			Status: http.StatusBadRequest,
-			Title: "requested resource is not a folder",
+			Title:  "requested resource is not a folder",
 			Detail: "a request was made to retrieve a folder, but a document with the same path was found",
 			// @todo: fmt.Sprintf("%s", path),
 		},
@@ -183,7 +183,7 @@ func NotADocument(path string) error {
 	return ErrNotADocument{
 		HttpError: HttpError{
 			Status: http.StatusBadRequest,
-			Title: "requested resource is not a document",
+			Title:  "requested resource is not a document",
 			Detail: "a request was made to retrieve a document, but a folder with the same path was found",
 			// @todo: fmt.Sprintf("%s", path),
 		},
@@ -192,9 +192,9 @@ func NotADocument(path string) error {
 
 func InvalidIfNonMatch(cond string) error {
 	return ErrInvalidIfNonMatch{
-		HttpError: HttpError {
+		HttpError: HttpError{
 			Status: http.StatusBadRequest,
-			Title: "invalid etag",
+			Title:  "invalid etag",
 			Detail: "the etag contained in the If-None-Match header could not be parsed",
 			// @todo: fmt.Sprintf("%s", cond),
 		},
@@ -203,9 +203,9 @@ func InvalidIfNonMatch(cond string) error {
 
 func InvalidIfMatch(cond string) error {
 	return ErrInvalidIfMatch{
-		HttpError: HttpError {
+		HttpError: HttpError{
 			Status: http.StatusBadRequest,
-			Title: "invalid etag",
+			Title:  "invalid etag",
 			Detail: "the etag contained in the If-Match header could not be parsed",
 			// @todo: fmt.Sprintf("%s", cond),
 		},
@@ -230,7 +230,7 @@ func Conflict(path string) error {
 	return ErrConflict{
 		HttpError: HttpError{
 			Status: http.StatusConflict,
-			Title: "conflicting path names",
+			Title:  "conflicting path names",
 			Detail: "the document conflicts with an already existing folder of the same name",
 			// @todo: fmt.Sprintf("%s", cond),
 		},
@@ -241,7 +241,7 @@ func MaybeAncestorConflict(err error, path string) error {
 	return ErrMaybeAncestorConflict{
 		HttpError: HttpError{
 			Status: http.StatusConflict,
-			Title: "conflicting path names while creating ancestors",
+			Title:  "conflicting path names while creating ancestors",
 			Detail: "the name of an ancestor collides with the name of an existing document",
 			// @todo: fmt.Sprintf("%s", cond),
 			//   err.(ConflictError).ConflictPath
@@ -270,7 +270,7 @@ func DocExists(path string) error {
 	return ErrDocExists{
 		HttpError: HttpError{
 			Status: http.StatusPreconditionFailed,
-			Title: "document already exists",
+			Title:  "document already exists",
 			Detail: "the request was rejected because the requested document already exists, but If-None-Match with a value of * was specified",
 			// @todo: fmt.Sprintf("%s", cond),
 		},
@@ -281,7 +281,7 @@ func VersionMismatch(expected, actual ETag) error {
 	return ErrVersionMismatch{
 		HttpError: HttpError{
 			Status: http.StatusPreconditionFailed,
-			Title: "version mismatch",
+			Title:  "version mismatch",
 			Detail: "the version provided in the If-Match header does not match the document's current version",
 			// @todo: expected, actual
 		},
