@@ -1,7 +1,6 @@
 package mock
 
 import (
-	"fmt"
 	"github.com/cvanloo/go-ffs"
 	"time"
 
@@ -48,11 +47,13 @@ func Mock(fsOpts ...FSOption) {
 // UUIDFunc returns a mock function that creates predictable UUIDs, simply a
 // number starting at one, being increased for each new UUID.
 func UUIDFunc() func() (uuid.UUID, error) {
-	last := 0
+	last := 48
 	return func() (uuid.UUID, error) {
 		last++
-		lastX := fmt.Sprintf("%016x", last) // @nocheckin
-		return uuid.UUID([]byte(lastX)[:16]), nil
+		bs := make([]byte, 16)
+		bs[0] = byte((last >> 0) & 0xFF)
+		bs[1] = byte((last >> 8) & 0xFF)
+		return uuid.FromBytes(bs)
 	}
 }
 
