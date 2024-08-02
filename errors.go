@@ -83,7 +83,6 @@ func (e HttpError) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h := w.Header()
 	h.Set("Content-Type", "application/problem+json") // respond with problem+json even if the client didn't request it (rfc9457#section-3-11)
 
-	// @nocheckin
 	//text := http.StatusText(e.Status) // @todo: replace with RFC 9457 formatted error response
 	//http.Error(w, text, e.Status)
 
@@ -159,7 +158,7 @@ func (e ErrMaybeNotFound) Unwrap() error {
 }
 
 func (e ErrMaybeNotFound) IsNotFound() bool {
-	return errors.Is(e.Cause, ErrNotExist) // @nocheckin: other possible not founds?
+	return errors.Is(e.Cause, ErrNotExist) // @todo: other possible not founds?
 }
 
 func (e ErrMaybeNotFound) RespondError(w http.ResponseWriter, r *http.Request) bool {

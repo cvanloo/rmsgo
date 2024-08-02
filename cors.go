@@ -20,18 +20,10 @@ var (
 )
 
 func handleCORS(next http.Handler) http.Handler {
-	return HandlerWithError(func(w http.ResponseWriter, r *http.Request) error {
-		if r.Method == http.MethodOptions {
-			return preflight(w, r)
-			// do /not/ pass on to next handler
-		} else {
-			if err := cors(w, r); err != nil {
-				return err
-			}
-			next.ServeHTTP(w, r)
-			return nil // @nocheckin: maybe just a normal http.HandlerFunc?
-		}
-	})
+	mux := &MuxWithError{}
+	mux.HandleFunc("OPTIONS /", preflight) // preflight does not pass on the request to the next handler
+	mux.Handle("/", cors(next))
+	return mux
 }
 
 func preflight(w http.ResponseWriter, r *http.Request) error {
@@ -106,21 +98,25 @@ func preflight(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func cors(w http.ResponseWriter, r *http.Request) error {
-	hs := w.Header()
+func cors(next http.Handler) http.Handler {
+	return HandlerWithError(func(w http.ResponseWriter, r *http.Request) error {
+		hs := w.Header()
 
-	// always set Vary header
-	hs.Set("Vary", "Origin")
+		// always set Vary header
+		hs.Set("Vary", "Origin")
 
-	origin := r.Header.Get("Origin")
-	if !(g.allowAllOrigins || g.allowOrigin(r, origin)) {
-		return errCorsFail
-	}
+		origin := r.Header.Get("Origin")
+		if !(g.allowAllOrigins || g.allowOrigin(r, origin)) {
+			return errCorsFail
+		}
 
-	if g.allowAllOrigins {
-		hs.Set("Access-Control-Allow-Origin", "*")
-	} else {
-		hs.Set("Access-Control-Allow-Origin", origin)
-	}
-	return nil
+		if g.allowAllOrigins {
+			hs.Set("Access-Control-Allow-Origin", "*")
+		} else {
+			hs.Set("Access-Control-Allow-Origin", origin)
+		}
+
+		next.ServeHTTP(w, r)
+		return nil
+	})
 }
