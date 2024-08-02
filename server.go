@@ -35,22 +35,17 @@ type (
 		allowAllOrigins bool
 		allowedOrigins  []string
 		allowOrigin     AllowOriginFunc
-		middleware      MiddlewareFunc
+		middleware      Middleware
 		unhandled       ErrorHandlerFunc
 		defaultUser     User
 		authenticate    AuthenticateFunc
 	}
 
+	// @todo: domain name (needed eg., for rfc9457 errors)
+
 	// ErrorHandlerFunc is passed any errors that the remoteStorage server
 	// doesn't know how to handle itself.
 	ErrorHandlerFunc func(err error)
-
-	// A MiddlewareFunc is inserted into a chain of other http.Handler.
-	// This way, different parts of handling a request can be separated each
-	// into its own handler.
-	// The handler inserted here will receive the request first, before any
-	// remote storage handler are executed.
-	MiddlewareFunc func(next http.Handler) http.Handler
 
 	// AllowOriginFunc decides whether the origin of request r is allowed
 	// (returns true) or forbidden (returns false).
@@ -73,6 +68,7 @@ var g *Options
 // documents are written to and read from.
 // A pointer to the Options object is returned and allows for further
 // configuration beyond the default settings.
+// At the very least authentication should be properly configured.
 func Configure(remoteRoot, storageRoot string) (*Options, error) {
 	rroot := filepath.Clean(remoteRoot)
 	if rroot == "/" {
@@ -138,13 +134,14 @@ func (o *Options) UseErrorHandler(h ErrorHandlerFunc) {
 // remote storage server.
 // The middleware is responsible for passing the request on to the rms server
 // using next.ServeHTTP(w, r).
-func (o *Options) UseMiddleware(m MiddlewareFunc) {
+// If this is not done correctly, rmsgo won't be able to handle requests.
+func (o *Options) UseMiddleware(m Middleware) {
 	o.middleware = m
 }
 
 // AllowAnyReadWrite allows even unauthenticated requests to create, read, and
 // delete any documents on the server.
-// This option has no effect if UseAuthentication is used.
+// This option has no effect if Options.UseAuthentication is called.
 // Per default, i.e if neither this nor any other auth related option
 // is configured, read-only (GET and HEAD) requests are allowed for the
 // unauthenticated user.
@@ -153,8 +150,8 @@ func (o *Options) AllowAnyReadWrite() {
 }
 
 // UseAuthentication configures the function to use for authenticating requests.
-// The AuthenticateFunc authenticates a request and returns the associated user,
-// or nil (unauthenticated).
+// The AuthenticateFunc authenticates a request and returns the associated user
+// and true, or nil and false (unauthenticated).
 // In the latter case, access is forbidden unless it is a read request going to
 // a public document (a document whose path starts with "/public/").
 // In case of an authenticated user, access rights are determined based on the
@@ -165,6 +162,7 @@ func (o *Options) UseAuthentication(a AuthenticateFunc) {
 
 // UseAllowedOrigins configures a list of allowed origins.
 // By default all origins are allowed.
+// This option is ignored if Options.UseAllowOrigin is called.
 func (o *Options) UseAllowedOrigins(origins []string) {
 	o.allowAllOrigins = false
 	o.allowedOrigins = origins
@@ -196,12 +194,25 @@ func handlePanic(next http.Handler) http.Handler {
 	})
 }
 
-// Register the remote storage server (with middleware if configured) to the
-// mux using g.Rroot + '/' as pattern.
+func stripRoot(next http.Handler) http.Handler {
+	return http.StripPrefix(g.rroot /* don't strip slash */, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r)
+	}))
+}
+
+// Register the remote storage server (with middleware if configured via
+// Options.UseMiddleware) to the mux using g.Rroot() + '/' as pattern.
 // If mux is nil the http.DefaultServeMux is used.
 func Register(mux *http.ServeMux) {
 	if mux == nil {
 		mux = http.DefaultServeMux
 	}
-	mux.Handle(g.rroot+"/", handlePanic(g.middleware(handleCORS(handleAuthorization(handleRMS())))))
+	stack := MiddlewareStack(
+		handlePanic,
+		g.middleware,
+		stripRoot,
+		handleCORS,
+		handleAuthorization,
+	)
+	mux.Handle(g.rroot+"/", stack(RMSRouter()))
 }

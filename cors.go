@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	errCorsFail  = ErrForbidden
+	errCorsFail  = Forbidden("you are not allowed in here")
 	allowMethods = []string{"HEAD", "GET", "PUT", "DELETE"}
 	allowHeaders = []string{
 		"Authorization",
@@ -20,25 +20,14 @@ var (
 )
 
 func handleCORS(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodOptions {
-			err := preflight(w, r)
-			if err != nil {
-				g.unhandled(err)
-			}
-			// do NOT pass on to next handler
-		} else {
-			err := cors(w, r)
-			if err != nil {
-				g.unhandled(err)
-			}
-			next.ServeHTTP(w, r)
-		}
-	})
+	mux := &MuxWithError{}
+	mux.HandleFunc("OPTIONS /", preflight) // preflight does not pass on the request to the next handler
+	mux.Handle("/", cors(next))
+	return mux
 }
 
 func preflight(w http.ResponseWriter, r *http.Request) error {
-	path := strings.TrimPrefix(r.URL.Path, g.rroot)
+	path := r.URL.Path
 	isFolder := path[len(path)-1] == '/'
 
 	hs := w.Header()
@@ -50,15 +39,15 @@ func preflight(w http.ResponseWriter, r *http.Request) error {
 
 	origin := r.Header.Get("Origin")
 	if !(g.allowAllOrigins || g.allowOrigin(r, origin)) {
-		return WriteError(w, errCorsFail)
+		return errCorsFail
 	}
 
 	n, err := Retrieve(path)
 	if err != nil { // not found
-		return WriteError(w, errCorsFail)
+		return errCorsFail
 	}
 	if n.isFolder != isFolder { // malformed request
-		return WriteError(w, errCorsFail)
+		return errCorsFail
 	}
 
 	reqMethod := strings.ToUpper(r.Header.Get("Access-Control-Request-Method"))
@@ -74,7 +63,7 @@ func preflight(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	if !reqMethodAllowed {
-		return WriteError(w, errCorsFail)
+		return errCorsFail
 	}
 
 	// We might get multiple header values, but a single value might actually
@@ -92,7 +81,7 @@ func preflight(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 		if !reqHeaderAllowed {
-			return WriteError(w, errCorsFail)
+			return errCorsFail
 		}
 	}
 
@@ -109,21 +98,25 @@ func preflight(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func cors(w http.ResponseWriter, r *http.Request) error {
-	hs := w.Header()
+func cors(next http.Handler) http.Handler {
+	return HandlerWithError(func(w http.ResponseWriter, r *http.Request) error {
+		hs := w.Header()
 
-	// always set Vary header
-	hs.Set("Vary", "Origin")
+		// always set Vary header
+		hs.Set("Vary", "Origin")
 
-	origin := r.Header.Get("Origin")
-	if !(g.allowAllOrigins || g.allowOrigin(r, origin)) {
-		return WriteError(w, errCorsFail)
-	}
+		origin := r.Header.Get("Origin")
+		if !(g.allowAllOrigins || g.allowOrigin(r, origin)) {
+			return errCorsFail
+		}
 
-	if g.allowAllOrigins {
-		hs.Set("Access-Control-Allow-Origin", "*")
-	} else {
-		hs.Set("Access-Control-Allow-Origin", origin)
-	}
-	return nil
+		if g.allowAllOrigins {
+			hs.Set("Access-Control-Allow-Origin", "*")
+		} else {
+			hs.Set("Access-Control-Allow-Origin", origin)
+		}
+
+		next.ServeHTTP(w, r)
+		return nil
+	})
 }

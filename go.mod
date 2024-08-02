@@ -1,6 +1,6 @@
 module github.com/cvanloo/rmsgo
 
-go 1.21.0
+go 1.22.5
 
 require (
 	github.com/google/uuid v1.3.0
