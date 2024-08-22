@@ -8,14 +8,12 @@
 // Storage root refers to the location on disk where the actual "Kitten.avif"
 // file is stored (for example "/var/storage").
 //
-// Use the Configure function and the methods on the returned Options struct
-// to setup the server.
+// Use the Configure function and the various Options to setup the server.
 //
-//	opts, err := rmsgo.Configure(RemoteRoot, StorageRoot)
+//	err := rmsgo.Configure(RemoteRoot, StorageRoot, WithXXX(...), ...)
 //	if err != nil {
 //		log.Fatal(err)
 //	}
-//	opts.UseXXX(...)
 package rmsgo
 
 import (
@@ -29,8 +27,11 @@ import (
 )
 
 type (
+	// Option configures the Server.
+	// You're not supposed to create an Option yourself, but instead use the WithXXX functions.
 	Option func(*Server)
 
+	// Server holds the server configuration.
 	Server struct {
 		rroot, sroot    string
 		allowAllOrigins bool
@@ -179,7 +180,8 @@ func WithAllowOrigin(f AllowOriginFunc) Option {
 	}
 }
 
-func WithCondition(cond bool, opt Option) Option {
+// Optionally use opt depending on cond.
+func Optionally(cond bool, opt Option) Option {
 	return func(s *Server) {
 		if cond {
 			opt(s)
@@ -187,6 +189,7 @@ func WithCondition(cond bool, opt Option) Option {
 	}
 }
 
+// Group multiple Options together into a single Option.
 func Options(opts ...Option) Option {
 	return func(s *Server) {
 		for _, opt := range opts {

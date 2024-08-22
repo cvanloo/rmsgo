@@ -76,9 +76,9 @@ func ExampleRegister_usingDefaultServeMux() {
 	}
 }
 
-// Configure returns a reference to an options object.
-// This can be used to customize the configuration, e.g., to configure CORS,
-// and to setup authentication, additional middleware, and more.
+// Configure accepts a variable number of Option arguments.
+// These can be used to overwrite the default configuration, e.g., to configure
+// CORS, setup authentication, additional middleware, and more.
 func ExampleOptions() {
 	const (
 		remoteRoot  = "/storage/"

@@ -112,7 +112,7 @@ func main() {
 			log.Fatalf("remote storage: unhandled error: %v", err)
 		}),
 		rmsgo.WithMiddleware(logger),
-		rmsgo.WithCondition(!allOrigins, rmsgo.WithAllowedOrigins(origins.Origins)), // allow all is the default in opts
+		rmsgo.Optionally(!allOrigins, rmsgo.WithAllowedOrigins(origins.Origins)), // allow all is the default in opts
 		rmsgo.WithAuthentication(func(r *http.Request, bearer string) (rmsgo.User, bool) {
 			return rmsgo.UserReadWrite{}, true
 		}),
