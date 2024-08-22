@@ -823,7 +823,7 @@ func TestMigrate(t *testing.T) {
 		rroot = "/storage/"
 		sroot = "/tmp/rms/storage/"
 	)
-	mustVal(Configure(rroot, sroot))
+	must(Configure(rroot, sroot))
 	Mock(
 		WithDirectory(sroot),
 		WithFile("/somewhere/Documents/hello.txt", []byte("Hello, World!")),
