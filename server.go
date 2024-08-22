@@ -68,7 +68,7 @@ var g *Server
 // documents are written to and read from.
 // It is recommended to properly configure authentication by using the
 // WithAuthentication option.
-func Configure(remoteRoot, storageRoot string, opts ...Option) (*Server, error) {
+func Configure(remoteRoot, storageRoot string, opts ...Option) error {
 	rroot := filepath.Clean(remoteRoot)
 	if rroot == "/" {
 		rroot = ""
@@ -77,10 +77,10 @@ func Configure(remoteRoot, storageRoot string, opts ...Option) (*Server, error) 
 	sroot := filepath.Clean(storageRoot)
 	fi, err := FS.Stat(sroot)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if !fi.IsDir() {
-		return nil, fmt.Errorf("storage root is not a directory: %s", sroot)
+		return fmt.Errorf("storage root is not a directory: %s", sroot)
 	}
 
 	s := &Server{
@@ -113,22 +113,7 @@ func Configure(remoteRoot, storageRoot string, opts ...Option) (*Server, error) 
 	}
 
 	g = s
-	return s, nil
-}
-
-// Rroot specifies the URL path at which remoteStorage is rooted.
-// E.g., if Rroot is "/storage" then a document "/Picture/Kittens.png" can
-// be accessed using the URL "https://example.com/storage/Picture/Kittens.png".
-// Rroot does not have a trailing slash.
-func (o *Server) Rroot() string {
-	return o.rroot
-}
-
-// Sroot is a path specifying the location on the server's file system where
-// all of remoteStorage's files are stored. Sroot does not have a trailing
-// slash.
-func (o *Server) Sroot() string {
-	return o.sroot
+	return nil
 }
 
 // WithErrorHandler configures the error handler to use.

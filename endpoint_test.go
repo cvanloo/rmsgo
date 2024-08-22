@@ -11,7 +11,7 @@ import (
 	. "github.com/cvanloo/rmsgo/mock"
 )
 
-func mockServer(opts ...Option) (ts *httptest.Server, s *Server, root string) {
+func mockServer(opts ...Option) (ts *httptest.Server, root string) {
 	hostname = "catboy"
 	const (
 		rroot = "/storage/"
@@ -20,7 +20,7 @@ func mockServer(opts ...Option) (ts *httptest.Server, s *Server, root string) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	s = mustVal(Configure(rroot, sroot,
+	must(Configure(rroot, sroot,
 		WithAllowAnyReadWrite(),
 		Options(opts...),
 	))
@@ -29,7 +29,7 @@ func mockServer(opts ...Option) (ts *httptest.Server, s *Server, root string) {
 	mux := http.NewServeMux()
 	Register(mux)
 	ts = httptest.NewServer(mux)
-	return ts, s, ts.URL + g.rroot
+	return ts, ts.URL + g.rroot
 }
 
 // @todo: PUT test chunked transfer-encoding
@@ -103,7 +103,7 @@ func TestPutDocument(t *testing.T) {
 		testDocument     = "/Classified/FOGBANK.txt"
 		testDocumentEtag = "60ca7ee51a4a4886d00ae2470457b206"
 	)
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent))))
@@ -149,7 +149,7 @@ func TestPutDocumentTwiceUpdatesIt(t *testing.T) {
 		testDocumentEtag2 = "063c77ac4aa257f9396f1b5cae956004"
 	)
 
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	{ // put first version of document
@@ -232,7 +232,7 @@ func TestPutDocumentIfMatchSuccessUpdatesIt(t *testing.T) {
 		testContent2      = "I will travel the distance in your eyes Interstellar Light years from you Supernova We'll fuse when we collide Awaking in the light of all the stars aligned"
 		testDocumentEtag2 = "063c77ac4aa257f9396f1b5cae956004"
 	)
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	{
@@ -281,7 +281,7 @@ func TestPutDocumentIfMatchFailDoesNotUpdateIt(t *testing.T) {
 
 		testContent2 = "I will travel the distance in your eyes Interstellar Light years from you Supernova We'll fuse when we collide Awaking in the light of all the stars aligned"
 	)
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	{
@@ -332,7 +332,7 @@ func TestPutDocumentIfMatchUpdateInBetween(t *testing.T) {
 
 		testContent3 = "I will travel the distance in your eyes"
 	)
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	{ // create document
@@ -403,7 +403,7 @@ func TestPutDocumentIfNonMatchSuccessCreatesTheDocument(t *testing.T) {
 		testContent      = "I will travel the distance in your eyes Interstellar Light years from you"
 		testDocumentEtag = "33f7b41f98820961b12134677ba3f231"
 	)
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	{
@@ -455,7 +455,7 @@ func TestPutDocumentIfNonMatchFailDoesNotUpdateIt(t *testing.T) {
 		testContent2      = "I will travel the distance in your eyes Interstellar Light years from you Supernova We'll fuse when we collide Awaking in the light of all the stars aligned"
 		testDocumentEtag2 = "063c77ac4aa257f9396f1b5cae956004"
 	)
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	{
@@ -511,7 +511,7 @@ func TestPutDocumentSilentlyCreateAncestors(t *testing.T) {
 		testDirListing = `{"@context":"http://remotestorage.io/spec/folder-description","items":{"Neal Stephenson.txt":{"Content-Length":83,"Content-Type":"wise/quote","ETag":"3dc42d11db35b8354dc06c46a53c9c9d","Last-Modified":"Mon, 01 Jan 0001 00:00:00 UTC"}}}
 ` // don't forget newline
 	)
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+testDocument, bytes.NewReader([]byte(testContent))))
@@ -564,7 +564,7 @@ func TestPutDocumentUpdatesAncestorETags(t *testing.T) {
 		testRootETag1 = "b5f199d0f2c635bf299450fe9f81da94"
 		testRootETag2 = "42e40ece81f1b30afe6ae1a6de3eaffa"
 	)
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	// PUT first document
@@ -680,7 +680,7 @@ func TestPutDocumentAutodetectContentType(t *testing.T) {
 		testDocumentETag = "c1d56d2d5814cf52357a0129341402db"
 		testMime         = "application/octet-stream"
 	)
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	{
@@ -719,7 +719,7 @@ func TestPutDocumentAutodetectContentType(t *testing.T) {
 }
 
 func TestPutDocumentAsFolderFails(t *testing.T) {
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	req := mustVal(http.NewRequest(http.MethodPut, remoteRoot+"/Edward/M/D/Teach/", bytes.NewReader([]byte("HA! Liar. I have to write sentences with multiple dependent clauses in order to repair the damage of your 5 word rhetorical cluster grenade."))))
@@ -746,7 +746,7 @@ func TestPutDocumentClashesWithFolderFails(t *testing.T) {
 
 		expectedConflictPath = "/Lyrics/Favourite"
 	)
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	// PUT first document
@@ -794,7 +794,7 @@ func TestPutDocumentAncestorFolderClashesWithDocumentFails(t *testing.T) {
 
 		expectedConflictPath = "/Lyrics/Favourite"
 	)
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	// PUT first document
@@ -830,7 +830,7 @@ func TestPutDocumentAncestorFolderClashesWithDocumentFails(t *testing.T) {
 }
 
 func TestGetFolder(t *testing.T) {
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -882,7 +882,7 @@ func TestGetFolder(t *testing.T) {
 }
 
 func TestGetFolderEmpty(t *testing.T) {
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -909,7 +909,7 @@ func TestGetFolderEmpty(t *testing.T) {
 }
 
 func TestGetFolderNotFound(t *testing.T) {
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	r, err := http.Get(remoteRoot + "/nonexistent/")
@@ -922,7 +922,7 @@ func TestGetFolderNotFound(t *testing.T) {
 }
 
 func TestGetFolderIfNonMatchRevMatches(t *testing.T) {
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -965,7 +965,7 @@ func TestGetFolderIfNonMatchRevMatches(t *testing.T) {
 }
 
 func TestGetFolderIfNonMatchRevNoMatch(t *testing.T) {
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1017,7 +1017,7 @@ func TestGetFolderIfNonMatchRevNoMatch(t *testing.T) {
 }
 
 func TestGetFolderThatIsADocumentFails(t *testing.T) {
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1053,7 +1053,7 @@ func TestGetFolderThatIsADocumentFails(t *testing.T) {
 }
 
 func TestHeadFolder(t *testing.T) {
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1099,7 +1099,7 @@ func TestHeadFolder(t *testing.T) {
 // (Go's HTTP lib takes care of not including the body in the response.)
 
 func TestGetDocument(t *testing.T) {
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1143,7 +1143,7 @@ func TestGetDocument(t *testing.T) {
 }
 
 func TestGetDocumentNotFound(t *testing.T) {
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	r, err := http.Get(remoteRoot + "/inexistent/document")
@@ -1157,7 +1157,7 @@ func TestGetDocumentNotFound(t *testing.T) {
 }
 
 func TestGetDocumentIfNonMatchRevMatches(t *testing.T) {
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1202,7 +1202,7 @@ around inheritance.`
 }
 
 func TestGetDocumentIfNonMatchRevNoMatch(t *testing.T) {
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1255,7 +1255,7 @@ around inheritance.`
 }
 
 func TestGetDocumentThatIsAFolderFails(t *testing.T) {
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1291,7 +1291,7 @@ func TestGetDocumentThatIsAFolderFails(t *testing.T) {
 }
 
 func TestHeadDocument(t *testing.T) {
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1334,7 +1334,7 @@ func TestHeadDocument(t *testing.T) {
 }
 
 func TestDeleteDocument(t *testing.T) {
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1524,7 +1524,7 @@ func TestDeleteDocument(t *testing.T) {
 }
 
 func TestDeleteDocumentNotFound(t *testing.T) {
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	req := mustVal(http.NewRequest(http.MethodDelete, remoteRoot+"/nonexistent/document", nil))
@@ -1538,7 +1538,7 @@ func TestDeleteDocumentNotFound(t *testing.T) {
 }
 
 func TestDeleteFolderFails(t *testing.T) {
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1577,7 +1577,7 @@ func TestDeleteFolderFails(t *testing.T) {
 }
 
 func TestDeleteDocumentIfMatch(t *testing.T) {
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1634,7 +1634,7 @@ func TestDeleteDocumentIfMatch(t *testing.T) {
 }
 
 func TestDeleteDocumentIfMatchFail(t *testing.T) {
-	ts, _, remoteRoot := mockServer()
+	ts, remoteRoot := mockServer()
 	defer ts.Close()
 
 	const (
@@ -1691,7 +1691,7 @@ func TestDeleteDocumentIfMatchFail(t *testing.T) {
 }
 
 func TestUnauthorizedCanReadPublicDocument(t *testing.T) {
-	ts, _, remoteRoot := mockServer(
+	ts, remoteRoot := mockServer(
 		WithAuthentication(func(r *http.Request, bearer string) (User, bool) {
 			if bearer == "PUTTER" {
 				return UserReadWrite{}, true
@@ -1783,7 +1783,7 @@ func TestUnauthorizedCanReadPublicDocument(t *testing.T) {
 }
 
 func TestUnauthorizedCannotAccessPublicFolder(t *testing.T) {
-	ts, _, remoteRoot := mockServer(
+	ts, remoteRoot := mockServer(
 		WithAuthentication(func(r *http.Request, bearer string) (User, bool) {
 			if bearer == "PUTTER" {
 				return UserReadWrite{}, true
@@ -1843,7 +1843,7 @@ func TestUnauthorizedCannotAccessPublicFolder(t *testing.T) {
 }
 
 func TestUnauthorizedCannotAccessNonPublicDocument(t *testing.T) {
-	ts, _, remoteRoot := mockServer(
+	ts, remoteRoot := mockServer(
 		WithAuthentication(func(r *http.Request, bearer string) (User, bool) {
 			if bearer == "PUTTER" {
 				return UserReadWrite{}, true
@@ -1926,7 +1926,7 @@ func TestUnauthorizedCannotAccessNonPublicDocument(t *testing.T) {
 }
 
 func TestUnauthorizedCannotAccessNonPublicFolder(t *testing.T) {
-	ts, _, remoteRoot := mockServer(
+	ts, remoteRoot := mockServer(
 		WithAuthentication(func(r *http.Request, bearer string) (User, bool) {
 			if bearer == "PUTTER" {
 				return UserReadWrite{}, true
@@ -1986,7 +1986,7 @@ func TestUnauthorizedCannotAccessNonPublicFolder(t *testing.T) {
 }
 
 func TestAuthorizationRead(t *testing.T) {
-	ts, _, remoteRoot := mockServer(
+	ts, remoteRoot := mockServer(
 		WithAuthentication(func(r *http.Request, bearer string) (User, bool) {
 			if bearer == "PUTTER" {
 				return UserReadWrite{}, true
@@ -2087,7 +2087,7 @@ func TestAuthorizationRead(t *testing.T) {
 }
 
 func TestAuthorizationReadPublicNoPerm(t *testing.T) {
-	ts, _, remoteRoot := mockServer(
+	ts, remoteRoot := mockServer(
 		WithAuthentication(func(r *http.Request, bearer string) (User, bool) {
 			if bearer == "PUTTER" {
 				return UserReadWrite{}, true
@@ -2181,7 +2181,7 @@ func TestAuthorizationReadPublicNoPerm(t *testing.T) {
 }
 
 func TestAuthorizationReadNonPublicNoPerm(t *testing.T) {
-	ts, _, remoteRoot := mockServer(
+	ts, remoteRoot := mockServer(
 		WithAuthentication(func(r *http.Request, bearer string) (User, bool) {
 			if bearer == "PUTTER" {
 				return UserReadWrite{}, true
@@ -2267,7 +2267,7 @@ func TestAuthorizationReadNonPublicNoPerm(t *testing.T) {
 }
 
 func TestAuthorizationReadPublicFolderNoPerm(t *testing.T) {
-	ts, _, remoteRoot := mockServer(
+	ts, remoteRoot := mockServer(
 		WithAuthentication(func(r *http.Request, bearer string) (User, bool) {
 			if bearer == "PUTTER" {
 				return UserReadWrite{}, true
@@ -2353,7 +2353,7 @@ func TestAuthorizationReadPublicFolderNoPerm(t *testing.T) {
 }
 
 func TestAuthorizationReadPublic(t *testing.T) {
-	ts, _, remoteRoot := mockServer(
+	ts, remoteRoot := mockServer(
 		WithAuthentication(func(r *http.Request, bearer string) (User, bool) {
 			if bearer == "PUTTER" {
 				return UserReadWrite{}, true
@@ -2454,7 +2454,7 @@ func TestAuthorizationReadPublic(t *testing.T) {
 }
 
 func TestAuthorizationReadWrite(t *testing.T) {
-	ts, _, remoteRoot := mockServer(
+	ts, remoteRoot := mockServer(
 		WithAuthentication(func(r *http.Request, bearer string) (User, bool) {
 			if bearer == "PUTTER" {
 				return UserReadWrite{}, true
@@ -2557,7 +2557,7 @@ func TestAuthorizationReadWrite(t *testing.T) {
 }
 
 func TestAuthorizationReadWritePublic(t *testing.T) {
-	ts, _, remoteRoot := mockServer(
+	ts, remoteRoot := mockServer(
 		WithAuthentication(func(r *http.Request, bearer string) (User, bool) {
 			if bearer == "PUTTER" {
 				return UserReadWrite{}, true
@@ -2665,8 +2665,7 @@ func TestPreflightAllowAny(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	opts := mustVal(Configure(rroot, sroot))
-	_ = opts
+	must(Configure(rroot, sroot))
 	Reset()
 
 	mux := http.NewServeMux()
@@ -2696,8 +2695,7 @@ func TestOptionsAllowAny(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	opts := mustVal(Configure(rroot, sroot))
-	_ = opts
+	must(Configure(rroot, sroot))
 	Reset()
 
 	mux := http.NewServeMux()
@@ -2725,7 +2723,7 @@ func TestPreflightAllowSpecific(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	_ = mustVal(Configure(rroot, sroot,
+	must(Configure(rroot, sroot,
 		WithAllowedOrigins([]string{"other.example.com", "my.example.com"}),
 	))
 	Reset()
@@ -2757,7 +2755,7 @@ func TestOptionsAllowSpecific(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	_ = mustVal(Configure(rroot, sroot,
+	must(Configure(rroot, sroot,
 		WithAllowedOrigins([]string{"other.example.com", "my.example.com"}),
 	))
 	Reset()
@@ -2787,7 +2785,7 @@ func TestPreflightAllowCustom(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	_ = mustVal(Configure(rroot, sroot,
+	must(Configure(rroot, sroot,
 		WithAllowOrigin(func(r *http.Request, origin string) bool {
 			return origin == "my.example.com"
 		}),
@@ -2821,7 +2819,7 @@ func TestOptionsAllowCustom(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	_ = mustVal(Configure(rroot, sroot,
+	must(Configure(rroot, sroot,
 		WithAllowOrigin(func(r *http.Request, origin string) bool {
 			return origin == "my.example.com"
 		}),
@@ -2853,7 +2851,7 @@ func TestPreflightAllowSpecificFail(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	_ = mustVal(Configure(rroot, sroot,
+	must(Configure(rroot, sroot,
 		WithAllowedOrigins([]string{"other.example.com", "my.example.com"}),
 	))
 	Reset()
@@ -2885,7 +2883,7 @@ func TestOptionsAllowSpecificFail(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	_ = mustVal(Configure(rroot, sroot,
+	must(Configure(rroot, sroot,
 		WithAllowedOrigins([]string{"other.example.com", "my.example.com"}),
 	))
 	Reset()
@@ -2915,7 +2913,7 @@ func TestPreflightAllowCustomFail(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	_ = mustVal(Configure(rroot, sroot,
+	must(Configure(rroot, sroot,
 		WithAllowOrigin(func(r *http.Request, origin string) bool {
 			return origin == "my.example.com"
 		}),
@@ -2949,7 +2947,7 @@ func TestOptionsAllowCustomFail(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	_ = mustVal(Configure(rroot, sroot,
+	must(Configure(rroot, sroot,
 		WithAllowOrigin(func(r *http.Request, origin string) bool {
 			return origin == "my.example.com"
 		}),
@@ -2981,8 +2979,7 @@ func TestPreflightNotFoundFail(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	opts := mustVal(Configure(rroot, sroot))
-	_ = opts
+	must(Configure(rroot, sroot))
 	Reset()
 
 	mux := http.NewServeMux()
@@ -3012,8 +3009,7 @@ func TestOptionsNotFoundFail(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	opts := mustVal(Configure(rroot, sroot))
-	_ = opts
+	must(Configure(rroot, sroot))
 	Reset()
 
 	mux := http.NewServeMux()
@@ -3041,7 +3037,7 @@ func TestPreflightADocumentIsNotAFolderFail(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	_ = mustVal(Configure(rroot, sroot,
+	must(Configure(rroot, sroot,
 		WithAllowAnyReadWrite(),
 	))
 	Reset()
@@ -3087,7 +3083,7 @@ func TestOptionsADocumentIsNotAFolderFail(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	_ = mustVal(Configure(rroot, sroot,
+	must(Configure(rroot, sroot,
 		WithAllowAnyReadWrite(),
 	))
 	Reset()
@@ -3131,7 +3127,7 @@ func TestPreflightAFolderIsNotADocumentFail(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	_ = mustVal(Configure(rroot, sroot,
+	must(Configure(rroot, sroot,
 		WithAllowAnyReadWrite(),
 	))
 	Reset()
@@ -3177,7 +3173,7 @@ func TestOptionsAFolderIsNotADocumentFail(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	_ = mustVal(Configure(rroot, sroot,
+	must(Configure(rroot, sroot,
 		WithAllowAnyReadWrite(),
 	))
 	Reset()
@@ -3219,8 +3215,7 @@ func TestPreflightMethodFail(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	opts := mustVal(Configure(rroot, sroot))
-	_ = opts
+	must(Configure(rroot, sroot))
 	Reset()
 
 	mux := http.NewServeMux()
@@ -3250,8 +3245,7 @@ func TestPreflightHeaderFail(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	opts := mustVal(Configure(rroot, sroot))
-	_ = opts
+	must(Configure(rroot, sroot))
 	Reset()
 
 	mux := http.NewServeMux()
@@ -3281,8 +3275,7 @@ func TestPreflightOptions(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	opts := mustVal(Configure(rroot, sroot))
-	_ = opts
+	must(Configure(rroot, sroot))
 	Reset()
 
 	mux := http.NewServeMux()
@@ -3312,7 +3305,7 @@ func TestPreflightDocument(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	_ = mustVal(Configure(rroot, sroot,
+	must(Configure(rroot, sroot,
 		WithAllowAnyReadWrite(),
 	))
 	Reset()

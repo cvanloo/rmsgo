@@ -26,7 +26,7 @@ func ExampleRegister() {
 		log.Fatal(err)
 	}
 
-	_, err = rmsgo.Configure(remoteRoot, storageRoot)
+	err = rmsgo.Configure(remoteRoot, storageRoot)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func ExampleRegister_usingDefaultServeMux() {
 		log.Fatal(err)
 	}
 
-	_, err = rmsgo.Configure(remoteRoot, storageRoot)
+	err = rmsgo.Configure(remoteRoot, storageRoot)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func ExampleOptions() {
 		storageRoot = "/var/rms/storage/"
 	)
 
-	_, err := rmsgo.Configure(remoteRoot, storageRoot,
+	err := rmsgo.Configure(remoteRoot, storageRoot,
 
 		rmsgo.WithErrorHandler(func(err error) {
 			log.Panicf("remote storage: unhandled error: %v", err)

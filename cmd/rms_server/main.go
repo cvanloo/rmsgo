@@ -107,7 +107,7 @@ func main() {
 		log.Fatalf("storage root does not exist: %v", err)
 	}
 
-	_, err = rmsgo.Configure(*rroot, *sroot,
+	err = rmsgo.Configure(*rroot, *sroot,
 		rmsgo.WithErrorHandler(func(err error) {
 			log.Fatalf("remote storage: unhandled error: %v", err)
 		}),
