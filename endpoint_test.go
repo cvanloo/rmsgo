@@ -22,7 +22,7 @@ func mockServer(opts ...Option) (ts *httptest.Server, s *Server, root string) {
 	)
 	s = mustVal(Configure(rroot, sroot,
 		WithAllowAnyReadWrite(),
-		Options(opts).Combine(),
+		Options(opts...),
 	))
 	Reset()
 

@@ -31,8 +31,6 @@ import (
 type (
 	Option func(*Server) error
 
-	Options []Option
-
 	Server struct {
 		rroot, sroot    string
 		allowAllOrigins bool
@@ -213,18 +211,14 @@ func WithCondition(cond bool, opt Option) Option {
 	}
 }
 
-func (opts Options) apply(s *Server) error {
-	for _, opt := range opts {
-		if err := opt(s); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (opts Options) Combine() Option {
+func Options(opts ...Option) Option {
 	return func(s *Server) error {
-		return opts.apply(s)
+		for _, opt := range opts {
+			if err := opt(s); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 }
 
