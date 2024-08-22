@@ -29,7 +29,7 @@ import (
 )
 
 type (
-	Option func(*Server) error
+	Option func(*Server)
 
 	Server struct {
 		rroot, sroot    string
@@ -109,9 +109,7 @@ func Configure(remoteRoot, storageRoot string, opts ...Option) (*Server, error) 
 	}
 
 	for _, opt := range opts {
-		if err := opt(s); err != nil {
-			return nil, err
-		}
+		opt(s)
 	}
 
 	g = s
@@ -135,9 +133,8 @@ func (o *Server) Sroot() string {
 
 // WithErrorHandler configures the error handler to use.
 func WithErrorHandler(h ErrorHandlerFunc) Option {
-	return func(s *Server) error {
+	return func(s *Server) {
 		s.unhandled = h
-		return nil
 	}
 }
 
@@ -147,9 +144,8 @@ func WithErrorHandler(h ErrorHandlerFunc) Option {
 // using next.ServeHTTP(w, r).
 // If this is not done correctly, rmsgo won't be able to handle requests.
 func WithMiddleware(m Middleware) Option {
-	return func(s *Server) error {
+	return func(s *Server) {
 		s.middleware = m
-		return nil
 	}
 }
 
@@ -160,9 +156,8 @@ func WithMiddleware(m Middleware) Option {
 // is configured, read-only (GET and HEAD) requests are allowed for the
 // unauthenticated user.
 func WithAllowAnyReadWrite() Option {
-	return func(s *Server) error {
+	return func(s *Server) {
 		s.defaultUser = UserReadWrite{}
-		return nil
 	}
 }
 
@@ -174,9 +169,8 @@ func WithAllowAnyReadWrite() Option {
 // In case of an authenticated user, access rights are determined based on the
 // user's Permission method.
 func WithAuthentication(a AuthenticateFunc) Option {
-	return func(s *Server) error {
+	return func(s *Server) {
 		s.authenticate = a
-		return nil
 	}
 }
 
@@ -184,10 +178,9 @@ func WithAuthentication(a AuthenticateFunc) Option {
 // By default all origins are allowed.
 // This option is ignored if WithAllowOrigin is called.
 func WithAllowedOrigins(origins []string) Option {
-	return func(s *Server) error {
+	return func(s *Server) {
 		s.allowAllOrigins = false
 		s.allowedOrigins = origins
-		return nil
 	}
 }
 
@@ -195,30 +188,25 @@ func WithAllowedOrigins(origins []string) Option {
 // whether an origin is allowed or not.
 // If this option is set up, the list of origins set by WithAllowOrigins is ignored.
 func WithAllowOrigin(f AllowOriginFunc) Option {
-	return func(s *Server) error {
+	return func(s *Server) {
 		s.allowAllOrigins = false
 		s.allowOrigin = f
-		return nil
 	}
 }
 
 func WithCondition(cond bool, opt Option) Option {
-	return func(s *Server) error {
+	return func(s *Server) {
 		if cond {
-			return opt(s)
+			opt(s)
 		}
-		return nil
 	}
 }
 
 func Options(opts ...Option) Option {
-	return func(s *Server) error {
+	return func(s *Server) {
 		for _, opt := range opts {
-			if err := opt(s); err != nil {
-				return err
-			}
+			opt(s)
 		}
-		return nil
 	}
 }
 
