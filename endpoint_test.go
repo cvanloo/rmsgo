@@ -11,7 +11,7 @@ import (
 	. "github.com/cvanloo/rmsgo/mock"
 )
 
-func mockServer() (ts *httptest.Server, opts *Options, root string) {
+func mockServer(opts ...Option) (ts *httptest.Server, s *Server, root string) {
 	hostname = "catboy"
 	const (
 		rroot = "/storage/"
@@ -20,14 +20,16 @@ func mockServer() (ts *httptest.Server, opts *Options, root string) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	opts = mustVal(Configure(rroot, sroot))
-	opts.AllowAnyReadWrite()
+	s = mustVal(Configure(rroot, sroot,
+		WithAllowAnyReadWrite(),
+		Options(opts).Combine(),
+	))
 	Reset()
 
 	mux := http.NewServeMux()
 	Register(mux)
 	ts = httptest.NewServer(mux)
-	return ts, opts, ts.URL + g.rroot
+	return ts, s, ts.URL + g.rroot
 }
 
 // @todo: PUT test chunked transfer-encoding
@@ -1689,14 +1691,15 @@ func TestDeleteDocumentIfMatchFail(t *testing.T) {
 }
 
 func TestUnauthorizedCanReadPublicDocument(t *testing.T) {
-	ts, opts, remoteRoot := mockServer()
+	ts, _, remoteRoot := mockServer(
+		WithAuthentication(func(r *http.Request, bearer string) (User, bool) {
+			if bearer == "PUTTER" {
+				return UserReadWrite{}, true
+			}
+			return nil, false
+		}),
+	)
 	defer ts.Close()
-	opts.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
-		if bearer == "PUTTER" {
-			return UserReadWrite{}, true
-		}
-		return nil, false
-	})
 
 	const (
 		mime           = "text/plain; charset=utf-8"
@@ -1780,14 +1783,15 @@ func TestUnauthorizedCanReadPublicDocument(t *testing.T) {
 }
 
 func TestUnauthorizedCannotAccessPublicFolder(t *testing.T) {
-	ts, opts, remoteRoot := mockServer()
+	ts, _, remoteRoot := mockServer(
+		WithAuthentication(func(r *http.Request, bearer string) (User, bool) {
+			if bearer == "PUTTER" {
+				return UserReadWrite{}, true
+			}
+			return nil, false
+		}),
+	)
 	defer ts.Close()
-	opts.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
-		if bearer == "PUTTER" {
-			return UserReadWrite{}, true
-		}
-		return nil, false
-	})
 
 	const (
 		mime              = "text/plain; charset=utf-8"
@@ -1839,14 +1843,15 @@ func TestUnauthorizedCannotAccessPublicFolder(t *testing.T) {
 }
 
 func TestUnauthorizedCannotAccessNonPublicDocument(t *testing.T) {
-	ts, opts, remoteRoot := mockServer()
+	ts, _, remoteRoot := mockServer(
+		WithAuthentication(func(r *http.Request, bearer string) (User, bool) {
+			if bearer == "PUTTER" {
+				return UserReadWrite{}, true
+			}
+			return nil, false
+		}),
+	)
 	defer ts.Close()
-	opts.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
-		if bearer == "PUTTER" {
-			return UserReadWrite{}, true
-		}
-		return nil, false
-	})
 
 	const (
 		mime              = "text/plain; charset=utf-8"
@@ -1921,14 +1926,15 @@ func TestUnauthorizedCannotAccessNonPublicDocument(t *testing.T) {
 }
 
 func TestUnauthorizedCannotAccessNonPublicFolder(t *testing.T) {
-	ts, opts, remoteRoot := mockServer()
+	ts, _, remoteRoot := mockServer(
+		WithAuthentication(func(r *http.Request, bearer string) (User, bool) {
+			if bearer == "PUTTER" {
+				return UserReadWrite{}, true
+			}
+			return nil, false
+		}),
+	)
 	defer ts.Close()
-	opts.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
-		if bearer == "PUTTER" {
-			return UserReadWrite{}, true
-		}
-		return nil, false
-	})
 
 	const (
 		mime                 = "text/plain; charset=utf-8"
@@ -1980,17 +1986,18 @@ func TestUnauthorizedCannotAccessNonPublicFolder(t *testing.T) {
 }
 
 func TestAuthorizationRead(t *testing.T) {
-	ts, opts, remoteRoot := mockServer()
+	ts, _, remoteRoot := mockServer(
+		WithAuthentication(func(r *http.Request, bearer string) (User, bool) {
+			if bearer == "PUTTER" {
+				return UserReadWrite{}, true
+			}
+			if bearer == "READER" {
+				return UserReadOnly{}, true
+			}
+			return nil, false
+		}),
+	)
 	defer ts.Close()
-	opts.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
-		if bearer == "PUTTER" {
-			return UserReadWrite{}, true
-		}
-		if bearer == "READER" {
-			return UserReadOnly{}, true
-		}
-		return nil, false
-	})
 
 	const (
 		mime     = "text/plain; charset=utf-8"
@@ -2080,14 +2087,15 @@ func TestAuthorizationRead(t *testing.T) {
 }
 
 func TestAuthorizationReadPublicNoPerm(t *testing.T) {
-	ts, opts, remoteRoot := mockServer()
+	ts, _, remoteRoot := mockServer(
+		WithAuthentication(func(r *http.Request, bearer string) (User, bool) {
+			if bearer == "PUTTER" {
+				return UserReadWrite{}, true
+			}
+			return UserReadPublic{}, true
+		}),
+	)
 	defer ts.Close()
-	opts.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
-		if bearer == "PUTTER" {
-			return UserReadWrite{}, true
-		}
-		return UserReadPublic{}, true
-	})
 
 	const (
 		mime     = "text/plain; charset=utf-8"
@@ -2173,14 +2181,15 @@ func TestAuthorizationReadPublicNoPerm(t *testing.T) {
 }
 
 func TestAuthorizationReadNonPublicNoPerm(t *testing.T) {
-	ts, opts, remoteRoot := mockServer()
+	ts, _, remoteRoot := mockServer(
+		WithAuthentication(func(r *http.Request, bearer string) (User, bool) {
+			if bearer == "PUTTER" {
+				return UserReadWrite{}, true
+			}
+			return UserReadPublic{}, true
+		}),
+	)
 	defer ts.Close()
-	opts.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
-		if bearer == "PUTTER" {
-			return UserReadWrite{}, true
-		}
-		return UserReadPublic{}, true
-	})
 
 	const (
 		mime     = "text/plain; charset=utf-8"
@@ -2258,14 +2267,15 @@ func TestAuthorizationReadNonPublicNoPerm(t *testing.T) {
 }
 
 func TestAuthorizationReadPublicFolderNoPerm(t *testing.T) {
-	ts, opts, remoteRoot := mockServer()
+	ts, _, remoteRoot := mockServer(
+		WithAuthentication(func(r *http.Request, bearer string) (User, bool) {
+			if bearer == "PUTTER" {
+				return UserReadWrite{}, true
+			}
+			return UserReadPublic{}, true
+		}),
+	)
 	defer ts.Close()
-	opts.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
-		if bearer == "PUTTER" {
-			return UserReadWrite{}, true
-		}
-		return UserReadPublic{}, true
-	})
 
 	const (
 		mime        = "text/plain; charset=utf-8"
@@ -2343,17 +2353,18 @@ func TestAuthorizationReadPublicFolderNoPerm(t *testing.T) {
 }
 
 func TestAuthorizationReadPublic(t *testing.T) {
-	ts, opts, remoteRoot := mockServer()
+	ts, _, remoteRoot := mockServer(
+		WithAuthentication(func(r *http.Request, bearer string) (User, bool) {
+			if bearer == "PUTTER" {
+				return UserReadWrite{}, true
+			}
+			if bearer == "READER" {
+				return UserReadOnly{}, true
+			}
+			return nil, false
+		}),
+	)
 	defer ts.Close()
-	opts.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
-		if bearer == "PUTTER" {
-			return UserReadWrite{}, true
-		}
-		if bearer == "READER" {
-			return UserReadOnly{}, true
-		}
-		return nil, false
-	})
 
 	const (
 		mime     = "text/plain; charset=utf-8"
@@ -2443,17 +2454,18 @@ func TestAuthorizationReadPublic(t *testing.T) {
 }
 
 func TestAuthorizationReadWrite(t *testing.T) {
-	ts, opts, remoteRoot := mockServer()
+	ts, _, remoteRoot := mockServer(
+		WithAuthentication(func(r *http.Request, bearer string) (User, bool) {
+			if bearer == "PUTTER" {
+				return UserReadWrite{}, true
+			}
+			if bearer == "READERWRITER" {
+				return UserReadWrite{}, true
+			}
+			return nil, false
+		}),
+	)
 	defer ts.Close()
-	opts.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
-		if bearer == "PUTTER" {
-			return UserReadWrite{}, true
-		}
-		if bearer == "READERWRITER" {
-			return UserReadWrite{}, true
-		}
-		return nil, false
-	})
 
 	const (
 		mime     = "text/plain; charset=utf-8"
@@ -2545,17 +2557,18 @@ func TestAuthorizationReadWrite(t *testing.T) {
 }
 
 func TestAuthorizationReadWritePublic(t *testing.T) {
-	ts, opts, remoteRoot := mockServer()
+	ts, _, remoteRoot := mockServer(
+		WithAuthentication(func(r *http.Request, bearer string) (User, bool) {
+			if bearer == "PUTTER" {
+				return UserReadWrite{}, true
+			}
+			if bearer == "READERWRITER" {
+				return UserReadWrite{}, true
+			}
+			return nil, false
+		}),
+	)
 	defer ts.Close()
-	opts.UseAuthentication(func(r *http.Request, bearer string) (User, bool) {
-		if bearer == "PUTTER" {
-			return UserReadWrite{}, true
-		}
-		if bearer == "READERWRITER" {
-			return UserReadWrite{}, true
-		}
-		return nil, false
-	})
 
 	const (
 		mime     = "text/plain; charset=utf-8"
@@ -2712,8 +2725,9 @@ func TestPreflightAllowSpecific(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	opts := mustVal(Configure(rroot, sroot))
-	opts.UseAllowedOrigins([]string{"other.example.com", "my.example.com"})
+	_ = mustVal(Configure(rroot, sroot,
+		WithAllowedOrigins([]string{"other.example.com", "my.example.com"}),
+	))
 	Reset()
 
 	mux := http.NewServeMux()
@@ -2743,8 +2757,9 @@ func TestOptionsAllowSpecific(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	opts := mustVal(Configure(rroot, sroot))
-	opts.UseAllowedOrigins([]string{"other.example.com", "my.example.com"})
+	_ = mustVal(Configure(rroot, sroot,
+		WithAllowedOrigins([]string{"other.example.com", "my.example.com"}),
+	))
 	Reset()
 
 	mux := http.NewServeMux()
@@ -2772,10 +2787,11 @@ func TestPreflightAllowCustom(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	opts := mustVal(Configure(rroot, sroot))
-	opts.UseAllowOrigin(func(r *http.Request, origin string) bool {
-		return origin == "my.example.com"
-	})
+	_ = mustVal(Configure(rroot, sroot,
+		WithAllowOrigin(func(r *http.Request, origin string) bool {
+			return origin == "my.example.com"
+		}),
+	))
 	Reset()
 
 	mux := http.NewServeMux()
@@ -2805,10 +2821,11 @@ func TestOptionsAllowCustom(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	opts := mustVal(Configure(rroot, sroot))
-	opts.UseAllowOrigin(func(r *http.Request, origin string) bool {
-		return origin == "my.example.com"
-	})
+	_ = mustVal(Configure(rroot, sroot,
+		WithAllowOrigin(func(r *http.Request, origin string) bool {
+			return origin == "my.example.com"
+		}),
+	))
 	Reset()
 
 	mux := http.NewServeMux()
@@ -2836,8 +2853,9 @@ func TestPreflightAllowSpecificFail(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	opts := mustVal(Configure(rroot, sroot))
-	opts.UseAllowedOrigins([]string{"other.example.com", "my.example.com"})
+	_ = mustVal(Configure(rroot, sroot,
+		WithAllowedOrigins([]string{"other.example.com", "my.example.com"}),
+	))
 	Reset()
 
 	mux := http.NewServeMux()
@@ -2867,8 +2885,9 @@ func TestOptionsAllowSpecificFail(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	opts := mustVal(Configure(rroot, sroot))
-	opts.UseAllowedOrigins([]string{"other.example.com", "my.example.com"})
+	_ = mustVal(Configure(rroot, sroot,
+		WithAllowedOrigins([]string{"other.example.com", "my.example.com"}),
+	))
 	Reset()
 
 	mux := http.NewServeMux()
@@ -2896,10 +2915,11 @@ func TestPreflightAllowCustomFail(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	opts := mustVal(Configure(rroot, sroot))
-	opts.UseAllowOrigin(func(r *http.Request, origin string) bool {
-		return origin == "my.example.com"
-	})
+	_ = mustVal(Configure(rroot, sroot,
+		WithAllowOrigin(func(r *http.Request, origin string) bool {
+			return origin == "my.example.com"
+		}),
+	))
 	Reset()
 
 	mux := http.NewServeMux()
@@ -2929,10 +2949,11 @@ func TestOptionsAllowCustomFail(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	opts := mustVal(Configure(rroot, sroot))
-	opts.UseAllowOrigin(func(r *http.Request, origin string) bool {
-		return origin == "my.example.com"
-	})
+	_ = mustVal(Configure(rroot, sroot,
+		WithAllowOrigin(func(r *http.Request, origin string) bool {
+			return origin == "my.example.com"
+		}),
+	))
 	Reset()
 
 	mux := http.NewServeMux()
@@ -3020,8 +3041,9 @@ func TestPreflightADocumentIsNotAFolderFail(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	opts := mustVal(Configure(rroot, sroot))
-	opts.AllowAnyReadWrite()
+	_ = mustVal(Configure(rroot, sroot,
+		WithAllowAnyReadWrite(),
+	))
 	Reset()
 
 	mux := http.NewServeMux()
@@ -3065,8 +3087,9 @@ func TestOptionsADocumentIsNotAFolderFail(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	opts := mustVal(Configure(rroot, sroot))
-	opts.AllowAnyReadWrite()
+	_ = mustVal(Configure(rroot, sroot,
+		WithAllowAnyReadWrite(),
+	))
 	Reset()
 
 	mux := http.NewServeMux()
@@ -3108,8 +3131,9 @@ func TestPreflightAFolderIsNotADocumentFail(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	opts := mustVal(Configure(rroot, sroot))
-	opts.AllowAnyReadWrite()
+	_ = mustVal(Configure(rroot, sroot,
+		WithAllowAnyReadWrite(),
+	))
 	Reset()
 
 	mux := http.NewServeMux()
@@ -3153,8 +3177,9 @@ func TestOptionsAFolderIsNotADocumentFail(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	opts := mustVal(Configure(rroot, sroot))
-	opts.AllowAnyReadWrite()
+	_ = mustVal(Configure(rroot, sroot,
+		WithAllowAnyReadWrite(),
+	))
 	Reset()
 
 	mux := http.NewServeMux()
@@ -3287,8 +3312,9 @@ func TestPreflightDocument(t *testing.T) {
 	Mock(
 		WithDirectory(sroot),
 	)
-	opts := mustVal(Configure(rroot, sroot))
-	opts.AllowAnyReadWrite()
+	_ = mustVal(Configure(rroot, sroot,
+		WithAllowAnyReadWrite(),
+	))
 	Reset()
 
 	mux := http.NewServeMux()

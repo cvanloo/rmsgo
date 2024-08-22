@@ -29,8 +29,11 @@ import (
 )
 
 type (
-	// Options' methods configure the remote storage server.
-	Options struct {
+	Option func(*Server) error
+
+	Options []Option
+
+	Server struct {
 		rroot, sroot    string
 		allowAllOrigins bool
 		allowedOrigins  []string
@@ -59,21 +62,20 @@ type (
 
 const timeFormat = time.RFC1123
 
-// Global g holds essential configuration values.
-var g *Options
+var g *Server
 
-// Configure initializes the remote storage server with the default configuration.
-// remoteRoot is the URL path below which remote storage is accessible, and
+// Configure initializes the remote storage server.
+// remoteRoot is the URL path below which remote storage is accessible.
 // storageRoot is a folder on the server's file system where remoteStorage
 // documents are written to and read from.
-// A pointer to the Options object is returned and allows for further
-// configuration beyond the default settings.
-// At the very least authentication should be properly configured.
-func Configure(remoteRoot, storageRoot string) (*Options, error) {
+// It is recommended to properly configure authentication by using the
+// WithAuthentication option.
+func Configure(remoteRoot, storageRoot string, opts ...Option) (*Server, error) {
 	rroot := filepath.Clean(remoteRoot)
 	if rroot == "/" {
 		rroot = ""
 	}
+
 	sroot := filepath.Clean(storageRoot)
 	fi, err := FS.Stat(sroot)
 	if err != nil {
@@ -83,7 +85,7 @@ func Configure(remoteRoot, storageRoot string) (*Options, error) {
 		return nil, fmt.Errorf("storage root is not a directory: %s", sroot)
 	}
 
-	g = &Options{
+	s := &Server{
 		rroot:           rroot,
 		sroot:           sroot,
 		allowAllOrigins: true,
@@ -107,73 +109,123 @@ func Configure(remoteRoot, storageRoot string) (*Options, error) {
 			return g.defaultUser, true
 		},
 	}
-	return g, nil
+
+	for _, opt := range opts {
+		if err := opt(s); err != nil {
+			return nil, err
+		}
+	}
+
+	g = s
+	return s, nil
 }
 
 // Rroot specifies the URL path at which remoteStorage is rooted.
 // E.g., if Rroot is "/storage" then a document "/Picture/Kittens.png" can
 // be accessed using the URL "https://example.com/storage/Picture/Kittens.png".
 // Rroot does not have a trailing slash.
-func (o *Options) Rroot() string {
+func (o *Server) Rroot() string {
 	return o.rroot
 }
 
 // Sroot is a path specifying the location on the server's file system where
 // all of remoteStorage's files are stored. Sroot does not have a trailing
 // slash.
-func (o *Options) Sroot() string {
+func (o *Server) Sroot() string {
 	return o.sroot
 }
 
-// UseErrorHandler configures the error handler to use.
-func (o *Options) UseErrorHandler(h ErrorHandlerFunc) {
-	o.unhandled = h
+// WithErrorHandler configures the error handler to use.
+func WithErrorHandler(h ErrorHandlerFunc) Option {
+	return func(s *Server) error {
+		s.unhandled = h
+		return nil
+	}
 }
 
-// UseMiddleware configures middleware (e.g., for logging) in front of the
+// WithMiddleware configures middleware (e.g., for logging) in front of the
 // remote storage server.
 // The middleware is responsible for passing the request on to the rms server
 // using next.ServeHTTP(w, r).
 // If this is not done correctly, rmsgo won't be able to handle requests.
-func (o *Options) UseMiddleware(m Middleware) {
-	o.middleware = m
+func WithMiddleware(m Middleware) Option {
+	return func(s *Server) error {
+		s.middleware = m
+		return nil
+	}
 }
 
-// AllowAnyReadWrite allows even unauthenticated requests to create, read, and
-// delete any documents on the server.
-// This option has no effect if Options.UseAuthentication is called.
-// Per default, i.e if neither this nor any other auth related option
+// WithAllowAnyReadWrite allows even unauthenticated requests to create, read,
+// and delete any documents on the server.
+// This option has no effect if WithAuthentication is specified.
+// Per default, i.e, if neither this nor any other auth related option
 // is configured, read-only (GET and HEAD) requests are allowed for the
 // unauthenticated user.
-func (o *Options) AllowAnyReadWrite() {
-	o.defaultUser = UserReadWrite{}
+func WithAllowAnyReadWrite() Option {
+	return func(s *Server) error {
+		s.defaultUser = UserReadWrite{}
+		return nil
+	}
 }
 
-// UseAuthentication configures the function to use for authenticating requests.
+// WithAuthentication configures the function to use for authenticating requests.
 // The AuthenticateFunc authenticates a request and returns the associated user
 // and true, or nil and false (unauthenticated).
 // In the latter case, access is forbidden unless it is a read request going to
 // a public document (a document whose path starts with "/public/").
 // In case of an authenticated user, access rights are determined based on the
 // user's Permission method.
-func (o *Options) UseAuthentication(a AuthenticateFunc) {
-	o.authenticate = a
+func WithAuthentication(a AuthenticateFunc) Option {
+	return func(s *Server) error {
+		s.authenticate = a
+		return nil
+	}
 }
 
-// UseAllowedOrigins configures a list of allowed origins.
+// WithAllowedOrigins configures a list of allowed origins.
 // By default all origins are allowed.
-// This option is ignored if Options.UseAllowOrigin is called.
-func (o *Options) UseAllowedOrigins(origins []string) {
-	o.allowAllOrigins = false
-	o.allowedOrigins = origins
+// This option is ignored if WithAllowOrigin is called.
+func WithAllowedOrigins(origins []string) Option {
+	return func(s *Server) error {
+		s.allowAllOrigins = false
+		s.allowedOrigins = origins
+		return nil
+	}
 }
 
-// UseAllowOrigin configures the remote storage server to use f to decide
+// WithAllowOrigin configures the remote storage server to use f to decide
 // whether an origin is allowed or not.
-// If this option is set up, the list of origins set by AllowOrigins is ignored.
-func (o *Options) UseAllowOrigin(f AllowOriginFunc) {
-	o.allowAllOrigins = false
-	o.allowOrigin = f
+// If this option is set up, the list of origins set by WithAllowOrigins is ignored.
+func WithAllowOrigin(f AllowOriginFunc) Option {
+	return func(s *Server) error {
+		s.allowAllOrigins = false
+		s.allowOrigin = f
+		return nil
+	}
+}
+
+func WithCondition(cond bool, opt Option) Option {
+	return func(s *Server) error {
+		if cond {
+			return opt(s)
+		}
+		return nil
+	}
+}
+
+func (opts Options) apply(s *Server) error {
+	for _, opt := range opts {
+		if err := opt(s); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (opts Options) Combine() Option {
+	return func(s *Server) error {
+		return opts.apply(s)
+	}
 }
 
 func handlePanic(next http.Handler) http.Handler {
