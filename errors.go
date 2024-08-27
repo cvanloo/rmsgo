@@ -11,11 +11,11 @@ type (
 	// @todo: to be extended as a RFC 9457 compliant error
 	//   (?maybe as its own library?)
 	HttpError struct {
-		Type     string `json:"type"`
-		Status   int    `json:"status"`
-		Title    string `json:"title"`
-		Detail   string `json:"detail"`
-		Instance string `json:"instance"`
+		Type     string `json:"type"`     // identifies this problem type, non-resolvable, eg. TAG, OR dereferencable uri to HTML page explaining the error type
+		Status   int    `json:"status"`   // must be the same as the HTTP response status
+		Title    string `json:"title"`    // always the same for this error type (@todo: how to enforce this? store out of band? (map[HttpError]Title))
+		Detail   string `json:"detail"`   // contains info specific to this instance of the error
+		Instance string `json:"instance"` // opaque identifier, eg. to correlate with log statements on the server OR dereferencable uri to fetch problem details object
 	}
 
 	ErrBadRequest struct {
